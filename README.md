@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 207개 테스트 | Python 3.11+
+11개(10개 동작) | 219개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -152,7 +152,8 @@ book-forge plan <slug> --revise
   멀티에이전트 협업 예제(아래 일반 능력 G 참고)
 - **코드-본문 정합성 검사(옵션)**: `book-forge draft ... --check-package agent_evaluator` —
   본문이 언급한 `import`/백틱 심볼이 실제로 그 패키지에 존재하는지 정적으로 대조(LLM
-  미호출, C의 확장)
+  미호출, C의 확장). 프로젝트가 처음 사용한 시점의 SDK 버전을 `sdk_versions.json`에
+  고정하고, 이후 설치 버전이 달라지면 경고
 - **실습/캡스톤 스캐폴드**: `content_type: capstone`으로 태깅한 챕터는 빈 템플릿(TODO
   있는 스켈레톤)과 별도 정답 파일을 함께 생성 — 독자가 직접 풀어보는 실습 전용
   (아래 일반 능력 B 표 참고)
@@ -168,7 +169,7 @@ book-forge plan <slug> --revise
 |---|---|---|
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
-| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py` |
+| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 SDK 버전을 프로젝트별로 `sdk_versions.json`에 고정하고 드리프트를 경고 | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py` |
 | **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
@@ -197,6 +198,18 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 `ValueError` 같은 Python 표준 어휘는 대상 패키지 소속이라 주장한 적이 없으므로
 검사에서 제외합니다. LLM을 호출하지 않는 순수 정적 분석이며, 실패해도 초안 저장을
 막지 않습니다(참고용).
+
+**SDK 버전 고정 메타데이터(C 확장의 기준)**: `--check-package`는 지금까지 "그 순간
+설치된" 버전을 암묵적으로 기준 삼았습니다 — 오늘 0.9.9로 챕터를 쓰고 몇 달 뒤 환경이
+1.2.0으로 올라간 채로 같은 프로젝트에 다시 검사를 돌리면, "본문이 틀렸다"와 "SDK가
+바뀌었다"를 구분할 방법이 없었습니다. 프로젝트가 `--check-package`를 처음 쓴 시점의
+설치 버전을 `sdk_versions.json`에 한 번 고정해두고(이후 자동으로 덮어쓰지 않음),
+이후 호출마다 현재 설치 버전과 대조합니다 — 달라졌으면 "코드-본문 정합성 검사가 다른
+버전을 기준으로 판정될 수 있다"는 경고를 CLI에 표시하고, 검사 결과 옆에 어느 버전
+기준인지(`(agent_evaluator 0.9.9 기준)`)를 항상 표시합니다. Book/AOO의
+`build_book.py`가 `pyproject.toml`에서 버전을 자동으로 읽어 표지에 찍던 관례를
+재해석한 것입니다 — Book-forge 자신이 아니라 저자가 근거로 삼는 **대상 SDK**의
+버전을 고정한다는 점이 다릅니다.
 
 **실습/캡스톤 스캐폴드(B의 네 번째 콘텐츠 유형)**: `content_type`을 `capstone`으로
 태깅하면(목차의 5번째 필드) 기존 `exercise`("목표→코드→해설"을 한 파일에 담음)와
@@ -272,7 +285,7 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조) |
+| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+SDK 버전 고정) |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
@@ -300,6 +313,8 @@ src/book_forge/
 │   │                       # reference_table 소스 대조/capstone TODO+완성도 (D, LLM 미호출 순수 함수)
 │   ├── code_consistency_checker.py # 본문의 import/백틱 심볼이 실제 패키지에
 │   │                       # 존재하는지 대조 (C 확장, LLM 미호출 순수 함수)
+│   ├── sdk_version_pin.py # 프로젝트별 대상 SDK 버전 고정 + 드리프트 감지
+│   │                       # (C 확장의 기준, LLM 미호출 순수 함수)
 │   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
 │   └── review_panel.py    # ReviewPanelAgent — 정확성/가독성 검토자 + 편집장
 │                           # (G, 감독자-작업자 패턴 — Gate F 실증 예제)

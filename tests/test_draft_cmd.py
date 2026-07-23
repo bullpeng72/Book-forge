@@ -395,6 +395,77 @@ def test_draft_check_package_flags_nonexistent_symbol(tmp_path: Path, monkeypatc
     assert "ScopeConfig.path" in result.output
 
 
+def test_draft_check_package_pins_sdk_version_on_first_use(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _RealSymbolLLM())
+
+    project_dir = tmp_path / "projects" / "version-pin-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "version-pin-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator",
+        ]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "agent_evaluator" in result.output and "기준)" in result.output
+
+    from book_forge.agents.sdk_version_pin import load_pinned_versions
+
+    pinned = load_pinned_versions(project_dir)
+    assert "agent_evaluator" in pinned
+    assert pinned["agent_evaluator"][0].isdigit()
+
+
+def test_draft_check_package_warns_on_version_drift(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _RealSymbolLLM())
+
+    project_dir = tmp_path / "projects" / "drift-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    from book_forge.agents.sdk_version_pin import sdk_versions_path
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    sdk_versions_path(project_dir).write_text(
+        '{"agent_evaluator": "0.0.1"}', encoding="utf-8"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "drift-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator",
+        ]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "0.0.1로 고정됐지만" in result.output
+
+
 def test_draft_without_check_package_skips_consistency_check(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)

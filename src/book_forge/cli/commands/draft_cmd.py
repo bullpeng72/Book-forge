@@ -20,6 +20,10 @@
   - C(확장): --check-package를 주면 본문이 언급한 import/백틱 심볼이 실제로
        그 패키지에 존재하는지 code_consistency_checker.py가 정적으로 대조한다
        (LLM 미호출, content_type과 무관하게 동작 — 옵트인, 기본은 검사 없음).
+       sdk_version_pin.py가 이 프로젝트가 최초로 --check-package를 쓴 시점의
+       설치 버전을 sdk_versions.json에 고정하고, 이후 호출마다 현재 설치
+       버전과 대조해 드리프트(SDK 버전이 바뀌어 검증 기준 자체가 달라짐)를
+       경고한다.
 
 --all(배치 모드) vs 단일 챕터 모드는 낮은 커버리지 처리 정책이 다르다 — 이건
 의도된 설계다: 단일 모드는 "저자가 지금 이 화면 앞에 있다"고 가정해 F의 대안을
@@ -388,7 +392,7 @@ def _draft_one_chapter(
     else:
         result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
     if check_package:
-        result.code_consistency = _print_code_consistency(check_package, draft_md)
+        result.code_consistency = _print_code_consistency(check_package, draft_md, project_dir)
     return result
 
 
@@ -439,17 +443,31 @@ def _print_capstone_verification(template_md: str, solution_md: str) -> Verifica
     return result
 
 
-def _print_code_consistency(check_package: str, draft_md: str) -> VerificationResult:
+def _print_code_consistency(
+    check_package: str, draft_md: str, project_dir: Path
+) -> VerificationResult:
     """C(근거 검증 계층) 확장 — 본문이 언급한 import/백틱 심볼이 실제로
     check_package에 존재하는지 정적으로 대조하고 CLI에 즉시 노출한다.
-    LLM을 호출하지 않으며, 실패해도 초안 저장을 막지 않는다(참고용)."""
+    LLM을 호출하지 않으며, 실패해도 초안 저장을 막지 않는다(참고용).
+
+    일반 능력(SDK 버전 고정): 이 프로젝트가 처음 --check-package를 쓴 시점의
+    설치 버전을 sdk_versions.json에 한 번 고정해두고, 이후 호출마다 현재
+    설치 버전과 대조한다 — 드리프트가 있으면 "검증 결과가 본문 오류가 아니라
+    SDK 버전 변화 때문일 수 있다"는 걸 저자에게 알린다."""
     from book_forge.agents.code_consistency_checker import verify_code_consistency
+    from book_forge.agents.sdk_version_pin import check_version_drift, pin_version
+
+    pinned = pin_version(project_dir, check_package)
+    drift_warning = check_version_drift(project_dir, check_package)
+    if drift_warning:
+        click.echo(f"⚠️  {drift_warning}")
 
     result = verify_code_consistency(draft_md, target_package=check_package)
+    version_suffix = f" ({check_package} {pinned} 기준)" if pinned else ""
     if result.passed:
-        click.echo(f"🔗 코드-본문 정합성: ✅ {result.detail}")
+        click.echo(f"🔗 코드-본문 정합성: ✅ {result.detail}{version_suffix}")
     else:
-        click.echo(f"🔗 코드-본문 정합성: ⚠️  {result.detail}")
+        click.echo(f"🔗 코드-본문 정합성: ⚠️  {result.detail}{version_suffix}")
         for issue in result.issues:
             click.echo(f"     → {issue}")
     return result
