@@ -5,10 +5,12 @@
 `context_arg="sources"`를 명시했으므로, HallucinationDetector가 `sources`(RAG
 발췌문) 대비 `response`(초안)의 근거 없는 서술을 자동으로 채점한다.
 
-content_type이 exercise/diagram이면 전용 프롬프트로 코드/mermaid 블록 생성을
-명시적으로 요구한다(일반 능력 D 강화 — draft_cmd.py의 demonstration_verifier가
-생성 직후 그 블록의 실존/유효성을 정적으로 검증하므로, 검증 대상이 애초에
-생성되도록 프롬프트가 보장해야 한다).
+content_type이 exercise면 전용 프롬프트로 코드 블록 생성을 명시적으로
+요구한다(일반 능력 D 강화 — draft_cmd.py의 demonstration_verifier가 생성 직후
+그 블록의 실존/유효성을 정적으로 검증하므로, 검증 대상이 애초에 생성되도록
+프롬프트가 보장해야 한다). diagram은 여기서 다루지 않는다 — 전용
+DiagramGeneratorAgent(agents/diagram_generator.py)로 승격됐다(reference_table.py와
+같은 "독립 에이전트" 패턴, draft_cmd.py가 content_type으로 분기해서 호출한다).
 """
 from __future__ import annotations
 
@@ -17,19 +19,13 @@ from typing import Callable
 from agent_evaluator import PerformanceMonitor, SLAConfig, ThreatSeverityConfig, agent_eval
 from agent_evaluator.decorators import EvalMetadata
 
-from book_forge.agents.prompts import (
-    DRAFT_PROMPT,
-    DRAFT_PROMPT_DIAGRAM,
-    DRAFT_PROMPT_EXERCISE,
-    DRAFT_SYSTEM_PROMPT,
-)
+from book_forge.agents.prompts import DRAFT_PROMPT, DRAFT_PROMPT_EXERCISE, DRAFT_SYSTEM_PROMPT
 from book_forge.llm.provider import LLM
 
 DraftFn = Callable[..., str]
 
 _CONTENT_TYPE_PROMPTS = {
     "exercise": DRAFT_PROMPT_EXERCISE,
-    "diagram": DRAFT_PROMPT_DIAGRAM,
 }
 
 

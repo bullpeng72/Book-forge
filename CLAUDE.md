@@ -246,8 +246,10 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       일반 서술형 프롬프트(`DRAFT_PROMPT`)로 생성됐다 — 검증 대상(코드/mermaid
       블록)이 애초에 안정적으로 생성된다는 보장이 없었다. `build_draft_chapter()`에
       `content_type` 파라미터(기본값 `"narrative"`, 하위 호환)를 추가해
-      `DRAFT_PROMPT_EXERCISE`/`DRAFT_PROMPT_DIAGRAM`(`agents/prompts.py`)로
-      분기하고, 각 프롬프트가 코드/mermaid 블록을 명시적으로 요구한다.
+      `DRAFT_PROMPT_EXERCISE`(`agents/prompts.py`)로 분기하고, 코드 블록을
+      명시적으로 요구한다(diagram도 처음엔 여기서 `DRAFT_PROMPT_DIAGRAM`으로
+      같이 처리했지만, 항목 14에서 독립 에이전트로 다시 옮겼다 — 지금은
+      `DRAFT_PROMPT_DIAGRAM`이 존재하지 않는다).
     - 검증 결과는 **agent-evaluator의 Gate 점수를 바꾸지 않는다** — SDK 내부
       판정 로직에 손대지 않고, Book-forge 자체 신호로 CLI(`🔬 실증 가능성
       검증: ✅/⚠️`)와 배치 요약에만 노출한다. 기존 Gate C/D 노출과 같은 철학
@@ -256,6 +258,26 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       검증이 생성 *후*에 일어나 F가 트리거되는 생성 *전* 흐름과 시점이 달라
       재구조화가 필요했다 — 이번엔 정보 노출까지만 구현하고 F 연동은 하지
       않았다(향후 필요해지면 재검토).
+
+14. **DiagramGeneratorAgent는 diagram content_type을 chapter_drafter.py에서
+    분리해 reference_table.py와 같은 "독립 에이전트" 패턴으로 승격한 것이다,
+    새 판정/검증 로직이 아니다**: 9개 후보 기능(AI Agent 강의 분석에서 도출)의
+    7번 항목이 원래 요구한 것도 이 형태였다 — "일반 서술형 프롬프트에 다이어그램
+    요구사항만 얹기"가 아니라 표(B의 reference_table.py)처럼 독립된 생성기.
+    직전 커밋(D 강화)에서는 diagram을 `chapter_drafter.py`의 `content_type`
+    분기(`DRAFT_PROMPT_DIAGRAM`)로 임시로 처리했었는데, 이번에 그 분기를
+    제거하고 `agents/diagram_generator.py`(`build_generate_diagram()`)로
+    이전했다 — 프롬프트/계측 배선은 그대로(`rag_mode=True`, `SLAConfig`,
+    `ThreatSeverityConfig` 동일), `draft_cmd.py`의 `_draft_one_chapter()`가
+    `content_type == "diagram"`이면 이 모듈을 호출하도록 분기만 추가했다
+    (`reference_table` 분기 바로 다음 `elif`). `chapter_drafter.py`는 이제
+    diagram을 모르는 content_type으로 취급해 기본 `DRAFT_PROMPT`로 안전하게
+    폴백한다(직접 호출돼도 예외 없음, `test_chapter_drafter.py`로 확인).
+    `agents/demonstration_verifier.py`(D)는 이 에이전트가 만든 결과물을 그대로
+    검증한다 — 검증 로직 자체는 이전 커밋에서 이미 완성돼 있었으므로 손대지
+    않았다. `exercise`는 아직 독립 에이전트로 승격하지 않았다(요청 범위 밖 —
+    9개 후보 기능 중 별개 항목인 "실습/캡스톤 스캐폴드"와 헷갈리지 말 것,
+    지금 `exercise`는 여전히 `chapter_drafter.py`의 content_type 분기로 처리됨).
 
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 

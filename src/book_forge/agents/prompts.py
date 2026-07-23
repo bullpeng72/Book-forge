@@ -111,10 +111,11 @@ DRAFT_PROMPT = """다음 챕터의 초안을 마크다운으로 작성하세요.
 `# Chapter {chapter_no}: {chapter_title}` 로 시작하고, `## `로 소제목을 나누어
 작성하세요. 소스에 근거하지 않은 사실은 작성하지 마세요."""
 
-# 일반 능력 D(실증 가능성 게이트) 강화 — exercise/diagram 유형은 일반 서술형
-# 프롬프트로는 검증 가능한 코드/다이어그램 블록이 생성된다는 보장이 없어 전용
-# 프롬프트로 명시적으로 요구한다. 검증은 agents/demonstration_verifier.py가
-# 생성 직후 정적으로 수행한다(draft_cmd.py가 호출).
+# 일반 능력 D(실증 가능성 게이트) 강화 — exercise 유형은 일반 서술형
+# 프롬프트로는 검증 가능한 코드 블록이 생성된다는 보장이 없어 전용 프롬프트로
+# 명시적으로 요구한다. 검증은 agents/demonstration_verifier.py가 생성 직후
+# 정적으로 수행한다(draft_cmd.py가 호출). diagram 유형은 여기 없다 — 전용
+# DiagramGeneratorAgent(agents/diagram_generator.py)가 자체 프롬프트를 갖는다.
 DRAFT_PROMPT_EXERCISE = """다음 챕터를 실습(exercise) 형태로 작성하세요.
 
 챕터 제목: {chapter_title}
@@ -128,23 +129,6 @@ DRAFT_PROMPT_EXERCISE = """다음 챕터를 실습(exercise) 형태로 작성하
 2. `## 실습` — 소스에 근거한 실행 가능한 파이썬 코드를 ```python 코드 블록으로
    최소 1개 포함 (문법적으로 올바른 완전한 코드여야 합니다 — 조각이나 의사코드 금지)
 3. `## 해설` — 코드가 왜 그렇게 동작하는지 소스에 근거해 설명
-
-소스에 근거하지 않은 사실은 작성하지 마세요."""
-
-DRAFT_PROMPT_DIAGRAM = """다음 챕터를 다이어그램 중심으로 작성하세요.
-
-챕터 제목: {chapter_title}
-
---- 참고 소스 발췌 ---
-{sources}
-
-`# Chapter {chapter_no}: {chapter_title}` 로 시작하고, 아래 구조를 반드시
-포함하세요:
-1. 1~2문단의 짧은 도입부
-2. ```mermaid 코드 블록 최소 1개 — `graph`/`flowchart`/`sequenceDiagram`/
-   `classDiagram`/`stateDiagram` 중 하나로 시작하고, 실제 노드/엣지를 포함해야
-   합니다(타입 선언만 있는 빈 다이어그램 금지)
-3. 다이어그램 각 요소에 대한 간단한 설명
 
 소스에 근거하지 않은 사실은 작성하지 마세요."""
 

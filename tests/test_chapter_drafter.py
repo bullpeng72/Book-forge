@@ -53,7 +53,13 @@ def test_draft_chapter_uses_exercise_prompt_for_exercise_content_type(tmp_path: 
     assert "```python" in result  # 프롬프트가 코드 블록 요구를 명시
 
 
-def test_draft_chapter_uses_diagram_prompt_for_diagram_content_type(tmp_path: Path) -> None:
+def test_draft_chapter_falls_back_to_default_prompt_for_diagram_content_type(
+    tmp_path: Path,
+) -> None:
+    # diagram은 DiagramGeneratorAgent(agents/diagram_generator.py)로 승격됐다 —
+    # chapter_drafter는 diagram을 모르는 content_type으로 취급해 기본 서술형
+    # 프롬프트로 폴백해야 한다(draft_cmd.py가 diagram을 이 함수로 아예 안 보내지만,
+    # 혹시 직접 호출되더라도 예외 없이 안전하게 동작해야 함).
     monitor = build_book_monitor(output_dir=str(tmp_path / "eval_results"))
     draft_chapter = build_draft_chapter(_PromptEchoLLM(), monitor)
 
@@ -65,8 +71,8 @@ def test_draft_chapter_uses_diagram_prompt_for_diagram_content_type(tmp_path: Pa
         content_type="diagram",
     )
 
-    assert "다이어그램 중심으로 작성하세요" in result
-    assert "```mermaid" in result
+    assert "다이어그램 중심으로 작성하세요" not in result
+    assert "`## `로 소제목을 나누어" in result  # 기본 DRAFT_PROMPT로 폴백
 
 
 def test_draft_chapter_uses_default_prompt_for_narrative_content_type(tmp_path: Path) -> None:

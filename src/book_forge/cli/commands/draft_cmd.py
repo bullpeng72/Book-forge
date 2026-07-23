@@ -3,7 +3,7 @@
 일반 능력 A(소스 어댑터)·B(콘텐츠 유형 분기)·C(근거 검증 계층)·D(실증 가능성
 게이트)·F(대안 제안)가 전부 이 명령에서 만난다:
   - A: --source는 PDF/코드 저장소 디렉토리/텍스트 파일/http(s):// URL을 자동 판별해 받는다.
-  - B: 챕터의 content_type이 reference_table이면 전용 생성기로 분기한다.
+  - B: 챕터의 content_type이 reference_table/diagram이면 전용 생성기로 분기한다.
   - C: 생성 전 소스 커버리지(코사인 유사도)를 점검하고, 생성 직후 Gate 점수를
        CLI에 바로 보여준다(book-forge gate를 따로 안 돌려도 됨).
   - D: content_type이 exercise/diagram(실증이 필요한 유형)이면 생성 전
@@ -299,6 +299,17 @@ def _draft_one_chapter(
 
         click.echo("📊 레퍼런스 표 생성 중 (LLM 호출)...")
         generate = build_generate_reference_table(llm, monitor)
+        draft_md = generate(
+            chapter_title=rc.spec.chapter_title,
+            chapter_no=rc.spec.chapter_no,
+            sources=sources_text,
+            ground_truth=rc.spec.chapter_title,
+        )
+    elif rc.spec.content_type == "diagram":
+        from book_forge.agents.diagram_generator import build_generate_diagram
+
+        click.echo("📈 다이어그램 생성 중 (LLM 호출)...")
+        generate = build_generate_diagram(llm, monitor)
         draft_md = generate(
             chapter_title=rc.spec.chapter_title,
             chapter_no=rc.spec.chapter_no,

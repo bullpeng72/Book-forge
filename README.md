@@ -155,7 +155,7 @@ book-forge plan <slug> --revise
 | 능력 | 내용 | 구현 위치 |
 |---|---|---|
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
-| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise) 태깅 — `reference_table`이면 서술형이 아니라 표 형태로 생성 | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py` |
+| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램 전용 생성기로 분기(narrative/exercise는 ChapterDrafterAgent가 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시 | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py` |
 | **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py` |
@@ -203,8 +203,9 @@ src/book_forge/
 │   ├── review_loop.py     # AuthorReviewLoop — 라운드별 개별 @agent_eval (conversation_eval 아님)
 │   ├── scaffold.py        # ScaffoldAgent — @tool_guard (파일 쓰기, 사후채점 아닌 실행전 차단)
 │   ├── slide_condenser.py # SlideCondenserAgent — 섹션 → TITLE/BULLET*/NOTES
-│   ├── chapter_drafter.py # ChapterDrafterAgent — RAG 소스 → 챕터 초안 (rag_mode=True, 옵션)
+│   ├── chapter_drafter.py # ChapterDrafterAgent — RAG 소스 → 챕터 초안 (narrative/exercise, rag_mode=True, 옵션)
 │   ├── reference_table.py # ReferenceTableAgent — RAG 소스 → 레퍼런스 표 (B)
+│   ├── diagram_generator.py # DiagramGeneratorAgent — RAG 소스 → Mermaid 다이어그램 (B)
 │   ├── alternative_suggester.py # AlternativeSuggesterAgent — 낮은 커버리지 → 대안 제안 (F)
 │   ├── demonstration_verifier.py # 생성 후 정적 검증 — exercise 문법/diagram 구조/
 │   │                       # reference_table 소스 대조 (D, LLM 미호출 순수 함수)

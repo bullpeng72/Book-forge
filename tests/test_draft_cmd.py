@@ -264,3 +264,50 @@ def test_draft_single_chapter_exercise_type_reports_missing_code_block(
     assert result.exit_code == 0, result.output
     assert "🔬 실증 가능성 검증: ⚠️" in result.output
     assert "python 코드 블록이 없습니다" in result.output
+
+
+class _DiagramLLM:
+    """content_type=diagram(DiagramGeneratorAgent) 프롬프트를 받으면 mermaid 블록을 낸다."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        if "다이어그램 중심으로" in prompt:
+            return (
+                "# Chapter 1: 파이프라인\n\n도입부.\n\n"
+                "```mermaid\ngraph TD\n    A[요청] --> B[응답]\n```\n\n설명."
+            )
+        return "# 생성된 챕터\n\n고정된 초안 본문입니다."
+
+
+def test_draft_single_chapter_diagram_type_routes_to_diagram_generator(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _DiagramLLM())
+
+    project_dir = tmp_path / "projects" / "diagram-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론|diagram\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "diagram-slug", "1", "--source", str(source_file), "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "📈 다이어그램 생성 중" in result.output
+    assert "🔬 실증 가능성 검증: ✅" in result.output
+
+    ch1 = (part_dir / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
+    assert "```mermaid" in ch1
