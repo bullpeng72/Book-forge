@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 260개 테스트 | Python 3.11+
+11개(10개 동작) | 261개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -524,6 +524,15 @@ python scripts/migrate_legacy_book.py \
 - **임베딩 컨텍스트 길이**: `mxbai-embed-large`는 청크가 너무 길면(코드 저장소 청크
   1200자에서 실제로 500 에러 재현) 실패합니다 — 코드 소스 청크 기본값을 500자로
   낮추고, 그래도 초과하면 절반으로 잘라 1회 자동 재시도합니다(`knowledge/embeddings.py`).
+- **Ollama 추론("thinking") 모델은 `think=false`로 강제 억제합니다(실측 버그 수정 완료)**:
+  `qwen3.6:35b-mlx` 같은 추론 모델은 `num_predict` 예산을 답변 전에 내부 사고 과정
+  (`<thinking>`)에 다 써버릴 수 있는데, Ollama의 `/api/generate`는 이 사고 과정을
+  `response`가 아니라 별도 `thinking` 필드에 담습니다 — `OllamaLLM.generate()`가
+  `response`만 읽으므로, 예산을 다 쓰면(`done_reason="length"`) 챕터 파일이 통째로
+  빈 채 저장되는 걸 실제 사용자 환경(`qwen3.6:35b-mlx`)에서 재현했습니다.
+  `llm/provider.py`의 `OllamaLLM.generate()`가 페이로드에 `think: false`를 항상
+  포함해 추론 모델도 사고 과정 없이 바로 답변하게 강제합니다 — 추론을 지원하지
+  않는 모델(예: `qwen3-coder`)은 이 옵션을 그냥 무시합니다(실측 확인, 에러 없음).
 - **URL 소스는 정적 HTML만 지원**: `--source https://...`는 표준 라이브러리
   `html.parser`로 `<script>/<style>/<head>`만 제거하고 나머지 텍스트를 그대로
   모읍니다(trafilatura/readability 같은 본문 추출 전용 라이브러리 미사용 — 의존성
@@ -544,7 +553,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 260개 테스트
+pytest                 # 261개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```

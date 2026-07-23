@@ -604,6 +604,36 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       재실행하니 `(toylib git 6eb099b 기준)`처럼 커밋 해시 기반 버전
       고정도 정상 동작함을 확인.
 
+23. **`llm/provider.py`의 `OllamaLLM.generate()`는 페이로드에 항상
+    `think: False`를 보낸다 — 실제 사용자 환경(`OLLAMA_MODEL=qwen3.6:35b-mlx`)에서
+    챕터 파일이 통째로 빈 채 저장되는 진짜 버그를 재현하고 고친 결과다.
+    재검토 시 이 옵션을 빼지 말 것**: 이 세션 내내 격리된 `/tmp` 테스트는
+    전부 `qwen3-coder:latest`(비추론 모델)로만 검증했었는데, 실제 사용자의
+    실제 프로젝트(`AI_에이전트_평가_입문`)에 `book-forge draft`를 처음
+    돌렸을 때 Gate A/C/D가 전부 `0.000`으로 나오고 챕터 파일이 0바이트로
+    저장되는 걸 발견했다.
+    - **근본 원인**: Ollama의 `/api/generate`는 Qwen3 계열 같은 "추론(thinking)"
+      모델의 사고 과정을 `response`가 아니라 별도 `thinking` 필드에 담는다.
+      `num_predict`(=`max_tokens`) 예산을 사고 과정에 다 써버리면
+      (`done_reason="length"`) `response`는 끝까지 빈 문자열로 남는다 —
+      실측: `curl`로 직접 `qwen3.6:35b-mlx`에 짧은 프롬프트를 보냈는데도
+      `response=""`, `thinking="Here's a thinking process..."`(300 토큰을
+      다 쓰고도 답변 시작 전)이 재현됨.
+    - **수정**: 요청 페이로드에 `"think": False`를 추가했다 — 이 값을 보내면
+      추론 모델도 사고 과정을 건너뛰고 바로 `response`에 답을 채운다
+      (`done_reason="stop"`으로 정상 종료). 추론을 지원하지 않는 모델
+      (`qwen3-coder:latest` 등)에 이 옵션을 보내도 에러 없이 무시된다 —
+      실측 확인, 항상 켜둬도 안전하다.
+    - `tests/test_llm_provider.py::test_ollama_generate_sends_think_false`가
+      페이로드에 `think: False`가 항상 포함되는지 회귀 고정한다.
+    - **교훈**: 이 세션의 모든 실제 Ollama 검증은 `qwen3-coder:latest`
+      (도구/코드 특화, 비추론) 모델로만 했다 — 추론 모델 특유의 실패 모드는
+      실제 사용자 환경에서 실제 사용자의 모델로 돌려보기 전까지 드러나지
+      않았다. 앞으로 새 LLM 호출 경로를 추가하거나 리팩터링할 때, 격리된
+      `/tmp` 테스트만으로 "검증 완료"라고 판단하지 말 것 — 가능하면 실제
+      사용자 `.env`/실제 프로젝트로도 최소 1회는 돌려봐야 이런 모델별 실패
+      모드를 잡는다.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

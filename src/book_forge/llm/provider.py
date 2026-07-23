@@ -85,6 +85,16 @@ class OllamaLLM:
             "prompt": prompt,
             "system": system or "",
             "stream": False,
+            # think=False: 추론("thinking") 모델(예: qwen3 계열)은 응답 본문을
+            # Ollama의 별도 "thinking" 필드에 담고 "response"는 비워둔다 —
+            # num_predict 예산을 추론에 다 쓰면 최종 답변이 한 글자도 안
+            # 나오고 response=""로 끝난다(실측 확인: qwen3.6:35b-mlx로
+            # 챕터를 생성했더니 파일이 통째로 빈 채 저장됨, done_reason
+            # "length"). think=False는 추론 모델의 사고 과정을 건너뛰고
+            # 바로 답을 response에 채우게 강제한다. 추론을 지원하지 않는
+            # 모델(예: qwen3-coder)은 이 옵션을 그냥 무시한다(실측 확인,
+            # 에러 없음) — 항상 켜둬도 안전하다.
+            "think": False,
             "options": {"num_predict": max_tokens},
         }
         response = requests.post(f"{self._base_url}/api/generate", json=payload, timeout=180)
