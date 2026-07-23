@@ -12,6 +12,7 @@ from book_forge.cli.commands.home_cmd import home
 from book_forge.cli.commands.init_cmd import init
 from book_forge.cli.commands.new_cmd import new
 from book_forge.cli.commands.plan_cmd import plan
+from book_forge.cli.commands.review_cmd import review
 
 _STUB_COMMANDS = [
     ("scaffold", "M1", "승인된 목차 → Part/Chapter MD 스캐폴드 생성"),
@@ -33,6 +34,7 @@ cli.add_command(draft)
 cli.add_command(home)
 cli.add_command(plan)
 cli.add_command(chat)
+cli.add_command(review)
 
 
 def _make_stub(name: str, milestone: str, summary: str) -> click.Command:

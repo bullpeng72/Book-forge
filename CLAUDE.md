@@ -279,6 +279,54 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
     9개 후보 기능 중 별개 항목인 "실습/캡스톤 스캐폴드"와 헷갈리지 말 것,
     지금 `exercise`는 여전히 `chapter_drafter.py`의 content_type 분기로 처리됨).
 
+15. **ReviewPanelAgent(`agents/review_panel.py`)는 Book-forge에서 처음으로 진짜
+    감독자-작업자(supervisor-worker) 멀티에이전트 협업을 구현한 것이다 —
+    이전까지 6개 에이전트가 전부 순차 파이프라인이라 `book-forge gate`의 Gate
+    F(Multi-Agent Coordination)는 항상 N/A였다("일반 능력 G"로 명명, A–F와는
+    다른 축 — RAG 집필 보조가 아니라 "강의가 가르치는 개념을 도구 자신이
+    실제로 실행해봐야 한다"는 요구에서 나옴)**:
+    - 정확성/가독성 검토자(worker) 2명이 같은 챕터를 독립 검토 → 편집장
+      (ChiefEditorAgent, supervisor)이 종합해 최종 판정. `book-forge review
+      <slug> <chapter_no>` CLI로 실행한다(`run_review_panel()`을 감싸는 얇은
+      래퍼, `cli/commands/review_cmd.py`).
+    - **consensus는 자유 텍스트 어휘 유사도가 아니라 구조화 신호로 계산한다**:
+      `eval_consensus(agent_interactions=[{"agent": role_name, "intent":
+      verdict}, ...])`(SPEC-009 REQ-1) — 리뷰어들이 서로 다른 어휘로 같은
+      결론에 도달해도 "불일치"로 오판되지 않는다. `agent_evaluator.decorators`
+      내부에는 `consensus_responses`라는 배치 전용 내부 파라미터가 있어
+      `agent_eval(consensus=...)`를 단일 호출에 써도 항상 조용히 건너뛰어지는데
+      (SDK 자체 경고 메시지가 이 워크어라운드를 안내함), 그 워크어라운드가
+      `eval_consensus()`를 `agent_evaluator.helpers.taskresult_helpers`에서
+      직접 import해 수동 호출한 뒤 `EvalMetadata(extra={"consensus": {...}})`로
+      편집장의 `@agent_eval` 호출에 주입하는 것이다 — `review_panel.py`가
+      정확히 이 패턴을 쓴다. 재검토 시: `agent_eval(consensus=ConsensusConfig())`
+      데코레이터 파라미터에 기대지 말 것 — 단일 호출에서는 무조건 무시된다.
+    - **coordination_score는 `monitor.agent_coordination_tracker.track_interaction()`
+      을 리뷰어마다 위임(delegation)·응답(communication) 2회씩 명시적으로 호출해야
+      채워진다** — `@agent_eval`이 자동으로 기록해주지 않는다(트래커가 별도
+      객체이기 때문).
+    - **agent_role은 각 리뷰어의 담당 관점을 `AgentRoleConfig.allowed_action_keywords`
+      (이 관점이면 언급했을 근거 단어)/`forbidden_action_keywords`(다른 관점
+      침범 시 쓰였을 단어)로 검사한다** — tool_calls가 없는(순수 텍스트 리뷰)
+      상황이라 `signal_source="text_fallback"` 경로가 자동으로 쓰인다.
+    - **conflict_resolution은 편집장 응답 텍스트만으로 판정한다**(`agent_interactions`를
+      의도적으로 안 넘김) — `ConflictResolutionConfig()` 기본값(한국어 마커
+      "충돌"/"불일치" vs "해결"/"합의"/"결정" 이미 포함)이 그대로 맞아떨어져서
+      커스텀 마커가 필요 없었다. 편집장 프롬프트가 "불일치를 명시적으로 언급한
+      뒤 해결하라"고 요구하므로, 판정이 갈렸을 때 편집장 응답에 이 마커들이
+      자연스럽게 등장한다.
+    - **`PropagationConfig`(정보 전파 충실도)는 의도적으로 범위 밖으로 뺐다**:
+      리뷰어의 자유 텍스트 근거를 `key_facts`로 어휘 매칭하려면 짧은 factoid가
+      필요한데, 한국어는 공백 기준 토큰 분할이라 리뷰어 문장 전체를 key_fact로
+      쓰면 fuzzy match가 쉽게 실패한다(threshold 조정으로 억지로 맞추기보다
+      스코프에서 뺌 — 나머지 4개 지표만으로 Gate F가 이미 N/A를 벗어나는 걸
+      증명하는 데 충분했다).
+    - 실측(실제 Ollama): 정상 챕터 → 두 검토자 합의(consensus=1.0), 편집장 승인,
+      `book-forge gate`의 Gate F가 **0.953(pass)**로 최초로 N/A를 벗어남을 확인.
+      의도적으로 사실 오류(파이썬 리스트를 C++ `std::vector`로 잘못 서술)를 심은
+      챕터에서는 두 검토자가 서로 다른 근거로 REVISE 판정, 편집장이 두 근거를
+      모두 반영해 최종 REVISE로 결론 내는 것도 확인.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

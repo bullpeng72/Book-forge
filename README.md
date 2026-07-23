@@ -5,8 +5,8 @@ HTML/PDF/발표자료. 전 과정을 [agent-evaluator](https://pypi.org/project/
 Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(로컬)** — API 키 없이
 바로 시작할 수 있습니다.
 
-**핵심 통계**: 10개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-10개(9개 동작) | 140개 테스트 | Python 3.11+
+**핵심 통계**: 11개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
+11개(10개 동작) | 179개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -14,6 +14,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 - [사용자 작업 흐름](#사용자-작업-흐름)
 - [기능](#기능)
 - [일반 능력 A–F (RAG 집필 보조 확장)](#일반-능력-af-rag-집필-보조-확장)
+- [일반 능력 G — 자기실증 예제 (멀티에이전트 협업)](#일반-능력-g--자기실증-예제-멀티에이전트-협업)
 - [CLI 명령](#cli-명령)
 - [아키텍처](#아키텍처)
 - [Gate A–G 계측](#gate-ag-계측)
@@ -144,6 +145,9 @@ book-forge plan <slug> --revise
   생성. 생성 전 커버리지 점검·낮으면 대안 제안, 생성 직후 Gate 점수 즉시 노출까지
   포함(아래 일반 능력 A–F 참고)
 - **지식창고 Q&A(옵션)**: `book-forge chat` — draft가 쌓은 프로젝트 지식창고에 대화형 질의
+- **다관점 리뷰 패널**: `book-forge review` — 정확성/가독성 검토자 2명이 챕터를 독립
+  검토하고 편집장(ChiefEditorAgent)이 종합 판정. Book-forge 최초의 진짜 감독자-작업자
+  멀티에이전트 협업 예제(아래 일반 능력 G 참고)
 
 ## 일반 능력 A–F (RAG 집필 보조 확장)
 
@@ -174,6 +178,42 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 `run_batch_draft()`)를 그대로 재사용합니다. 실측: 실제 Ollama로 "주제 입력 → 승인 →
 4챕터 완성"을 한 명령·76초로 완주했습니다.
 
+## 일반 능력 G — 자기실증 예제 (멀티에이전트 협업)
+
+A–F는 RAG 집필 보조 확장이지만, G는 다른 축입니다: **강의가 가르치는 개념(예:
+멀티에이전트 협업·오케스트레이션)을 저작 도구 자신이 최소 1회는 실제로 실행해봐야
+한다**는 요구에서 나왔습니다. Book-forge의 기존 6개 에이전트(Planner→TOCDesigner→
+ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이프라인이라, 아무리
+`book-forge gate`를 돌려도 Gate F(Multi-Agent Coordination)는 항상 N/A였습니다.
+
+`book-forge review <slug> <chapter_no>`가 처음으로 진짜 감독자-작업자(supervisor-worker)
+패턴을 구현합니다 — 합성 데모가 아니라 "초안을 승인 전에 다관점으로 검토"하는 실사용
+기능입니다:
+
+1. **정확성 검토자**와 **가독성 검토자**(worker)가 같은 챕터를 서로 다른 관점에서
+   독립적으로 검토해 `VERDICT: APPROVE`/`REVISE`를 냅니다.
+2. **편집장**(ChiefEditorAgent, supervisor)이 두 판정을 종합합니다 — 판정이 갈리면
+   그 불일치를 명시적으로 언급하고 조정해 최종 결론을 냅니다.
+
+이 한 번의 실행이 Gate F의 지금까지 비어있던 4개 지표를 전부 실제 값으로 채웁니다:
+
+| 지표 | 어떻게 채워지는가 |
+|---|---|
+| `coordination_score` | 편집장↔검토자 위임/응답을 `AgentCoordinationTracker.track_interaction()`으로 실제 기록 |
+| `avg_consensus` | 검토자 판정(VERDICT)을 구조화 신호(`agent_interactions=[{"agent","intent"}]`)로 `eval_consensus()`에 직접 전달 — 자유 텍스트 어휘 유사도가 아니라 판정 자체의 일치 여부로 계산(SPEC-009 REQ-1) |
+| `avg_role_compliance` | 각 검토자가 담당 관점(`AgentRoleConfig.allowed_action_keywords`)을 실제로 언급하고 다른 관점(`forbidden_action_keywords`)을 침범하지 않는지 |
+| `avg_conflict_resolution` | 편집장 응답 텍스트를 `ConflictResolutionConfig` 기본 한국어 마커("충돌"/"불일치" vs "해결"/"합의")로 판정 |
+
+실측(실제 Ollama): 두 검토자가 합의(승인)한 정상 챕터에서 `consensus_score=1.0`,
+편집장이 승인했고 `book-forge gate`의 Gate F가 **0.953(pass)**로 처음 N/A를 벗어남을
+확인했습니다. 의도적으로 사실 오류(파이썬 리스트를 C++ std::vector로 잘못 서술)를 심은
+챕터에서는 두 검토자가 각자 다른 근거(정확성 검토자는 사실 오류, 가독성 검토자는 구조
+문제)로 REVISE 판정을 내렸고, 편집장이 두 근거를 모두 반영해 REVISE로 최종 결론을 낸
+것도 확인했습니다.
+
+`PropagationConfig`(정보 전파 충실도)는 이번 범위에 포함하지 않았습니다 — 자유 텍스트
+근거를 key_facts로 어휘 매칭하는 건 한국어 토큰 분할 특성상 오탐이 잦습니다.
+
 ## CLI 명령
 
 | 명령 | 상태 | 설명 |
@@ -187,6 +227,7 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
 | `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표 생성 (`--all`로 일괄) |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 대화형 질의 |
+| `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
 | `book-forge plan <slug> [--revise]` | ✅ | 기획/목차 재검토 — `--revise` 없으면 미리보기만 |
 | `book-forge scaffold <slug>` | 🚧 | (현재 `new`/`plan --revise`에 통합됨 — 독립 실행 미구현) |
@@ -209,7 +250,9 @@ src/book_forge/
 │   ├── alternative_suggester.py # AlternativeSuggesterAgent — 낮은 커버리지 → 대안 제안 (F)
 │   ├── demonstration_verifier.py # 생성 후 정적 검증 — exercise 문법/diagram 구조/
 │   │                       # reference_table 소스 대조 (D, LLM 미호출 순수 함수)
-│   └── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
+│   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
+│   └── review_panel.py    # ReviewPanelAgent — 정확성/가독성 검토자 + 편집장
+│                           # (G, 감독자-작업자 패턴 — Gate F 실증 예제)
 ├── knowledge/      # RAG — 소스 어댑터 + Ollama 임베딩 인메모리 코사인 유사도 검색 ([rag] extra)
 │   ├── embeddings.py      # Ollama /api/embeddings, 컨텍스트 길이 초과 시 자동 축소 재시도
 │   ├── store.py           # KnowledgeStore — numpy 코사인 유사도 + save/load/merge (E)
