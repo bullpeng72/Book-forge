@@ -391,6 +391,41 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       말 것). 템플릿엔 TODO 마커 존재+문법 유효성을, 정답엔 TODO 부재+문법
       유효성을 확인한다.
 
+18. **`book-forge chat`의 지속형 상호작용 강화는 `agent_evaluator.core.trackers.conversation.ConversationSession`을
+    `monitor.conversation(session_id)`로 얻어 쓴 것이다, 새 대화 이력 관리 로직을
+    만들지 않았다**: 처음 구현한 `chat_cmd.py`는 매 질문이 완전히 독립적인
+    `answer_question()` 호출이라 "방금 말한 그거" 같은 이어지는 질문을 이해하지
+    못했다. 두 가지를 나눠서 고쳤다 — 헷갈리지 말 것, 서로 다른 메커니즘이다:
+    - **LLM이 실제로 이전 발화를 참조하게 하는 것**: `agents/chat_agent.py`의
+      `answer_question()`에 `conversation_history: str = ""` 파라미터를 추가하고
+      `CHAT_PROMPT`에 `--- 이전 대화 ---` 섹션으로 끼워 넣는다. `chat_cmd.py`가
+      매 턴마다 Python 리스트(`history: list[tuple[str, str]]`)에서 최근
+      `_MAX_HISTORY_TURNS=3`턴만 잘라 문자열로 포맷해 넘긴다 — `ConversationSession`
+      자체는 이 프롬프트 조립에 관여하지 않는다(순수 참고용 메트릭 트래커일
+      뿐, LLM 입력을 만들어주지 않음). `conversation_history`는 `rag_mode`의
+      `context_arg="sources"`와 별개 채널이라 `HallucinationDetector`의 환각
+      채점 기준(지식창고 발췌문)에는 영향을 주지 않는다 — 재검토 시 두 채널을
+      섞지 말 것.
+    - **세션 품질을 측정하는 것**: `chat_cmd.py`의 REPL 루프 전체를
+      `with monitor.conversation(f"chat_{slug}") as conv:`로 감싸고, 매 턴
+      끝에 `conv.turn(user=question, agent=answer)`를 호출한다. `with` 블록이
+      정상 종료(`/exit`, EOF)하면 `ConversationSession.__exit__`이 자동으로
+      `compute_metrics()`를 호출하고 `monitor.conversation_sessions`에 append한다
+      (예외가 전파되면 스킵 — SDK 자체 동작, Book-forge가 따로 처리 안 함).
+      계산되는 4개 지표(`context_retention`/`topic_coherence`/
+      `progressive_depth`/`session_completion`)는 순수 Python 어휘 비교
+      기반이라 LLM 호출이 없다. **Gate A-G 점수에는 반영되지 않는다** —
+      `ConversationSession`은 CLAUDE.md 상단의 25개 Native Tracker 분류에서
+      "operational support"(8종) 소속이다(재확인 완료), Gate 집계 로직
+      (`gates/*/aggregate.py`)이 이걸 참조하지 않는다. `eval_results/chat.json`의
+      최상위 `conversation_sessions` 키(중첩 아님, `extra_metrics` 밑이 아님 —
+      실측 확인)에 턴별 기록+계산된 지표가 함께 저장된다.
+    - 실측(실제 Ollama): "reverse() 메서드는 어떻게 동작해?" 다음에 "방금 말한
+      그 메서드는 원본을 바꾸는거야 아니면 새로 만드는거야?"를 물었을 때, 두
+      번째 답변이 지시어 "그 메서드"를 `reverse()`로 정확히 이해해 답함(대화
+      이력 없이는 이 대명사 참조가 불가능) — `context_retention=0.60,
+      topic_coherence=0.26, overall=0.49`로 실제 계산됨을 확인.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

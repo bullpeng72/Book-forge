@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 202개 테스트 | Python 3.11+
+11개(10개 동작) | 207개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -144,7 +144,9 @@ book-forge plan <slug> --revise
   소스를 Ollama 임베딩으로 청크·검색해 근거 발췌문만으로 챕터 초안 또는 레퍼런스 표
   생성. 생성 전 커버리지 점검·낮으면 대안 제안, 생성 직후 Gate 점수 즉시 노출까지
   포함(아래 일반 능력 A–F 참고)
-- **지식창고 Q&A(옵션)**: `book-forge chat` — draft가 쌓은 프로젝트 지식창고에 대화형 질의
+- **지식창고 Q&A(옵션)**: `book-forge chat` — draft가 쌓은 프로젝트 지식창고에 대화형 질의.
+  세션 전체를 `ConversationSession`으로 감싸 최근 대화를 프롬프트에 포함(이어지는 질문
+  이해)하고, 종료 시 맥락 유지/주제 일관성 등 4개 지표를 표시
 - **다관점 리뷰 패널**: `book-forge review` — 정확성/가독성 검토자 2명이 챕터를 독립
   검토하고 편집장(ChiefEditorAgent)이 종합 판정. Book-forge 최초의 진짜 감독자-작업자
   멀티에이전트 협업 예제(아래 일반 능력 G 참고)
@@ -168,7 +170,7 @@ book-forge plan <slug> --revise
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py` |
 | **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
-| **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py` |
+| **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
 
 **배치 모드**: `book-forge draft <slug> --all --source ...`로 목차의 미집필 챕터 전부를
@@ -206,6 +208,22 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 (`load_toc()`, 디렉토리 스캔이 아님) 정답 사이드카 파일은 HTML/PDF/발표자료/웹 에디터
 어디에도 노출되지 않습니다 — 실측(실제 Ollama)으로 빌드된 HTML에 정답 코드가 전혀
 섞이지 않음을 확인했습니다.
+
+**지속형 상호작용 강화(E)**: 처음 구현한 `book-forge chat`은 매 질문이 완전히
+독립적이었습니다 — "방금 말한 그 메서드는 원본을 바꾸나요?" 같은 이어지는 질문을 이해할
+수 없었습니다. `chat_cmd.py`가 세션 전체를 agent-evaluator의 `ConversationSession`
+(`monitor.conversation(...)`)으로 감싸도록 확장했습니다:
+- 최근 3턴을 `--- 이전 대화 ---` 섹션으로 프롬프트에 포함(`agents/chat_agent.py`의
+  `conversation_history` 파라미터) — RAG 근거(`sources`)와는 별개 채널이라
+  `HallucinationDetector`의 환각 채점 기준(지식창고 발췌문)에는 영향을 주지 않습니다.
+- 세션 종료(`/exit` 또는 Ctrl-D) 시 `context_retention`/`topic_coherence`/
+  `progressive_depth`/`session_completion` 4개 지표를 자동 계산해 CLI에 표시하고
+  `eval_results/chat.json`의 `conversation_sessions`에 턴별 기록과 함께 저장합니다.
+  Gate A-G 점수에는 반영되지 않는 순수 운영 지표입니다(`ConversationSession`은
+  25개 Native Tracker 중 "operational support" 8종에 속함).
+- 실측(실제 Ollama): "reverse() 메서드는 어떻게 동작해?" → "**방금 말한 그** 메서드는
+  원본을 바꾸는 거야 새로 만드는 거야?"를 연달아 질문했을 때, 두 번째 답변이 지시어
+  "그 메서드"를 `reverse()`로 정확히 이해해 답했습니다(대화 이력 없이는 불가능).
 
 ## 일반 능력 G — 자기실증 예제 (멀티에이전트 협업)
 
@@ -255,7 +273,7 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
 | `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조) |
-| `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 대화형 질의 |
+| `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
 | `book-forge plan <slug> [--revise]` | ✅ | 기획/목차 재검토 — `--revise` 없으면 미리보기만 |
