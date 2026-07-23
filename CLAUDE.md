@@ -459,6 +459,48 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       0.5.0 기준)`(고정값)이 표시되는 것, 재실행이 `0.9.9`로 자동 되돌리지
       않는 것(고정 유지)을 모두 확인.
 
+20. **`agents/code_example_verifier.py`(--execute-examples)는 항목 13("LLM이
+    생성한 임의 코드를 자동으로 실행하지는 않는다")의 결정을 뒤집는 게 아니라
+    그 결정 위에 별도의 명시적 옵트인 계층을 얹은 것이다 — 재검토 시 항목
+    13과 모순된다고 착각하지 말 것. `exercise`/`diagram`/`capstone`/
+    `code_consistency`의 기본 검증(문법·구조·심볼 존재)은 지금도 실행하지
+    않는다. `--check-package`와 함께 `--execute-examples`를 명시적으로 켰을
+    때만 이 모듈이 개입한다**:
+    - **격리 방식은 in-process `exec()`가 아니라 `subprocess`다 — 사용자가
+      명시적으로 이 방식을 선택했다(다른 대안: 구현 보류)**. 각 코드 블록을
+      임시 디렉토리(`tempfile.TemporaryDirectory`)의 별도 파일에 써서
+      `sys.executable`로 실행하고, 타임아웃(기본 10초,
+      `DEFAULT_TIMEOUT_SECONDS`)을 건다. `exec()`를 안 쓰는 이유: 크래시가
+      CLI 프로세스 자체를 죽이지 않고, 부모 프로세스 메모리(API 키가 담긴
+      환경 변수 등)에 코드가 직접 접근할 수 없다. **단, 파일시스템/네트워크
+      접근은 OS 수준으로 격리되지 않는다** — 컨테이너 없는 순수 Python
+      subprocess의 한계이며, README "알려진 한계"에 명시했다. 신뢰할 수 없는
+      `--source`와 함께 쓰지 말 것.
+    - **capstone은 template이 아니라 solution만 실행 대상이다**: template은
+      `TODO`/`raise NotImplementedError`로 의도적으로 미완성이므로 실행하면
+      항상 "실패"가 나와 무의미하다. `_draft_one_chapter()`가
+      `content_type == "capstone"`이면 `solution_md`를, 그 외엔 `draft_md`를
+      `verify_code_execution()`에 넘긴다 — 재검토 시 이 분기를 빠뜨리면
+      capstone 챕터마다 항상 거짓 실패가 뜬다.
+    - **실행 실패해도 초안 저장을 막지 않는다 — 원 설계 문서의 "실패 시
+      초안 반려"는 채택하지 않았다(사용자 확인 후 결정)**: 지금까지
+      exercise/diagram/capstone/code_consistency 전부가 "경고만, 저장은
+      유지" 원칙을 일관되게 지켜왔다 — 이 원칙을 이 검증기만 예외로 두면
+      다른 검증기와의 UX 일관성이 깨진다. `_print_code_execution()`이 다른
+      `_print_*` 헬퍼와 동일한 출력 패턴(`▶️  코드 실행 검증: ✅/⚠️`)을 쓴다.
+    - `--execute-examples`는 `--check-package` 없이 단독으로 쓸 수 없다
+      (`draft()`/`new()` 양쪽에 `if execute_examples and not check_package:
+      raise click.ClickException(...)` 검증 있음) — "이 SDK를 대상으로
+      검증한다"는 맥락 없이 코드 실행만 단독으로 여는 옵션을 만들지 않기로
+      했다(스코프를 좁게 유지).
+    - 실측(실제 Ollama): 정상 실습 코드(`reversed()`/슬라이싱으로 리스트
+      뒤집기)가 실제 subprocess 실행에 성공함을 확인. 존재하지 않는 메서드를
+      "실제로 있다고 믿게" 유도하는 소스로 재시도했을 때 LLM이 `try/except
+      AttributeError`로 방어적으로 코드를 작성해 실행이 여전히 성공한 것도
+      관찰함(검증기 버그 아님 — 오프라인 결정론적 테스트로 문법 오류/런타임
+      예외(AssertionError/ImportError)/타임아웃 3가지 실패 경로는 별도로 이미
+      검증 완료).
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

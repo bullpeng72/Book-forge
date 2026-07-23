@@ -466,6 +466,149 @@ def test_draft_check_package_warns_on_version_drift(tmp_path: Path, monkeypatch)
     assert "0.0.1로 고정됐지만" in result.output
 
 
+class _ExecutableCodeLLM:
+    """실제로 실행되면 성공하는 python 코드 블록을 낸다."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return "# 생성된 챕터\n\n```python\ndef add(a, b):\n    return a + b\n\nassert add(1, 2) == 3\n```"
+
+
+class _BrokenCodeLLM:
+    """실행하면 실패하는(하지만 문법은 유효한) python 코드 블록을 낸다."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return "# 생성된 챕터\n\n```python\nraise ValueError('boom')\n```"
+
+
+def _make_single_chapter_project(tmp_path: Path, slug: str) -> Path:
+    project_dir = tmp_path / "projects" / slug
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    return project_dir
+
+
+def test_execute_examples_requires_check_package(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["draft", "any-slug", "1", "--execute-examples"])
+    assert result.exit_code != 0
+    assert "--check-package와 함께" in result.output
+
+
+def test_draft_execute_examples_passes_for_working_code(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr(
+        "book_forge.cli.commands.draft_cmd.create_llm", lambda: _ExecutableCodeLLM()
+    )
+
+    _make_single_chapter_project(tmp_path, "exec-ok-slug")
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "exec-ok-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator", "--execute-examples",
+        ]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "▶️  코드 실행 검증: ✅" in result.output
+
+
+def test_draft_execute_examples_flags_runtime_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _BrokenCodeLLM())
+
+    _make_single_chapter_project(tmp_path, "exec-fail-slug")
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "exec-fail-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator", "--execute-examples",
+        ]
+    )
+
+    # 실행 실패해도 초안 저장은 그대로 진행된다(기존 원칙과 일관 — 참고용).
+    assert result.exit_code == 0, result.output
+    assert "▶️  코드 실행 검증: ⚠️" in result.output
+    assert "ValueError" in result.output
+    ch1 = (tmp_path / "projects" / "exec-fail-slug" / "Part_1_기초" / "Chapter_01_사과_개론.md")
+    assert ch1.is_file()
+    assert "raise ValueError" in ch1.read_text(encoding="utf-8")
+
+
+class _CapstoneExecRoutingLLM:
+    """템플릿을 실행하면 확실히 실패(raise)하고, 정답을 실행하면 확실히 성공하는
+    코드를 낸다 — 실행 검증이 template이 아니라 solution을 실행했는지 명확히
+    구분하기 위한 전용 fixture(기존 _CapstoneLLM은 둘 다 예외 없이 끝나는
+    코드라 라우팅 증명에 못 씀)."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return (
+            "=== TEMPLATE ===\n"
+            "# Chapter 1: 사과 개론\n\n## 시작 코드\n\n"
+            "```python\nraise NotImplementedError('템플릿이 실행되면 여기서 실패해야 함')\n```\n\n"
+            "=== SOLUTION ===\n"
+            "# Chapter 1: 사과 개론 — 모범 정답\n\n## 모범 정답\n\n"
+            "```python\nx = 1 + 1\nassert x == 2\n```\n\n## 해설\n\n정답 코드."
+        )
+
+
+def test_draft_execute_examples_runs_solution_not_template_for_capstone(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr(
+        "book_forge.cli.commands.draft_cmd.create_llm", lambda: _CapstoneExecRoutingLLM()
+    )
+
+    project_dir = tmp_path / "projects" / "exec-capstone-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론|capstone\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "exec-capstone-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator", "--execute-examples",
+        ]
+    )
+
+    # 정답이 실행됐다면 통과, 템플릿(NotImplementedError)이 실행됐다면 반드시 실패한다.
+    assert result.exit_code == 0, result.output
+    assert "▶️  코드 실행 검증: ✅" in result.output
+    assert "NotImplementedError" not in result.output
+
+
 def test_draft_without_check_package_skips_consistency_check(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)

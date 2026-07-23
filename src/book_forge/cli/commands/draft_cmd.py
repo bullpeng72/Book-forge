@@ -24,6 +24,12 @@
        설치 버전을 sdk_versions.json에 고정하고, 이후 호출마다 현재 설치
        버전과 대조해 드리프트(SDK 버전이 바뀌어 검증 기준 자체가 달라짐)를
        경고한다.
+  - C(확장 2): --check-package와 함께 --execute-examples를 주면 python 코드
+       블록을 subprocess로 실제 실행해 exit code 0인지 확인한다(code_example_verifier.py).
+       exercise/narrative는 생성된 코드 전체를, capstone은 정답(solution)만
+       실행한다(템플릿은 의도적으로 미완성이라 실행 대상에서 제외). 다른 검증과
+       같은 원칙 — 실패해도 초안 저장을 막지 않는다(참고용). LLM이 생성한
+       코드를 실제로 실행하는 위험을 인지하고 명시적으로 켜야 하는 옵트인이다.
 
 --all(배치 모드) vs 단일 챕터 모드는 낮은 커버리지 처리 정책이 다르다 — 이건
 의도된 설계다: 단일 모드는 "저자가 지금 이 화면 앞에 있다"고 가정해 F의 대안을
@@ -82,6 +88,7 @@ class ChapterDraftResult:
     gate_c_score: Optional[float] = None
     verification: Optional[VerificationResult] = None
     code_consistency: Optional[VerificationResult] = None
+    code_execution: Optional[VerificationResult] = None
 
 
 def _is_draftable(rc: ResolvedChapter, force: bool) -> bool:
@@ -126,6 +133,7 @@ def run_batch_draft(
     top_k: int = 8,
     min_coverage: float = 0.5,
     check_package: Optional[str] = None,
+    execute_examples: bool = False,
 ) -> list["ChapterDraftResult"]:
     """미집필 챕터 목록을 순회하며 배치 정책(저커버리지 스킵+리포트)으로 RAG 초안을 생성한다.
 
@@ -139,6 +147,7 @@ def run_batch_draft(
                 rc, store, llm, project_dir,
                 top_k=top_k, min_coverage=min_coverage,
                 yes=False, batch_mode=True, check_package=check_package,
+                execute_examples=execute_examples,
             )
         )
     return results
@@ -165,6 +174,12 @@ def run_batch_draft(
     help="본문이 언급한 import/백틱 심볼이 이 패키지에 실제로 존재하는지 정적으로 대조"
          "(예: --check-package agent_evaluator, 옵트인, 미지정 시 검사 없음)",
 )
+@click.option(
+    "--execute-examples", is_flag=True,
+    help="--check-package와 함께 사용 — python 코드 블록을 별도 subprocess에서 실제 실행해 "
+         "검증(타임아웃 10초, 격리 실행이지만 파일시스템/네트워크는 OS 수준으로 격리되지 않음. "
+         "LLM이 생성한 코드를 실행하는 위험을 인지하고 켤 것)",
+)
 def draft(
     slug: str,
     chapter_no: Optional[int],
@@ -175,6 +190,7 @@ def draft(
     yes: bool,
     force: bool,
     check_package: Optional[str],
+    execute_examples: bool,
 ) -> None:
     """SLUG 프로젝트의 CHAPTER_NO 챕터(또는 --all로 전체 미집필 챕터)를
     --source 기반 RAG로 초안 생성한다."""
@@ -182,6 +198,8 @@ def draft(
         raise click.ClickException("챕터 번호와 --all은 함께 쓸 수 없습니다.")
     if not draft_all and chapter_no is None:
         raise click.ClickException("챕터 번호를 지정하거나, 전체 일괄 생성은 --all을 쓰세요.")
+    if execute_examples and not check_package:
+        raise click.ClickException("--execute-examples는 --check-package와 함께 지정해야 합니다.")
 
     try:
         import numpy  # noqa: F401
@@ -230,14 +248,14 @@ def draft(
     if draft_all:
         results = run_batch_draft(
             targets, store, llm, config.project_dir, top_k=top_k, min_coverage=min_coverage,
-            check_package=check_package,
+            check_package=check_package, execute_examples=execute_examples,
         )
         _print_batch_summary(results)
     else:
         _draft_one_chapter(
             targets[0], store, llm, config.project_dir,
             top_k=top_k, min_coverage=min_coverage, yes=yes, batch_mode=False,
-            check_package=check_package,
+            check_package=check_package, execute_examples=execute_examples,
         )
 
 
@@ -252,6 +270,7 @@ def _draft_one_chapter(
     yes: bool,
     batch_mode: bool,
     check_package: Optional[str] = None,
+    execute_examples: bool = False,
 ) -> ChapterDraftResult:
     result = ChapterDraftResult(
         chapter_no=rc.spec.chapter_no, chapter_title=rc.spec.chapter_title, status="cancelled"
@@ -393,6 +412,11 @@ def _draft_one_chapter(
         result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
     if check_package:
         result.code_consistency = _print_code_consistency(check_package, draft_md, project_dir)
+    if execute_examples:
+        # capstone은 정답(solution)만 실행 대상이다 — 템플릿은 TODO/NotImplementedError로
+        # 의도적으로 미완성이라 실행하면 항상 "실패"로 나와 무의미하다.
+        code_to_execute = solution_md if rc.spec.content_type == "capstone" else draft_md
+        result.code_execution = _print_code_execution(code_to_execute or "")
     return result
 
 
@@ -473,6 +497,23 @@ def _print_code_consistency(
     return result
 
 
+def _print_code_execution(code_md: str) -> VerificationResult:
+    """C(근거 검증 계층) 확장 — python 코드 블록을 실제 subprocess에서 실행해
+    exit code 0인지 확인하고 CLI에 즉시 노출한다. 다른 검증과 같은 원칙 —
+    실패해도 초안 저장을 막지 않는다(참고용). --execute-examples로만 켜지는
+    옵트인이며, LLM이 생성한 코드를 실제로 실행하는 위험을 감수한다."""
+    from book_forge.agents.code_example_verifier import verify_code_execution
+
+    result = verify_code_execution(code_md)
+    if result.passed:
+        click.echo(f"▶️  코드 실행 검증: ✅ {result.detail}")
+    else:
+        click.echo(f"▶️  코드 실행 검증: ⚠️  {result.detail}")
+        for issue in result.issues:
+            click.echo(f"     → {issue}")
+    return result
+
+
 def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
     click.echo("\n" + "═" * 50)
     click.echo("📋 일괄 생성 요약")
@@ -490,6 +531,8 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
                 click.echo(f"       🔬 실증 검증 실패: {r.verification.detail}")
             if r.code_consistency is not None and not r.code_consistency.passed:
                 click.echo(f"       🔗 코드-본문 정합성 실패: {r.code_consistency.detail}")
+            if r.code_execution is not None and not r.code_execution.passed:
+                click.echo(f"       ▶️  코드 실행 실패: {r.code_execution.detail}")
         elif r.status == "skipped_low_coverage":
             click.echo(f"  ⏭️  {label} — 건너뜀 (커버리지 {r.avg_coverage:.3f} 미달)")
         else:
@@ -503,6 +546,9 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
     consistency_failed = sum(
         1 for r in results if r.code_consistency is not None and not r.code_consistency.passed
     )
+    execution_failed = sum(
+        1 for r in results if r.code_execution is not None and not r.code_execution.passed
+    )
     click.echo(f"\n생성 {created}개, 건너뜀 {skipped}개 (총 {len(results)}개)")
     if skipped:
         click.echo(
@@ -513,3 +559,5 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
         click.echo(f"🔬 실증 가능성 검증 실패 {verification_failed}개 — 위 목록에서 검토하세요.")
     if consistency_failed:
         click.echo(f"🔗 코드-본문 정합성 실패 {consistency_failed}개 — 위 목록에서 검토하세요.")
+    if execution_failed:
+        click.echo(f"▶️  코드 실행 실패 {execution_failed}개 — 위 목록에서 검토하세요.")

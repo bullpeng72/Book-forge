@@ -45,9 +45,14 @@ from book_forge.publish.toc_loader import load_toc
     help="[--source] 본문이 언급한 import/백틱 심볼이 이 패키지에 실제로 존재하는지 정적으로 대조"
          "(옵트인, 미지정 시 검사 없음)",
 )
+@click.option(
+    "--execute-examples", is_flag=True,
+    help="[--source, --check-package와 함께] python 코드 블록을 subprocess에서 실제 실행해 검증"
+         "(LLM이 생성한 코드를 실행하는 위험을 인지하고 켤 것)",
+)
 def new(
     title: str, constraints: str, sources: tuple, top_k: int, min_coverage: float,
-    check_package: str,
+    check_package: str, execute_examples: bool,
 ) -> None:
     """주제(TITLE)로 신규 프로젝트를 만들고 기획→목차 대화형 루프를 진행한다."""
     if sources:
@@ -58,6 +63,8 @@ def new(
             raise click.ClickException(
                 'RAG 기능에 필요한 패키지가 없습니다. pip install -e ".[rag]" 로 설치하세요.'
             ) from exc
+    if execute_examples and not check_package:
+        raise click.ClickException("--execute-examples는 --check-package와 함께 지정해야 합니다.")
 
     load_config()
 
@@ -161,7 +168,7 @@ def new(
     store = collect_sources_into_store(project_dir, sources)
     results = run_batch_draft(
         targets, store, llm, project_dir, top_k=top_k, min_coverage=min_coverage,
-        check_package=check_package,
+        check_package=check_package, execute_examples=execute_examples,
     )
     _print_batch_summary(results)
     click.echo(f"\n   완료. {project_dir} 에서 결과를 확인하세요.")

@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 219개 테스트 | Python 3.11+
+11개(10개 동작) | 229개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -154,6 +154,9 @@ book-forge plan <slug> --revise
   본문이 언급한 `import`/백틱 심볼이 실제로 그 패키지에 존재하는지 정적으로 대조(LLM
   미호출, C의 확장). 프로젝트가 처음 사용한 시점의 SDK 버전을 `sdk_versions.json`에
   고정하고, 이후 설치 버전이 달라지면 경고
+- **코드 예제 실행 검증(옵션)**: `--check-package`와 함께 `--execute-examples`를 주면
+  python 코드 블록을 별도 subprocess에서 실제로 실행해 성공하는지 확인(타임아웃 10초,
+  LLM이 생성한 코드를 실행하는 위험을 인지하고 명시적으로 켜야 하는 옵트인)
 - **실습/캡스톤 스캐폴드**: `content_type: capstone`으로 태깅한 챕터는 빈 템플릿(TODO
   있는 스켈레톤)과 별도 정답 파일을 함께 생성 — 독자가 직접 풀어보는 실습 전용
   (아래 일반 능력 B 표 참고)
@@ -169,7 +172,7 @@ book-forge plan <slug> --revise
 |---|---|---|
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
-| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 SDK 버전을 프로젝트별로 `sdk_versions.json`에 고정하고 드리프트를 경고 | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py` |
+| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 SDK 버전을 프로젝트별로 `sdk_versions.json`에 고정하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
 | **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
@@ -210,6 +213,28 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 `build_book.py`가 `pyproject.toml`에서 버전을 자동으로 읽어 표지에 찍던 관례를
 재해석한 것입니다 — Book-forge 자신이 아니라 저자가 근거로 삼는 **대상 SDK**의
 버전을 고정한다는 점이 다릅니다.
+
+**코드 예제 실행 검증(C의 세 번째 검증기 종류)**: `demonstration_verifier.verify_exercise_code()`는
+`ast.parse()`로 **문법**만 봅니다 — 실제로 실행하면 성공하는지는 지금까지 한 번도
+확인하지 않았습니다. 이 프로젝트는 그 결정을 CLAUDE.md에 명시적으로 기록해뒀습니다
+("LLM이 생성한 임의 코드를 자동으로 실행하지는 않는다"). `--check-package`와 함께
+`--execute-examples`를 켜면 그 결정을 뒤집는 게 아니라 **별도의 명시적 옵트인
+계층**으로 실행 검증을 추가합니다:
+- 코드 블록마다 별도 `subprocess`(타임아웃 10초)로 격리 실행합니다 — in-process
+  `exec()`가 아니므로 크래시가 CLI 자체를 죽이지 않고, 부모 프로세스의 메모리(API
+  키가 담긴 환경 변수 등)에 직접 접근하지 못합니다. 단, 파일시스템/네트워크 접근은
+  OS 수준으로 격리되지 않습니다(컨테이너 없는 순수 Python subprocess의 한계 — 알려진
+  한계 참고).
+- `narrative`/`exercise`는 생성된 코드 전체를, `capstone`은 **정답(solution)만**
+  실행합니다 — 템플릿은 `TODO`/`NotImplementedError`로 의도적으로 미완성이라
+  실행하면 항상 "실패"로 나와 무의미하기 때문입니다.
+- 다른 검증과 같은 원칙으로 **실패해도 초안 저장을 막지 않습니다**(참고용) —
+  원 설계 문서는 "실패 시 초안 반려"를 제안했지만, exercise/diagram/capstone/
+  code_consistency 전부가 지켜온 "경고만 하고 저장은 유지" 원칙을 깨지 않는 쪽을
+  택했습니다.
+- 실측(실제 Ollama): 정상 실습 코드(`reversed()`/슬라이싱으로 리스트 뒤집기)가
+  실제로 실행에 성공함을 확인했고, 오프라인 결정론적 테스트로 문법 오류/런타임
+  예외(assert 실패, ImportError)/타임아웃 3가지 실패 경로를 모두 검증했습니다.
 
 **실습/캡스톤 스캐폴드(B의 네 번째 콘텐츠 유형)**: `content_type`을 `capstone`으로
 태깅하면(목차의 5번째 필드) 기존 `exercise`("목표→코드→해설"을 한 파일에 담음)와
@@ -285,7 +310,7 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+SDK 버전 고정) |
+| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package] [--execute-examples]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+SDK 버전 고정, `--execute-examples`로 실제 실행 검증) |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
@@ -315,6 +340,8 @@ src/book_forge/
 │   │                       # 존재하는지 대조 (C 확장, LLM 미호출 순수 함수)
 │   ├── sdk_version_pin.py # 프로젝트별 대상 SDK 버전 고정 + 드리프트 감지
 │   │                       # (C 확장의 기준, LLM 미호출 순수 함수)
+│   ├── code_example_verifier.py # python 코드 블록을 subprocess로 실제 실행해
+│   │                       # 검증 (C 확장, --execute-examples 옵트인, LLM 미호출)
 │   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
 │   └── review_panel.py    # ReviewPanelAgent — 정확성/가독성 검토자 + 편집장
 │                           # (G, 감독자-작업자 패턴 — Gate F 실증 예제)
@@ -434,13 +461,20 @@ python scripts/migrate_legacy_book.py \
   SPA 페이지는 텍스트를 거의 못 가져옵니다. 재귀적으로 링크를 따라가지 않고 지정한
   URL 1개만 가져오며, 리다이렉트/robots.txt는 별도로 존중하지 않으므로 저자 본인이
   권한이 있거나 공개된 자료만 지정하세요.
+- **`--execute-examples`는 LLM이 생성한 코드를 실제로 실행합니다**: `subprocess`로
+  격리하고 타임아웃을 걸지만, 컨테이너 수준의 파일시스템/네트워크 격리는 없습니다 —
+  이 프로세스를 실행하는 사용자 권한 그대로 코드가 돌아갑니다. 생성된 코드는
+  `--source`로 넣은 RAG 소스의 영향을 받으므로, 신뢰할 수 없는 출처(예: 검증되지
+  않은 코드 저장소)를 소스로 쓸 때는 특히 주의하세요. 기본은 꺼져 있고
+  (`--check-package`와 함께 명시적으로 켜야 함), 실행 실패는 경고만 하고 초안
+  저장을 막지 않습니다.
 
 ## 개발
 
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 140개 테스트
+pytest                 # 229개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```
