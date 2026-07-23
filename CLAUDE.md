@@ -357,6 +357,40 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       CLI에서 명시적으로 지정한 패키지만 로드한다 — 임의 원격 코드 실행이
       아니다.
 
+17. **`capstone` content_type은 `exercise`와 다른 생성 패턴이다 — 결과물이
+    한 파일이 아니라 두 파일(템플릿+정답)이라는 게 핵심 차이다**: 9개 후보
+    기능(AI Agent 강의 분석에서 도출)의 9번 항목("빈 템플릿 + 별도 정답")을
+    구현한 것이다. `exercise`(`chapter_drafter.py`)는 "목표→실습 코드→해설"을
+    한 파일에 담아 독자가 열자마자 정답이 보이지만, `capstone`
+    (`agents/capstone_generator.py`)은 독자가 실제로 풀어볼 빈 템플릿(TODO
+    스켈레톤)과 모범 정답+해설을 분리한다.
+    - **한 번의 LLM 호출로 둘 다 받는다, 두 번 호출하지 않는다**:
+      `=== TEMPLATE ===`/`=== SOLUTION ===` 구분자로 같은 응답 안에서 나눈다.
+      두 번 호출하면(템플릿 생성 1회 + 정답 생성 1회) 서로 다른 컨텍스트에서
+      나와 다른 문제를 다룰 위험이 있다(예: 템플릿은 리스트 실습인데 정답은
+      딕셔너리 실습) — `parse_capstone_response()`가 관대하게 분리한다(구분자가
+      없거나 순서가 뒤바뀌면 예외 없이 전체를 템플릿으로, 정답은 빈 문자열로
+      폴백 — `parse_alternatives()`와 같은 원칙).
+    - **정답은 `01_목차.md`가 모르는 사이드카 파일에 쓴다**: `draft_cmd.py`가
+      `rc.path.with_name(rc.path.stem + "_정답" + rc.path.suffix)`로 챕터
+      파일과 같은 디렉토리에 `Chapter_XX_제목_정답.md`를 쓴다. 별도
+      `solutions/` 디렉토리를 만들지 않은 이유: `load_toc()`이 목차
+      매니페스트만 파싱하고 디렉토리를 스캔하지 않는다는 게 이미 확인된
+      사실이라(`build_toc_sidebar()`/`editor/server.py`/`html_builder.py`/
+      `pdf_builder.py`/`slide_builder.py` 전부 `load_toc()` 경유), 목차에
+      없는 파일은 어디서든 안전하게 숨겨진다 — 새 격리 메커니즘을 만들 필요가
+      없었다. 실측(실제 Ollama): 빌드된 HTML에 정답 코드(`.reverse()` 등
+      정답에만 있는 텍스트)가 전혀 섞이지 않음을 확인.
+    - **`_STRICT_CONTENT_TYPES`(D)에 `capstone`도 포함시켰다** — exercise/diagram과
+      같은 이유로, 실증이 필요한 콘텐츠는 소스 부족 상태로 생성하면 위험이
+      더 크다.
+    - `verify_demonstration()`(단일 문서 시그니처)로는 capstone을 처리할 수
+      없다 — 템플릿/정답 두 문서를 함께 봐야 하므로 `verify_capstone
+      (template_md, solution_md)`을 `draft_cmd.py`가 직접 호출한다
+      (`verify_demonstration()`의 디스패치 대상이 아님, 재검토 시 착각하지
+      말 것). 템플릿엔 TODO 마커 존재+문법 유효성을, 정답엔 TODO 부재+문법
+      유효성을 확인한다.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

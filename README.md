@@ -5,8 +5,8 @@ HTML/PDF/발표자료. 전 과정을 [agent-evaluator](https://pypi.org/project/
 Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(로컬)** — API 키 없이
 바로 시작할 수 있습니다.
 
-**핵심 통계**: 11개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 190개 테스트 | Python 3.11+
+**핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
+11개(10개 동작) | 202개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -151,6 +151,9 @@ book-forge plan <slug> --revise
 - **코드-본문 정합성 검사(옵션)**: `book-forge draft ... --check-package agent_evaluator` —
   본문이 언급한 `import`/백틱 심볼이 실제로 그 패키지에 존재하는지 정적으로 대조(LLM
   미호출, C의 확장)
+- **실습/캡스톤 스캐폴드**: `content_type: capstone`으로 태깅한 챕터는 빈 템플릿(TODO
+  있는 스켈레톤)과 별도 정답 파일을 함께 생성 — 독자가 직접 풀어보는 실습 전용
+  (아래 일반 능력 B 표 참고)
 
 ## 일반 능력 A–F (RAG 집필 보조 확장)
 
@@ -162,9 +165,9 @@ book-forge plan <slug> --revise
 | 능력 | 내용 | 구현 위치 |
 |---|---|---|
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
-| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램 전용 생성기로 분기(narrative/exercise는 ChapterDrafterAgent가 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py` |
+| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py` |
-| **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
+| **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
 
@@ -192,6 +195,17 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 `ValueError` 같은 Python 표준 어휘는 대상 패키지 소속이라 주장한 적이 없으므로
 검사에서 제외합니다. LLM을 호출하지 않는 순수 정적 분석이며, 실패해도 초안 저장을
 막지 않습니다(참고용).
+
+**실습/캡스톤 스캐폴드(B의 네 번째 콘텐츠 유형)**: `content_type`을 `capstone`으로
+태깅하면(목차의 5번째 필드) 기존 `exercise`("목표→코드→해설"을 한 파일에 담음)와
+다른 패턴으로 생성됩니다 — 독자가 실제로 풀어볼 **빈 템플릿**(TODO가 있는 미완성
+스켈레톤)을 챕터 파일에, **모범 정답+해설**을 별도 사이드카 파일(`Chapter_XX_제목_정답.md`)에
+나눠 씁니다. 템플릿과 정답은 한 번의 LLM 호출·같은 컨텍스트에서 `=== TEMPLATE ===`/
+`=== SOLUTION ===` 구분자로 함께 생성됩니다(두 번 호출하면 서로 다른 문제를 다룰
+위험이 있음). `book-forge build`/`edit`는 `01_목차.md` 매니페스트만 읽으므로
+(`load_toc()`, 디렉토리 스캔이 아님) 정답 사이드카 파일은 HTML/PDF/발표자료/웹 에디터
+어디에도 노출되지 않습니다 — 실측(실제 Ollama)으로 빌드된 HTML에 정답 코드가 전혀
+섞이지 않음을 확인했습니다.
 
 ## 일반 능력 G — 자기실증 예제 (멀티에이전트 협업)
 
@@ -240,7 +254,7 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조) |
+| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조) |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 대화형 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
@@ -262,9 +276,10 @@ src/book_forge/
 │   ├── chapter_drafter.py # ChapterDrafterAgent — RAG 소스 → 챕터 초안 (narrative/exercise, rag_mode=True, 옵션)
 │   ├── reference_table.py # ReferenceTableAgent — RAG 소스 → 레퍼런스 표 (B)
 │   ├── diagram_generator.py # DiagramGeneratorAgent — RAG 소스 → Mermaid 다이어그램 (B)
+│   ├── capstone_generator.py # CapstoneGeneratorAgent — 빈 템플릿+별도 정답 2파일 (B)
 │   ├── alternative_suggester.py # AlternativeSuggesterAgent — 낮은 커버리지 → 대안 제안 (F)
 │   ├── demonstration_verifier.py # 생성 후 정적 검증 — exercise 문법/diagram 구조/
-│   │                       # reference_table 소스 대조 (D, LLM 미호출 순수 함수)
+│   │                       # reference_table 소스 대조/capstone TODO+완성도 (D, LLM 미호출 순수 함수)
 │   ├── code_consistency_checker.py # 본문의 import/백틱 심볼이 실제 패키지에
 │   │                       # 존재하는지 대조 (C 확장, LLM 미호출 순수 함수)
 │   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)

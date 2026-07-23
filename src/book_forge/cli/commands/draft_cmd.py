@@ -3,15 +3,19 @@
 일반 능력 A(소스 어댑터)·B(콘텐츠 유형 분기)·C(근거 검증 계층)·D(실증 가능성
 게이트)·F(대안 제안)가 전부 이 명령에서 만난다:
   - A: --source는 PDF/코드 저장소 디렉토리/텍스트 파일/http(s):// URL을 자동 판별해 받는다.
-  - B: 챕터의 content_type이 reference_table/diagram이면 전용 생성기로 분기한다.
+  - B: 챕터의 content_type이 reference_table/diagram/capstone이면 전용 생성기로
+       분기한다. capstone은 exercise("목표→코드→해설" 한 덩어리)와 달리 빈
+       템플릿(TODO 있는 스켈레톤)을 챕터 파일에, 별도 정답을 `_정답.md`
+       사이드카 파일에 나눠 쓴다 — load_toc()이 목차 매니페스트만 읽으므로
+       사이드카 파일은 build/edit 어디에도 노출되지 않는다(정답 유출 방지).
   - C: 생성 전 소스 커버리지(코사인 유사도)를 점검하고, 생성 직후 Gate 점수를
        CLI에 바로 보여준다(book-forge gate를 따로 안 돌려도 됨).
-  - D: content_type이 exercise/diagram(실증이 필요한 유형)이면 생성 전
+  - D: content_type이 exercise/diagram/capstone(실증이 필요한 유형)이면 생성 전
        커버리지 임계값을 더 엄격하게 적용하고(C의 메커니즘 재사용), 생성 후에는
        demonstration_verifier.py가 exercise(코드 문법)·diagram(mermaid 구조)·
-       reference_table(소스-표 값 대조)을 정적으로 검증해 CLI/배치 요약에
-       즉시 노출한다(agent-evaluator의 Gate 점수와는 별개의 Book-forge 자체
-       신호 — 참고용, 빌드를 막지 않음).
+       reference_table(소스-표 값 대조)·capstone(템플릿 TODO 존재+정답 완성도)을
+       정적으로 검증해 CLI/배치 요약에 즉시 노출한다(agent-evaluator의 Gate
+       점수와는 별개의 Book-forge 자체 신호 — 참고용, 빌드를 막지 않음).
   - F: 커버리지가 낮으면 AlternativeSuggesterAgent가 대안을 제안한다.
   - C(확장): --check-package를 주면 본문이 언급한 import/백틱 심볼이 실제로
        그 패키지에 존재하는지 code_consistency_checker.py가 정적으로 대조한다
@@ -32,7 +36,11 @@ from typing import Optional
 
 import click
 
-from book_forge.agents.demonstration_verifier import VerificationResult, verify_demonstration
+from book_forge.agents.demonstration_verifier import (
+    VerificationResult,
+    verify_capstone,
+    verify_demonstration,
+)
 from book_forge.cli.project_utils import load_book_config
 from book_forge.config import load_config
 from book_forge.eval.gate_summary import format_gate_line, load_gate_scores
@@ -44,8 +52,9 @@ from book_forge.publish.toc_loader import ResolvedChapter, load_toc
 _STUB_MARKER = "TODO: 이 챕터를 집필하세요"
 
 # D: 실증이 필요한 콘텐츠 유형은 서술형보다 엄격한 커버리지 기준을 적용한다.
-_STRICT_CONTENT_TYPES = {"exercise", "diagram"}
+_STRICT_CONTENT_TYPES = {"exercise", "diagram", "capstone"}
 _STRICT_COVERAGE_BONUS = 0.15
+_SOLUTION_SUFFIX = "_정답"
 
 
 class _SourcePath(click.ParamType):
@@ -308,6 +317,7 @@ def _draft_one_chapter(
                 return result
 
     # B: 콘텐츠 유형에 따라 전용 생성기로 분기.
+    solution_md: Optional[str] = None
     if rc.spec.content_type == "reference_table":
         from book_forge.agents.reference_table import build_generate_reference_table
 
@@ -330,6 +340,21 @@ def _draft_one_chapter(
             sources=sources_text,
             ground_truth=rc.spec.chapter_title,
         )
+    elif rc.spec.content_type == "capstone":
+        from book_forge.agents.capstone_generator import (
+            build_generate_capstone,
+            parse_capstone_response,
+        )
+
+        click.echo("🎓 실습/캡스톤 생성 중 (LLM 호출)...")
+        generate = build_generate_capstone(llm, monitor)
+        raw = generate(
+            chapter_title=rc.spec.chapter_title,
+            chapter_no=rc.spec.chapter_no,
+            sources=sources_text,
+            ground_truth=rc.spec.chapter_title,
+        )
+        draft_md, solution_md = parse_capstone_response(raw)
     else:
         from book_forge.agents.chapter_drafter import build_draft_chapter
 
@@ -345,12 +370,23 @@ def _draft_one_chapter(
 
     rc.path.parent.mkdir(parents=True, exist_ok=True)
     rc.path.write_text(draft_md, encoding="utf-8")
-    result_path = monitor.save_to_file(f"draft_ch{rc.spec.chapter_no:02d}")
     click.echo(f"✅ 완료: {rc.path}")
+
+    if rc.spec.content_type == "capstone":
+        # load_toc()은 목차 매니페스트만 읽으므로, 이 사이드카 파일은 build/edit
+        # 어디에도 노출되지 않는다 — 정답이 독자에게 보이는 산출물에 섞이지 않는다.
+        solution_path = rc.path.with_name(rc.path.stem + _SOLUTION_SUFFIX + rc.path.suffix)
+        solution_path.write_text(solution_md or "", encoding="utf-8")
+        click.echo(f"🔑 정답 저장: {solution_path}")
+
+    result_path = monitor.save_to_file(f"draft_ch{rc.spec.chapter_no:02d}")
 
     result.status = "created"
     result.gate_c_score = _print_gate_summary(result_path)
-    result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
+    if rc.spec.content_type == "capstone":
+        result.verification = _print_capstone_verification(draft_md, solution_md or "")
+    else:
+        result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
     if check_package:
         result.code_consistency = _print_code_consistency(check_package, draft_md)
     return result
@@ -380,6 +416,20 @@ def _print_verification(
     result = verify_demonstration(content_type, draft_md, sources_text)
     if result is None:
         return None
+    if result.passed:
+        click.echo(f"🔬 실증 가능성 검증: ✅ {result.detail}")
+    else:
+        click.echo(f"🔬 실증 가능성 검증: ⚠️  {result.detail}")
+        for issue in result.issues:
+            click.echo(f"     → {issue}")
+    return result
+
+
+def _print_capstone_verification(template_md: str, solution_md: str) -> VerificationResult:
+    """D(실증 가능성 게이트) — 템플릿엔 TODO가 있고 문법이 유효한지, 정답엔
+    TODO 없이 문법이 유효한 완성 코드인지 확인하고 CLI에 즉시 노출한다.
+    verify_demonstration()과 달리 template/solution 2개 문서를 함께 본다."""
+    result = verify_capstone(template_md, solution_md)
     if result.passed:
         click.echo(f"🔬 실증 가능성 검증: ✅ {result.detail}")
     else:

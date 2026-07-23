@@ -12,6 +12,8 @@ exercise/diagram 유형에 더 엄격하게 재적용하는 **생성 전** 점�
     내용(노드/엣지)이 있는지 최소 구조만 확인.
   - reference_table → 표 셀 값이 실제 소스 발췌문에 등장하는 비율을 계산해
     소스에 없는 값을 날조하지 않았는지 대조.
+  - capstone → 템플릿 코드에 TODO 마커가 있고(진짜 빈 템플릿인지) 문법이
+    유효한지, 정답 코드는 TODO 없이 문법이 유효한 완성 코드인지 확인.
 
 LLM을 호출하지 않는 순수 정적 분석이라 agents/의 다른 모듈과 달리 @agent_eval이
 없다 — agent-evaluator의 Gate 점수를 바꾸지 않는, Book-forge 자체 도메인
@@ -133,10 +135,58 @@ def verify_reference_table(
     )
 
 
+def verify_capstone(template_md: str, solution_md: str) -> VerificationResult:
+    """빈 템플릿엔 TODO 마커가 있고 문법이 유효한지, 정답엔 TODO 없이 문법이
+    유효한 완성 코드인지 확인한다 — exercise와 달리 두 산출물을 함께 대조한다."""
+    if not solution_md.strip():
+        return VerificationResult(
+            content_type="capstone",
+            passed=False,
+            detail=(
+                "정답이 생성되지 않았습니다 — LLM 응답이 TEMPLATE/SOLUTION "
+                "구분자 형식을 지키지 않았습니다."
+            ),
+        )
+
+    issues: list[str] = []
+
+    template_blocks = _CODE_FENCE_RE.findall(template_md)
+    if not template_blocks:
+        issues.append("템플릿에 python 코드 블록이 없습니다.")
+    else:
+        for i, block in enumerate(template_blocks, 1):
+            try:
+                ast.parse(block)
+            except SyntaxError as exc:
+                issues.append(f"템플릿 코드 블록 {i}: 문법 오류 ({exc.msg})")
+        if not any("TODO" in b.upper() for b in template_blocks):
+            issues.append("템플릿 코드에 TODO 마커가 없습니다 — 이미 채워진 정답처럼 보입니다.")
+
+    solution_blocks = _CODE_FENCE_RE.findall(solution_md)
+    if not solution_blocks:
+        issues.append("정답에 python 코드 블록이 없습니다.")
+    else:
+        for i, block in enumerate(solution_blocks, 1):
+            try:
+                ast.parse(block)
+            except SyntaxError as exc:
+                issues.append(f"정답 코드 블록 {i}: 문법 오류 ({exc.msg})")
+        if any("TODO" in b.upper() for b in solution_blocks):
+            issues.append("정답 코드에 TODO가 남아있습니다 — 완성되지 않았을 수 있습니다.")
+
+    passed = not issues
+    detail = "템플릿/정답 모두 구조 검증 통과" if passed else f"{len(issues)}개 문제 발견"
+    return VerificationResult(content_type="capstone", passed=passed, detail=detail, issues=issues)
+
+
 def verify_demonstration(
     content_type: Optional[str], draft_md: str, sources_text: str
 ) -> Optional[VerificationResult]:
-    """content_type에 맞는 검증기를 실행한다. narrative 등 대응 검증기가 없으면 None."""
+    """content_type에 맞는 검증기를 실행한다. narrative 등 대응 검증기가 없으면 None.
+
+    capstone은 template/solution 2개 산출물을 함께 봐야 해서 이 단일-문서
+    디스패처의 시그니처(draft_md 하나)와 안 맞는다 — draft_cmd.py가
+    verify_capstone()을 직접 호출한다."""
     if content_type == "exercise":
         return verify_exercise_code(draft_md)
     if content_type == "diagram":

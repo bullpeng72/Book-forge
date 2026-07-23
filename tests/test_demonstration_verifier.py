@@ -3,6 +3,7 @@
 LLM/네트워크 없이 순수 함수만 검증한다(ast.parse/정규식 기반이라 결정론적).
 """
 from book_forge.agents.demonstration_verifier import (
+    verify_capstone,
     verify_demonstration,
     verify_diagram,
     verify_exercise_code,
@@ -156,3 +157,54 @@ def test_verify_demonstration_returns_none_for_narrative_and_unknown() -> None:
     assert verify_demonstration("narrative", "본문", "소스") is None
     assert verify_demonstration(None, "본문", "소스") is None
     assert verify_demonstration("unknown_type", "본문", "소스") is None
+
+
+# ── capstone (빈 템플릿 + 별도 정답 대조) ───────────────────────────────────
+
+
+def test_verify_capstone_passes_with_todo_template_and_complete_solution() -> None:
+    template = "```python\ndef add(a, b):\n    # TODO: 구현하세요\n    pass\n```"
+    solution = "```python\ndef add(a, b):\n    return a + b\n```"
+    result = verify_capstone(template, solution)
+    assert result.passed is True
+    assert result.content_type == "capstone"
+    assert not result.issues
+
+
+def test_verify_capstone_fails_when_solution_missing() -> None:
+    template = "```python\ndef add(a, b):\n    pass\n```"
+    result = verify_capstone(template, "")
+    assert result.passed is False
+    assert "정답이 생성되지 않았습니다" in result.detail
+
+
+def test_verify_capstone_fails_when_template_has_no_todo() -> None:
+    # 템플릿에 TODO가 없으면 이미 답이 채워진 것처럼 보인다 — 검증 실패.
+    template = "```python\ndef add(a, b):\n    return a + b\n```"
+    solution = "```python\ndef add(a, b):\n    return a + b\n```"
+    result = verify_capstone(template, solution)
+    assert result.passed is False
+    assert any("TODO 마커가 없습니다" in issue for issue in result.issues)
+
+
+def test_verify_capstone_fails_when_solution_still_has_todo() -> None:
+    template = "```python\ndef add(a, b):\n    # TODO\n    pass\n```"
+    solution = "```python\ndef add(a, b):\n    # TODO: 아직 안 끝남\n    pass\n```"
+    result = verify_capstone(template, solution)
+    assert result.passed is False
+    assert any("TODO가 남아있습니다" in issue for issue in result.issues)
+
+
+def test_verify_capstone_fails_on_syntax_error_in_either_side() -> None:
+    template = "```python\ndef add(a, b:\n    # TODO\n    pass\n```"
+    solution = "```python\ndef add(a, b):\n    return a + b\n```"
+    result = verify_capstone(template, solution)
+    assert result.passed is False
+    assert any("템플릿 코드 블록" in issue and "문법 오류" in issue for issue in result.issues)
+
+
+def test_verify_capstone_fails_when_no_code_blocks_present() -> None:
+    result = verify_capstone("서술형 텍스트만 있음", "서술형 텍스트만 있음")
+    assert result.passed is False
+    assert any("템플릿에 python 코드 블록이 없습니다" in issue for issue in result.issues)
+    assert any("정답에 python 코드 블록이 없습니다" in issue for issue in result.issues)

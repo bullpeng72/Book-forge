@@ -14,7 +14,9 @@ from book_forge.exceptions import TocParseError
 _TOC_BLOCK_RE = re.compile(r"```toc\s*\n(.*?)```", re.DOTALL)
 
 # 일반 능력 B(콘텐츠 유형 분기) — narrative가 기본값, 나머지는 전용 생성기로 분기된다.
-KNOWN_CONTENT_TYPES = ("narrative", "reference_table", "diagram", "exercise")
+# capstone: exercise("목표→코드→해설" 한 덩어리)와 달리 빈 템플릿(TODO)과 별도
+# 정답 파일 2개를 생성한다 — 독자가 실제로 풀어보는 실습/캡스톤 과제 전용.
+KNOWN_CONTENT_TYPES = ("narrative", "reference_table", "diagram", "exercise", "capstone")
 
 
 @dataclass(frozen=True)

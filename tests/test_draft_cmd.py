@@ -420,3 +420,96 @@ def test_draft_without_check_package_skips_consistency_check(tmp_path: Path, mon
 
     assert result.exit_code == 0, result.output
     assert "코드-본문 정합성" not in result.output
+
+
+class _CapstoneLLM:
+    """content_type=capstone 프롬프트를 받으면 TEMPLATE/SOLUTION 구분자 응답을 낸다."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        if "실습/캡스톤 과제" in prompt:
+            return (
+                "=== TEMPLATE ===\n"
+                "# Chapter 1: 사과 개론\n\n## 목표\n\n덧셈을 배운다.\n\n"
+                "## 시작 코드\n\n```python\ndef add(a, b):\n    # TODO: 구현하세요\n    pass\n```\n\n"
+                "=== SOLUTION ===\n"
+                "# Chapter 1: 사과 개론 — 모범 정답\n\n## 모범 정답\n\n"
+                "```python\ndef add(a, b):\n    return a + b\n```\n\n## 해설\n\n소스에 근거한 설명."
+            )
+        return "# 생성된 챕터\n\n고정된 초안 본문입니다."
+
+
+def test_draft_single_chapter_capstone_type_writes_template_and_solution_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _CapstoneLLM())
+
+    project_dir = tmp_path / "projects" / "capstone-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론|capstone\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "capstone-slug", "1", "--source", str(source_file), "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "🎓 실습/캡스톤 생성 중" in result.output
+    assert "🔑 정답 저장" in result.output
+    assert "🔬 실증 가능성 검증: ✅" in result.output
+
+    template_path = part_dir / "Chapter_01_사과_개론.md"
+    solution_path = part_dir / "Chapter_01_사과_개론_정답.md"
+    assert solution_path.is_file()
+
+    template_content = template_path.read_text(encoding="utf-8")
+    solution_content = solution_path.read_text(encoding="utf-8")
+    assert "TODO" in template_content
+    assert "=== SOLUTION ===" not in template_content
+    assert "return a + b" in solution_content
+    assert "TODO" not in solution_content
+
+
+def test_draft_capstone_solution_file_not_exposed_via_load_toc(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # load_toc()이 목차 매니페스트만 읽으므로 정답 사이드카 파일이 build/edit에
+    # 노출되지 않아야 한다(정답 유출 방지) — 실제로 목차에 없는 파일임을 확인.
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _CapstoneLLM())
+
+    project_dir = tmp_path / "projects" / "capstone-slug2"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론|capstone\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    runner.invoke(cli, ["draft", "capstone-slug2", "1", "--source", str(source_file), "-y"])
+
+    from book_forge.publish.toc_loader import load_toc
+
+    chapters = load_toc(project_dir)
+    toc_paths = {rc.path for rc in chapters}
+    solution_path = part_dir / "Chapter_01_사과_개론_정답.md"
+    assert solution_path not in toc_paths
