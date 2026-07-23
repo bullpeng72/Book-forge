@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__ — Book-forge 편집기</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+<script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; display: flex; height: 100vh; }
+  nav#toc { width: 260px; overflow-y: auto; border-right: 1px solid #ddd; padding: 12px; flex-shrink: 0; }
+  nav#toc .part { font-weight: 700; margin-top: 12px; color: #1a237e; }
+  nav#toc .chapter { display: block; padding: 4px 8px; cursor: pointer; border-radius: 4px; font-size: 14px; }
+  nav#toc .chapter:hover { background: #eee; }
+  nav#toc .chapter.active { background: #1a237e; color: white; }
+  nav#toc .chapter.missing { color: #999; font-style: italic; }
+  main#editor-pane { flex: 1; display: flex; flex-direction: column; padding: 12px; min-width: 0; }
+  #toolbar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  #status { color: #666; font-size: 13px; }
+  aside#gallery { width: 260px; border-left: 1px solid #ddd; padding: 12px; overflow-y: auto; flex-shrink: 0; }
+  aside#gallery img { width: 100%; border-radius: 4px; margin-bottom: 4px; cursor: pointer; }
+  aside#gallery .img-item { margin-bottom: 12px; }
+  aside#gallery .img-name { font-size: 11px; color: #666; word-break: break-all; }
+  button { cursor: pointer; padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: white; }
+  button.primary { background: #1a237e; color: white; border-color: #1a237e; }
+  button:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+<nav id="toc"><p>불러오는 중...</p></nav>
+<main id="editor-pane">
+  <div id="toolbar">
+    <strong id="current-title">챕터를 선택하세요</strong>
+    <button id="save-btn" class="primary" disabled>저장 (⌘S)</button>
+    <span id="status"></span>
+  </div>
+  <textarea id="markdown-editor"></textarea>
+</main>
+<aside id="gallery">
+  <strong>이미지 갤러리</strong>
+  <p><input type="file" id="upload-input" accept="image/*"></p>
+  <div id="gallery-list"></div>
+</aside>
+<script>
+let mde = null;
+let currentChapterNo = null;
+let dirty = false;
+
+function initEditor() {
+  mde = new EasyMDE({
+    element: document.getElementById('markdown-editor'),
+    spellChecker: false,
+    autofocus: false,
+    status: false,
+  });
+  mde.codemirror.on('change', () => { dirty = true; updateStatus(); });
+}
+
+function updateStatus() {
+  document.getElementById('status').textContent = dirty ? '● 저장 안 됨' : (currentChapterNo === null ? '' : '저장됨');
+  document.getElementById('save-btn').disabled = !dirty || currentChapterNo === null;
+}
+
+async function loadToc() {
+  const res = await fetch('/api/toc');
+  const chapters = await res.json();
+  const nav = document.getElementById('toc');
+  nav.innerHTML = '';
+  let lastPart = null;
+  chapters.forEach(ch => {
+    if (ch.part_no !== lastPart) {
+      const h = document.createElement('div');
+      h.className = 'part';
+      h.textContent = `Part ${ch.part_no}. ${ch.part_title}`;
+      nav.appendChild(h);
+      lastPart = ch.part_no;
+    }
+    const a = document.createElement('div');
+    a.className = 'chapter' + (ch.exists ? '' : ' missing');
+    a.textContent = `Ch${String(ch.chapter_no).padStart(2, '0')}. ${ch.chapter_title}`;
+    a.dataset.chapterNo = ch.chapter_no;
+    a.onclick = () => selectChapter(ch.chapter_no, ch.chapter_title);
+    nav.appendChild(a);
+  });
+}
+
+async function selectChapter(chapterNo, title) {
+  if (dirty && !confirm('저장하지 않은 변경사항이 있습니다. 이동할까요?')) return;
+  currentChapterNo = chapterNo;
+  document.getElementById('current-title').textContent = `Ch${chapterNo}. ${title}`;
+  document.querySelectorAll('#toc .chapter').forEach(el => {
+    el.classList.toggle('active', Number(el.dataset.chapterNo) === chapterNo);
+  });
+  const res = await fetch(`/api/chapter/${chapterNo}`);
+  const data = await res.json();
+  mde.value(data.content || '');
+  dirty = false;
+  updateStatus();
+  loadGallery(chapterNo);
+}
+
+async function saveChapter() {
+  if (currentChapterNo === null) return;
+  const content = mde.value();
+  const res = await fetch(`/api/chapter/${currentChapterNo}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (res.ok) {
+    dirty = false;
+    updateStatus();
+  } else {
+    alert('저장 실패');
+  }
+}
+
+async function loadGallery(chapterNo) {
+  const res = await fetch(`/api/chapter/${chapterNo}/images`);
+  const images = await res.json();
+  const list = document.getElementById('gallery-list');
+  list.innerHTML = '';
+  images.forEach(img => {
+    const div = document.createElement('div');
+    div.className = 'img-item';
+    const imgEl = document.createElement('img');
+    imgEl.src = img.url;
+    imgEl.title = '클릭하면 에디터에 삽입';
+    imgEl.onclick = () => {
+      mde.codemirror.replaceSelection(`![${img.name}](./images/${img.name})`);
+      dirty = true; updateStatus();
+    };
+    const nameEl = document.createElement('div');
+    nameEl.className = 'img-name';
+    nameEl.textContent = img.name;
+    div.appendChild(imgEl);
+    div.appendChild(nameEl);
+    list.appendChild(div);
+  });
+}
+
+document.getElementById('save-btn').onclick = saveChapter;
+document.getElementById('upload-input').onchange = async (e) => {
+  if (currentChapterNo === null) { alert('먼저 챕터를 선택하세요'); e.target.value = ''; return; }
+  const file = e.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`/api/chapter/${currentChapterNo}/images`, { method: 'POST', body: formData });
+  if (res.ok) { loadGallery(currentChapterNo); } else { alert('업로드 실패'); }
+  e.target.value = '';
+};
+
+window.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveChapter(); }
+});
+window.addEventListener('beforeunload', (e) => {
+  if (dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+initEditor();
+loadToc();
+</script>
+</body>
+</html>

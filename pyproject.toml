@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "book-forge"
+version = "0.1.0"
+description = "AI 협업 다권 도서 저술 파이프라인 — 기획/목차부터 HTML·PDF·발표자료까지, agent-evaluator Gate A-G로 계측"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Sungwoo Kim" }]
+dependencies = [
+    "click>=8.1",
+    "python-dotenv>=1.0",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "markdown>=3.5",
+    "requests>=2.31",
+    "agent-evaluator>=0.9.9",
+]
+
+[project.optional-dependencies]
+pdf = ["playwright>=1.40"]
+# RAG는 chromadb 같은 벡터 DB 대신 numpy 코사인 유사도 기반 인메모리 스토어를 쓴다 —
+# 프로젝트 하나 분량 소스에 별도 벡터 DB 프로세스/스키마는 과한 인프라라는 판단.
+rag = ["pypdf>=4.0", "numpy>=1.24"]
+serve = ["flask>=3.0"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5", "mypy>=1.10", "playwright>=1.40", "flask>=3.0", "pypdf>=4.0", "numpy>=1.24"]
+
+[project.scripts]
+book-forge = "book_forge.cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# editor/templates/index.html — Lecture_forge가 v0.5.3에서 겪은 실제 사고와 동일 유형:
+# 비-.py 데이터 파일은 package-data로 명시하지 않으면 wheel 빌드에서 조용히 빠진다
+# (editable install만으로는 이 문제가 드러나지 않는다 — 반드시 실제 wheel 빌드로 검증).
+[tool.setuptools.package-data]
+"book_forge.editor" = ["templates/*.html"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
