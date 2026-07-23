@@ -3,6 +3,8 @@
 실제 subprocess를 띄우므로 다른 검증기 테스트보다 느리지만(각 케이스 ~0.1-1초),
 LLM/네트워크는 쓰지 않는다 — 순수 인터프리터 실행 검증.
 """
+from pathlib import Path
+
 from book_forge.agents.code_example_verifier import verify_code_execution
 
 
@@ -77,3 +79,48 @@ time.sleep(5)
     result = verify_code_execution(draft, timeout=0.5)
     assert result.passed is False
     assert "초과" in result.issues[0]
+
+
+# ── 로컬 코드베이스 대상(일반 능력 I) — PYTHONPATH 주입 ─────────────────────
+
+
+def test_verify_code_execution_resolves_local_import_via_extra_pythonpath(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "local_pkg.py").write_text("VALUE = 42\n", encoding="utf-8")
+    draft = """```python
+from local_pkg import VALUE
+assert VALUE == 42
+```
+"""
+    result = verify_code_execution(draft, extra_pythonpath=tmp_path)
+    assert result.passed is True
+
+
+def test_verify_code_execution_fails_local_import_without_extra_pythonpath(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "local_pkg.py").write_text("VALUE = 42\n", encoding="utf-8")
+    draft = """```python
+from local_pkg import VALUE
+```
+"""
+    result = verify_code_execution(draft)
+    assert result.passed is False
+    assert "ModuleNotFoundError" in result.issues[0] or "ImportError" in result.issues[0]
+
+
+def test_verify_code_execution_accepts_relative_extra_pythonpath(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # 실측으로 발견한 회귀 케이스: subprocess의 cwd가 임시 디렉토리라, 상대
+    # 경로를 절대 경로로 정규화하지 않으면 PYTHONPATH가 엉뚱한 곳을 가리킨다.
+    (tmp_path / "local_pkg.py").write_text("VALUE = 7\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    draft = """```python
+from local_pkg import VALUE
+assert VALUE == 7
+```
+"""
+    result = verify_code_execution(draft, extra_pythonpath=Path("."))
+    assert result.passed is True

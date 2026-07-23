@@ -395,6 +395,57 @@ def test_draft_check_package_flags_nonexistent_symbol(tmp_path: Path, monkeypatc
     assert "ScopeConfig.path" in result.output
 
 
+class _LocalSymbolLLM:
+    """로컬 프로젝트 소스에 실제로 있는 심볼만 언급 — 로컬 대상 정합성 검사 통과 케이스."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return "# 생성된 챕터\n\n`Worker` 클래스와 `build_worker` 함수가 정의돼 있습니다."
+
+
+def test_draft_check_package_supports_local_directory_target(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # 일반 능력 I — --check-package에 설치된 패키지명 대신 로컬 디렉토리를
+    # 줬을 때도 정합성 검사가 정상 동작해야 한다(pip install 안 한 분석
+    # 대상 프로젝트를 --source로 분석하는 강의 유형 지원).
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _LocalSymbolLLM())
+
+    local_target = tmp_path / "analyzed_project"
+    (local_target / "agents").mkdir(parents=True)
+    (local_target / "agents" / "worker.py").write_text(
+        "def build_worker(name):\n    return name\n\n\nclass Worker:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    project_dir = tmp_path / "projects" / "local-target-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "local-target-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", str(local_target),
+        ]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "🔗 코드-본문 정합성: ✅" in result.output
+
+
 def test_draft_check_package_pins_sdk_version_on_first_use(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)

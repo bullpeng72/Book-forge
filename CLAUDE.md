@@ -544,6 +544,66 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       클래스·역할과 `demonstration_verifier.py`/`diagram_generator.py` 같은
       실제 모듈명을 정확히 서술함을 확인.
 
+22. **로컬 코드베이스 대상 검증(일반 능력 I)은 `--check-package`에 새 CLI
+    플래그를 추가하지 않고, `Path(check_package).is_dir()`로 자동 감지해
+    기존 3개 검증기(code_consistency_checker/sdk_version_pin/code_example_verifier)를
+    로컬 모드로 전환하는 방식이다 — `_SourcePath`가 URL/로컬 경로를 자동
+    구분하는 것과 같은 UX 패턴을 재사용한 것이지 새로 고안한 게 아니다**:
+    - **`code_consistency_checker.py`의 로컬 모드는 H(구조적 코드 인덱싱)의
+      정적 분석을 그대로 재사용한다, 새 파싱 로직을 만들지 않았다**:
+      `verify_code_consistency_local()`이 `code_index.build_structure_index()`로
+      대상 디렉토리를 훑고, `code_index.internal_import_roots()`(H를 위해
+      만든 함수를 이제 두 모듈이 공유 — 원래 `_`prefix로 비공개였던 걸
+      공개로 승격했다)로 "이 import가 분석 대상 프로젝트 소속으로 보이는가"를
+      거른다.
+      - **정확한 서브모듈까지는 확인하지 않는다 — 평평한 심볼 테이블 대조다**:
+        로컬 디렉토리 경로를 dotted import 경로(`book_forge.agents.x`)로
+        신뢰성 있게 매핑할 방법이 없다(target_dir가 패키지 루트인지 그
+        서브디렉토리인지 알 수 없음). 그래서 "정확히 어느 파일에 있는가"가
+        아니라 "대상 디렉토리 전체 어딘가에 존재하는가"만 본다 — installed
+        패키지 모드(`importlib`, 서브모듈 단위로 정확히 확인)보다 느슨한
+        보장이라는 걸 재검토 시 기억할 것.
+      - **import 필터는 첫 세그먼트가 아니라 임의 세그먼트로 대조한다 —
+        실측으로 발견한 실패 케이스를 고친 것**: `target_dir`가 실제 패키지
+        루트(`src/book_forge`)가 아니라 그 서브디렉토리(`src/book_forge/agents`)를
+        가리키면, `internal_roots`엔 `"agents"`만 들어있는데 import는
+        `"book_forge.agents.x"`로 시작해 첫 세그먼트 비교로는 못 잡았다
+        (`test_verify_code_consistency_local_matches_when_target_is_subdirectory`로
+        회귀 고정). `set(module_path.split(".")) & internal_roots`로
+        수정했다 — 오탐 위험은 낮다(최종적으로 known_symbols 대조가 필터
+        역할을 함).
+    - **`sdk_version_pin.py`의 로컬 버전은 git 커밋 해시(짧게)+dirty
+      여부다 — agent-evaluator 자신의 `agent_version="auto"`(git 커밋+dirty
+      해시) 패턴과 같은 원리를 그대로 가져왔다**: `resolve_local_version()`이
+      `git -C <dir> rev-parse --short HEAD` + `git status --porcelain`을
+      호출한다. git이 없거나 저장소가 아니면(또는 명령 타임아웃) 예외 없이
+      `None`으로 폴백 — 코드-본문 정합성 검사 자체는 버전 추적 없이도
+      계속 정상 동작한다(부가 기능이라는 위치를 지킴). `sdk_versions.json`의
+      dict 키는 `_normalize_target_key()`로 로컬 디렉토리를 **절대 경로로
+      정규화**한다 — `./toylib`와 `/abs/path/toylib`처럼 상대/절대 경로를
+      다르게 써도 같은 고정 기록을 재사용하게 하기 위함(정규화 안 하면
+      같은 디렉토리인데 다른 키로 중복 기록됨).
+    - **`code_example_verifier.py`는 대상 디렉토리를 subprocess의
+      `PYTHONPATH`에 추가해 설치 안 된 로컬 import를 풀리게 한다 —
+      실측으로 진짜 버그를 하나 잡았다**: 처음 구현했을 때 `extra_pythonpath`를
+      **상대 경로 그대로** `PYTHONPATH`에 넣었는데, subprocess의 `cwd`가
+      임시 디렉토리(`tempfile.TemporaryDirectory`)라 상대 경로가 엉뚱한
+      위치를 가리켜 `ModuleNotFoundError`가 계속 재현됐다 — `_build_execution_env()`가
+      `extra_pythonpath.resolve()`로 절대 경로 정규화한 뒤에야 해결됨
+      (`test_verify_code_execution_accepts_relative_extra_pythonpath`로
+      회귀 고정). 대상 디렉토리 자신과 그 부모 디렉토리 둘 다 추가한다 —
+      target_dir 자체가 import 가능한 패키지인지(부모가 필요), 아니면
+      target_dir 안에 낱개 모듈이 있는지(target_dir 자체가 필요) 미리 알
+      수 없어서다(휴리스틱, H의 "완벽한 그래프 아님"과 같은 철학).
+    - 실측(실제 Ollama): 어디에도 설치되지 않은 독립 로컬 패키지(`toylib`,
+      pip install도 editable install도 안 함)를 만들어
+      `--check-package <경로> --execute-examples`로 검증했다. 생성된 실습
+      챕터가 `from toylib.calculator import make_calculator`를 실제로
+      import해 subprocess 실행에 성공(PYTHONPATH 주입 없이는 애초에 이
+      import가 실패할 수밖에 없는 패키지였음). git 저장소로 만든 뒤
+      재실행하니 `(toylib git 6eb099b 기준)`처럼 커밋 해시 기반 버전
+      고정도 정상 동작함을 확인.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

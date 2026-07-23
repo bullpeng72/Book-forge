@@ -149,7 +149,7 @@ def build_structure_index(directory: Path, *, max_files: int = 200) -> list[Modu
     return summaries
 
 
-def _internal_import_roots(directory: Path) -> set[str]:
+def internal_import_roots(directory: Path) -> set[str]:
     """이 디렉토리를 패키지 루트로 삼는 import의 첫 세그먼트 후보를 모은다.
 
     예: directory가 src/book_forge면 "book_forge" 자신 + 바로 아래
@@ -158,6 +158,10 @@ def _internal_import_roots(directory: Path) -> set[str]:
     이름으로 절대 import하는 관례를 그대로 이용한 휴리스틱이다. 완벽한
     import 해석기가 아니다(상대 import나 sys.path 조작까지는 못 따라간다) —
     "정확한 그래프"가 아니라 "내부/외부를 대략 구분하는 근거"가 목적이다.
+
+    `code_consistency_checker.py`의 로컬 코드베이스 대상 검증(일반 능력 I)도
+    이 함수를 그대로 재사용한다 — "본문이 언급한 import가 분석 대상 프로젝트
+    소속인가"를 판단하는 기준이 여기서 쓰는 것과 같은 문제이기 때문이다.
     """
     roots = {directory.name}
     try:
@@ -181,7 +185,7 @@ def format_structure_summary(summaries: list[ModuleSummary], directory: Path) ->
     if not summaries:
         return ""
 
-    internal_roots = _internal_import_roots(directory)
+    internal_roots = internal_import_roots(directory)
     lines = [f"# 프로젝트 구조 요약 (정적 분석, {len(summaries)}개 모듈)"]
 
     for s in summaries:

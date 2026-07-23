@@ -12,6 +12,15 @@ ScopeConfig가 실제로 그 이름으로 존재하는지, `ScopeConfig.path`처
 content_type과 무관하게 동작한다(narrative 챕터도 프로즈 중에 클래스/설정
 이름을 언급하므로) — demonstration_verifier.py의 content_type 분기와는 별개
 축이라, draft_cmd.py가 --check-package가 주어졌을 때만 별도로 호출한다.
+
+로컬 코드베이스 대상 검증(일반 능력 I): `--check-package`에 설치된 패키지명
+대신 **로컬 디렉토리 경로**를 주면(`Path(target).is_dir()`) `verify_code_consistency()`가
+자동으로 로컬 모드로 전환한다 — "개념 설명 + 특정 프로젝트 소스코드 분석"형
+강의는 분석 대상이 pip install된 패키지가 아니라 그냥 클론해온 로컬 저장소인
+경우가 많은데, 기존 방식(`importlib.import_module()`)은 이런 경우 항상
+ImportError를 낸다. 로컬 모드는 `importlib` 대신 `knowledge/code_index.py`의
+정적 분석(구조적 코드 인덱싱, 일반 능력 H)으로 심볼 존재를 대조한다 — H가
+이미 검증한 인프라를 그대로 재사용하는 것이라 새 파싱 로직을 만들지 않는다.
 """
 from __future__ import annotations
 
@@ -20,6 +29,7 @@ import dataclasses
 import importlib
 import re
 import typing
+from pathlib import Path
 
 from book_forge.agents.demonstration_verifier import VerificationResult
 
@@ -103,13 +113,94 @@ def _resolve_dotted(root_module, path: list[str]) -> bool:
     return True
 
 
+def verify_code_consistency_local(draft_md: str, *, target_dir: Path) -> VerificationResult:
+    """target_dir가 설치된 패키지가 아니라 로컬 디렉토리(pip install 안 한
+    분석 대상 프로젝트 소스)일 때 쓰는 경로다(일반 능력 I).
+
+    importlib 기반 경로처럼 "정확히 어느 서브모듈에 있는가"까지는 확인하지
+    않는다 — 로컬 디렉토리의 상대 경로를 절대 dotted import 경로로 신뢰성
+    있게 매핑할 방법이 없기 때문이다(target_dir가 패키지 루트인지, src/
+    상위 디렉토리인지 알 수 없음). 대신 **평평한 심볼 테이블**(대상 디렉토리
+    전체에서 발견한 클래스/함수 이름 전부)에 대해 "이 이름이 프로젝트 어딘가에
+    실제로 존재하는가"만 확인한다 — H(구조적 코드 인덱싱)의
+    internal_import_roots()로 "이 import가 분석 대상 프로젝트 소속으로 보이는가"만
+    먼저 거르고, 소속으로 보이면 평평한 심볼 테이블과 대조한다.
+    """
+    from book_forge.knowledge.code_index import build_structure_index, internal_import_roots
+
+    summaries = build_structure_index(target_dir)
+    if not summaries:
+        return VerificationResult(
+            content_type="code_consistency",
+            passed=False,
+            detail=f"대조할 .py 모듈을 찾지 못했습니다: {target_dir}",
+        )
+
+    known_symbols: set[str] = set()
+    for s in summaries:
+        known_symbols.update(c.name for c in s.classes)
+        known_symbols.update(fn.name for fn in s.functions)
+
+    internal_roots = internal_import_roots(target_dir)
+    issues: list[str] = []
+    checked = 0
+
+    for module_path, names in _extract_imports(draft_md):
+        # 첫 세그먼트만이 아니라 임의 세그먼트로 대조한다 — target_dir가 실제
+        # 패키지 루트(예: src/book_forge)가 아니라 그 서브디렉토리(예:
+        # src/book_forge/agents)를 가리켜도(흔한 사용 패턴) internal_roots에는
+        # "agents"만 들어있고 import는 "book_forge.agents.x"로 시작해 첫
+        # 세그먼트 비교로는 못 잡는다(실측으로 확인한 실패 케이스). 대신
+        # known_symbols 대조가 최종 필터라 오탐 위험은 낮다.
+        if not (set(module_path.split(".")) & internal_roots):
+            continue  # 이 프로젝트 소속으로 보이지 않는 import는 대조 대상이 아님
+        checked += 1
+        for name in names:
+            if name not in known_symbols:
+                issues.append(
+                    f"본문의 `from {module_path} import {name}` — "
+                    f"{target_dir}에서 {name}을(를) 찾지 못했습니다."
+                )
+
+    for symbol in _extract_backtick_symbols(draft_md):
+        base = symbol.split(".")[0]
+        checked += 1
+        if base not in known_symbols:
+            issues.append(f"본문이 언급한 `{symbol}` — {target_dir}에서 확인되지 않습니다.")
+
+    if checked == 0:
+        return VerificationResult(
+            content_type="code_consistency",
+            passed=True,
+            detail=f"{target_dir} 관련 import/심볼 언급이 없어 대조할 항목이 없습니다.",
+        )
+
+    passed = not issues
+    detail = (
+        f"{checked}개 항목 모두 {target_dir}에서 확인됨"
+        if passed
+        else f"{checked}개 항목 중 {len(issues)}개가 {target_dir}에 없음"
+    )
+    return VerificationResult(
+        content_type="code_consistency", passed=passed, detail=detail, issues=issues
+    )
+
+
 def verify_code_consistency(draft_md: str, *, target_package: str) -> VerificationResult:
     """본문이 언급한 import/심볼이 target_package에 실제로 존재하는지 검증한다.
 
     LLM을 호출하지 않고, target_package를 실제로 import해 대조한다
     (importlib.import_module — 저자가 CLI에서 명시적으로 지정한 패키지만
     로드한다, 임의 원격 코드 실행이 아니다).
+
+    target_package가 실제 로컬 디렉토리 경로면(`Path(target_package).is_dir()`)
+    설치된 패키지가 아니라 분석 대상 프로젝트 소스 자체로 간주해 로컬 모드
+    (verify_code_consistency_local)로 자동 전환한다 — 일반 능력 I.
     """
+    local_dir = Path(target_package)
+    if local_dir.is_dir():
+        return verify_code_consistency_local(draft_md, target_dir=local_dir)
+
     try:
         root_module = importlib.import_module(target_package)
     except ImportError as exc:

@@ -42,8 +42,8 @@ from book_forge.publish.toc_loader import load_toc
 )
 @click.option(
     "--check-package", default=None,
-    help="[--source] 본문이 언급한 import/백틱 심볼이 이 패키지에 실제로 존재하는지 정적으로 대조"
-         "(옵트인, 미지정 시 검사 없음)",
+    help="[--source] 본문이 언급한 import/백틱 심볼이 이 패키지(설치된 패키지명 또는 로컬 "
+         "디렉토리 경로)에 실제로 존재하는지 정적으로 대조(옵트인, 미지정 시 검사 없음)",
 )
 @click.option(
     "--execute-examples", is_flag=True,

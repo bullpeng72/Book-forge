@@ -30,6 +30,13 @@
        실행한다(템플릿은 의도적으로 미완성이라 실행 대상에서 제외). 다른 검증과
        같은 원칙 — 실패해도 초안 저장을 막지 않는다(참고용). LLM이 생성한
        코드를 실제로 실행하는 위험을 인지하고 명시적으로 켜야 하는 옵트인이다.
+  - C(확장 3, 일반 능력 I): --check-package에 설치된 패키지명 대신 로컬
+       디렉토리 경로를 주면(예: --check-package src/myproject) 코드-본문
+       정합성 검사가 importlib 대신 code_index.py의 정적 분석(H)으로 심볼을
+       대조하고, SDK 버전 고정도 git 커밋 해시로 대체하며, --execute-examples는
+       그 경로를 PYTHONPATH에 추가해 로컬 import가 풀리게 한다 — "pip
+       install 안 한 프로젝트를 분석하는" 강의를 지원한다. 자동 감지라 별도
+       플래그가 없다(Path(check_package).is_dir()로 판별).
 
 --all(배치 모드) vs 단일 챕터 모드는 낮은 커버리지 처리 정책이 다르다 — 이건
 의도된 설계다: 단일 모드는 "저자가 지금 이 화면 앞에 있다"고 가정해 F의 대안을
@@ -171,8 +178,9 @@ def run_batch_draft(
 @click.option("--force", is_flag=True, help="기존에 집필된 챕터도 덮어쓰기")
 @click.option(
     "--check-package", default=None,
-    help="본문이 언급한 import/백틱 심볼이 이 패키지에 실제로 존재하는지 정적으로 대조"
-         "(예: --check-package agent_evaluator, 옵트인, 미지정 시 검사 없음)",
+    help="본문이 언급한 import/백틱 심볼이 이 패키지(설치된 패키지명 또는 로컬 디렉토리 경로)에 "
+         "실제로 존재하는지 정적으로 대조(예: --check-package agent_evaluator 또는 "
+         "--check-package src/myproject, 옵트인, 미지정 시 검사 없음)",
 )
 @click.option(
     "--execute-examples", is_flag=True,
@@ -416,7 +424,7 @@ def _draft_one_chapter(
         # capstone은 정답(solution)만 실행 대상이다 — 템플릿은 TODO/NotImplementedError로
         # 의도적으로 미완성이라 실행하면 항상 "실패"로 나와 무의미하다.
         code_to_execute = solution_md if rc.spec.content_type == "capstone" else draft_md
-        result.code_execution = _print_code_execution(code_to_execute or "")
+        result.code_execution = _print_code_execution(code_to_execute or "", check_package)
     return result
 
 
@@ -474,20 +482,30 @@ def _print_code_consistency(
     check_package에 존재하는지 정적으로 대조하고 CLI에 즉시 노출한다.
     LLM을 호출하지 않으며, 실패해도 초안 저장을 막지 않는다(참고용).
 
+    check_package가 로컬 디렉토리면(pip install 안 한 분석 대상 프로젝트,
+    일반 능력 I) verify_code_consistency()가 자동으로 로컬 모드로 전환한다 —
+    이 함수는 호출부만 그대로 두면 된다.
+
     일반 능력(SDK 버전 고정): 이 프로젝트가 처음 --check-package를 쓴 시점의
-    설치 버전을 sdk_versions.json에 한 번 고정해두고, 이후 호출마다 현재
-    설치 버전과 대조한다 — 드리프트가 있으면 "검증 결과가 본문 오류가 아니라
-    SDK 버전 변화 때문일 수 있다"는 걸 저자에게 알린다."""
+    버전(설치 패키지면 pip 버전, 로컬 디렉토리면 git 커밋)을 sdk_versions.json에
+    한 번 고정해두고, 이후 호출마다 현재 버전과 대조한다 — 드리프트가 있으면
+    "검증 결과가 본문 오류가 아니라 버전/커밋 변화 때문일 수 있다"는 걸
+    저자에게 알린다."""
     from book_forge.agents.code_consistency_checker import verify_code_consistency
     from book_forge.agents.sdk_version_pin import check_version_drift, pin_version
 
+    is_local = Path(check_package).is_dir()
     pinned = pin_version(project_dir, check_package)
     drift_warning = check_version_drift(project_dir, check_package)
     if drift_warning:
         click.echo(f"⚠️  {drift_warning}")
 
     result = verify_code_consistency(draft_md, target_package=check_package)
-    version_suffix = f" ({check_package} {pinned} 기준)" if pinned else ""
+    if pinned:
+        version_label = f"git {pinned}" if is_local else pinned
+        version_suffix = f" ({check_package} {version_label} 기준)"
+    else:
+        version_suffix = ""
     if result.passed:
         click.echo(f"🔗 코드-본문 정합성: ✅ {result.detail}{version_suffix}")
     else:
@@ -497,14 +515,21 @@ def _print_code_consistency(
     return result
 
 
-def _print_code_execution(code_md: str) -> VerificationResult:
+def _print_code_execution(code_md: str, check_package: Optional[str] = None) -> VerificationResult:
     """C(근거 검증 계층) 확장 — python 코드 블록을 실제 subprocess에서 실행해
     exit code 0인지 확인하고 CLI에 즉시 노출한다. 다른 검증과 같은 원칙 —
     실패해도 초안 저장을 막지 않는다(참고용). --execute-examples로만 켜지는
-    옵트인이며, LLM이 생성한 코드를 실제로 실행하는 위험을 감수한다."""
+    옵트인이며, LLM이 생성한 코드를 실제로 실행하는 위험을 감수한다.
+
+    check_package가 로컬 디렉토리면(일반 능력 I) 그 경로를 PYTHONPATH에 넣어
+    설치 안 된 로컬 패키지의 import도 subprocess에서 풀리게 한다."""
     from book_forge.agents.code_example_verifier import verify_code_execution
 
-    result = verify_code_execution(code_md)
+    extra_pythonpath = None
+    if check_package and Path(check_package).is_dir():
+        extra_pythonpath = Path(check_package)
+
+    result = verify_code_execution(code_md, extra_pythonpath=extra_pythonpath)
     if result.passed:
         click.echo(f"▶️  코드 실행 검증: ✅ {result.detail}")
     else:

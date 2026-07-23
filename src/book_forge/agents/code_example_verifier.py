@@ -21,14 +21,24 @@ diagram/reference_table/capstone 검증은 전부 그대로 문법·구조 검�
     subprocess의 한계, README "알려진 한계"에 명시).
   - **실패해도 초안 저장을 막지 않는다** — 다른 D/C 검증(exercise 문법,
     code_consistency)과 같은 "경고만, 저장은 유지" 원칙을 그대로 따른다.
+
+로컬 코드베이스 대상(일반 능력 I): 분석 대상이 pip install된 패키지가 아니라
+로컬 디렉토리면, 생성된 예제 코드의 `from <local_pkg> import X`가 기본
+subprocess 환경에서는 ImportError가 난다(현재 venv의 site-packages에는 없는
+모듈이므로). `extra_pythonpath`를 주면 그 경로(및 부모 경로 — target_dir
+자신이 패키지인지, target_dir 안에 낱개 모듈이 있는지 미리 알 수 없어 둘 다
+추가하는 휴리스틱)를 subprocess의 `PYTHONPATH`에 넣어 로컬 import가 풀리게
+한다.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 from book_forge.agents.demonstration_verifier import VerificationResult
 
@@ -37,8 +47,24 @@ _CODE_FENCE_RE = re.compile(r"```(?:python|py)\s*\n(.*?)```", re.DOTALL | re.IGN
 DEFAULT_TIMEOUT_SECONDS = 10.0
 
 
+def _build_execution_env(extra_pythonpath: Optional[Path]) -> Optional[dict[str, str]]:
+    if extra_pythonpath is None:
+        return None
+    # 절대 경로로 정규화해야 한다 — subprocess의 cwd는 임시 디렉토리(tmp_dir)라
+    # 상대 경로를 그대로 PYTHONPATH에 넣으면 엉뚱한 위치를 가리킨다(실측으로
+    # 발견한 버그: 상대 경로를 넣었더니 ModuleNotFoundError가 계속 재현됨).
+    resolved = extra_pythonpath.resolve()
+    existing = os.environ.get("PYTHONPATH", "")
+    candidates = [str(resolved), str(resolved.parent)]
+    new_pythonpath = os.pathsep.join(candidates + ([existing] if existing else []))
+    return {**os.environ, "PYTHONPATH": new_pythonpath}
+
+
 def verify_code_execution(
-    draft_md: str, *, timeout: float = DEFAULT_TIMEOUT_SECONDS
+    draft_md: str,
+    *,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    extra_pythonpath: Optional[Path] = None,
 ) -> VerificationResult:
     """```python 코드 블록마다 별도 subprocess로 실행해 exit code 0인지 확인한다.
 
@@ -46,6 +72,10 @@ def verify_code_execution(
     문법 검증과 달리, narrative 챕터는 코드가 없는 게 정상이라 실패로 보지
     않는다 — content_type별 필수 여부는 draft_cmd.py가 호출 시점에서 이미
     판단했다).
+
+    extra_pythonpath를 주면(로컬 코드베이스 대상, 일반 능력 I) 그 경로와
+    부모 경로를 subprocess의 PYTHONPATH에 추가해, 설치 안 된 로컬 패키지의
+    import가 풀리게 한다.
     """
     blocks = _CODE_FENCE_RE.findall(draft_md)
     if not blocks:
@@ -55,6 +85,7 @@ def verify_code_execution(
             detail="실행할 python 코드 블록이 없습니다.",
         )
 
+    env = _build_execution_env(extra_pythonpath)
     issues: list[str] = []
     with tempfile.TemporaryDirectory(prefix="book_forge_code_example_") as tmp_dir:
         for i, block in enumerate(blocks, 1):
@@ -67,6 +98,7 @@ def verify_code_execution(
                     capture_output=True,
                     text=True,
                     timeout=timeout,
+                    env=env,
                 )
             except subprocess.TimeoutExpired:
                 issues.append(f"코드 블록 {i}: 실행 시간이 {timeout:.0f}초를 초과했습니다.")

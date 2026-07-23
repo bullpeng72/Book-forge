@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 239개 테스트 | Python 3.11+
+11개(10개 동작) | 260개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -16,6 +16,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 - [일반 능력 A–F (RAG 집필 보조 확장)](#일반-능력-af-rag-집필-보조-확장)
 - [일반 능력 G — 자기실증 예제 (멀티에이전트 협업)](#일반-능력-g--자기실증-예제-멀티에이전트-협업)
 - [일반 능력 H — 구조적 코드 인덱싱](#일반-능력-h--구조적-코드-인덱싱)
+- [일반 능력 I — 로컬 코드베이스 대상 검증](#일반-능력-i--로컬-코드베이스-대상-검증)
 - [CLI 명령](#cli-명령)
 - [아키텍처](#아키텍처)
 - [Gate A–G 계측](#gate-ag-계측)
@@ -173,7 +174,7 @@ book-forge plan <slug> --revise
 |---|---|---|
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별. 코드 저장소는 텍스트 청크에 더해 정적 분석 구조 요약도 자동 포함(H) | `knowledge/sources.py`, `knowledge/code_index.py` |
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
-| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 SDK 버전을 프로젝트별로 `sdk_versions.json`에 고정하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
+| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지(설치된 패키지 또는 로컬 디렉토리, I)에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 버전을 프로젝트별로 `sdk_versions.json`에 고정(패키지는 pip 버전, 로컬은 git 커밋)하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(로컬 대상은 PYTHONPATH 자동 주입, 타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
 | **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
@@ -329,6 +330,42 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 `diagram_generator.py` 같은 실제 모듈명까지 정확히 언급하는 걸 확인했습니다 — 순수
 청크 검색만으로는 이 정도의 구조적 일관성을 기대하기 어렵습니다.
 
+## 일반 능력 I — 로컬 코드베이스 대상 검증
+
+H와 같은 강의 유형 분석에서 나온 또 다른 공백입니다: `--check-package`/`--execute-examples`
+(C의 확장)는 지금까지 `importlib.import_module()`로 **설치된 패키지**만 대상으로
+삼을 수 있었습니다 — "특정 프로젝트 소스코드 분석" 강의는 분석 대상이 보통 `pip
+install` 안 한, 그냥 클론해온 로컬 저장소입니다. 기존 방식으로는 이런 경우 항상
+`ImportError`만 났습니다.
+
+`--check-package`에 설치된 패키지명 대신 **로컬 디렉토리 경로**를 주면
+(`Path(...).is_dir()`로 자동 감지, 새 CLI 플래그 없음) 세 검증이 전부 로컬 모드로
+전환됩니다:
+
+| 검증 | 설치된 패키지 모드 | 로컬 디렉토리 모드 |
+|---|---|---|
+| 코드-본문 정합성 | `importlib.import_module()`로 심볼 존재 확인 | H(구조적 코드 인덱싱)의 정적 분석 결과로 대조 — 새 파싱 로직 없이 이미 검증된 인프라 재사용 |
+| SDK 버전 고정 | `importlib.metadata.version()` | git 커밋 해시(짧게)+dirty 여부(`agent-evaluator` 자신의 `agent_version="auto"`와 같은 원리). git 저장소가 아니면 버전 추적 없이 조용히 스킵 |
+| 코드 실행 검증 | 이미 설치된 환경이라 그대로 실행 | 대상 디렉토리(+부모 디렉토리)를 subprocess의 `PYTHONPATH`에 추가해 로컬 import가 풀리게 함 |
+
+- **정합성 검사는 "정확한 서브모듈"이 아니라 "프로젝트 어딘가에 존재하는가"를
+  봅니다**: 로컬 디렉토리 경로를 dotted import 경로로 신뢰성 있게 매핑할 방법이
+  없어서(대상이 패키지 루트인지 그 서브디렉토리인지 알 수 없음), 대상 디렉토리
+  전체에서 발견한 클래스/함수 이름을 평평한 집합으로 모아 대조합니다 — import
+  경로가 대상 디렉토리 소속으로 보이는지만 먼저 거르고(경로의 어느 세그먼트든
+  일치하면 인정 — 첫 세그먼트만 보면 대상을 서브디렉토리로 지정했을 때 놓치는
+  걸 실측으로 확인해 완화했습니다), 소속으로 보이면 평평한 심볼 집합과 대조합니다.
+- **`PYTHONPATH` 경로는 절대 경로로 정규화합니다**: subprocess의 작업 디렉토리가
+  임시 디렉토리라, 상대 경로를 그대로 넣으면 엉뚱한 곳을 가리킵니다(실측으로 발견한
+  버그 — 상대 경로를 넣었더니 `ModuleNotFoundError`가 계속 재현됐습니다).
+
+실측(실제 Ollama): 어디에도 설치되지 않은 독립 로컬 패키지(`toylib`)를 만들어
+`--check-package /path/to/toylib --execute-examples`로 분석했더니, 생성된 실습
+챕터가 `from toylib.calculator import make_calculator`를 실제로 import해 실행에
+성공하는 걸 확인했습니다(PYTHONPATH 주입 없이는 애초에 import가 불가능한
+패키지였습니다). git 저장소로 만든 뒤 재실행하니 `(toylib git 6eb099b 기준)`처럼
+커밋 해시 기준 버전 표시도 정상 동작했습니다.
+
 ## CLI 명령
 
 | 명령 | 상태 | 설명 |
@@ -340,7 +377,7 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package] [--execute-examples]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+SDK 버전 고정, `--execute-examples`로 실제 실행 검증) |
+| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package] [--execute-examples]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+버전 고정, `--execute-examples`로 실제 실행 검증 — 둘 다 로컬 디렉토리 대상도 지원) |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
@@ -367,11 +404,12 @@ src/book_forge/
 │   ├── demonstration_verifier.py # 생성 후 정적 검증 — exercise 문법/diagram 구조/
 │   │                       # reference_table 소스 대조/capstone TODO+완성도 (D, LLM 미호출 순수 함수)
 │   ├── code_consistency_checker.py # 본문의 import/백틱 심볼이 실제 패키지에
-│   │                       # 존재하는지 대조 (C 확장, LLM 미호출 순수 함수)
-│   ├── sdk_version_pin.py # 프로젝트별 대상 SDK 버전 고정 + 드리프트 감지
-│   │                       # (C 확장의 기준, LLM 미호출 순수 함수)
+│   │                       # 존재하는지 대조. 로컬 디렉토리 대상이면 code_index.py의
+│   │                       # 정적 분석으로 자동 전환 (C 확장, I, LLM 미호출)
+│   ├── sdk_version_pin.py # 프로젝트별 대상 버전 고정 + 드리프트 감지 —
+│   │                       # 설치 패키지는 pip 버전, 로컬 디렉토리는 git 커밋 (C 확장, I, LLM 미호출)
 │   ├── code_example_verifier.py # python 코드 블록을 subprocess로 실제 실행해
-│   │                       # 검증 (C 확장, --execute-examples 옵트인, LLM 미호출)
+│   │                       # 검증. 로컬 대상이면 PYTHONPATH 자동 주입 (C 확장, I, --execute-examples 옵트인)
 │   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
 │   └── review_panel.py    # ReviewPanelAgent — 정확성/가독성 검토자 + 편집장
 │                           # (G, 감독자-작업자 패턴 — Gate F 실증 예제)
@@ -506,7 +544,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 239개 테스트
+pytest                 # 260개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```
