@@ -17,6 +17,7 @@ from book_forge.agents.planner import build_propose_plan
 from book_forge.agents.review_loop import build_revise, run_review_loop
 from book_forge.agents.scaffold import scaffold_project
 from book_forge.agents.toc_designer import build_design_toc
+from book_forge.cli.commands.draft_cmd import _SourcePath
 from book_forge.config import ensure_project_dir, load_config
 from book_forge.eval.monitor import build_book_monitor
 from book_forge.exceptions import BookForgeError
@@ -30,8 +31,8 @@ from book_forge.publish.toc_loader import load_toc
 @click.option("--constraints", default="", help="저자 제약/요구사항 (자유 텍스트, 선택)")
 @click.option(
     "--source", "sources", multiple=True,
-    type=click.Path(exists=True),
-    help="RAG 소스 — PDF/코드 저장소 디렉토리/텍스트 파일. 지정하면 스캐폴딩 직후 "
+    type=_SourcePath(),
+    help="RAG 소스 — PDF/코드 저장소 디렉토리/텍스트 파일/http(s):// URL. 지정하면 스캐폴딩 직후 "
          "전체 챕터를 자동으로 RAG 초안까지 생성한다([rag] extra 필요)",
 )
 @click.option("--top-k", type=int, default=8, show_default=True, help="[--source] 챕터당 검색할 소스 청크 수")

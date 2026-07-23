@@ -96,7 +96,7 @@ book-forge new "AI 에이전트 평가 입문" --constraints "초보자 대상, 
 |---|---|
 | 저자가 모든 내용을 직접 씀 | `book-forge edit <slug>` (웹 에디터, Part/Chapter 트리 + 이미지 갤러리) |
 | 특정 챕터 하나만 자료 기반으로 초안이 필요 | `book-forge draft <slug> <chapter_no> --source paper.pdf` |
-| 자료가 있는 챕터 전부를 한 번에 채우고 싶음 | `book-forge draft <slug> --all --source ./papers --source ./src` |
+| 자료가 있는 챕터 전부를 한 번에 채우고 싶음 | `book-forge draft <slug> --all --source ./papers --source ./src --source https://example.com/article` |
 | 주제 입력만으로 끝까지 자동으로 밀고 싶음 | `book-forge new "<제목>" --source ./papers` (2~5를 한 번에, 실측 76초/4챕터) |
 
 RAG 경로((b)(c))는 생성 전 소스 커버리지를 점검해 낮으면 경고·대안을 보여줍니다
@@ -139,10 +139,10 @@ book-forge plan <slug> --revise
   저자가 `agent-eval claims add <Part 절대경로> --developer <이름>`으로 스코프를
   선점해두면 겹치는 저장 시도가 409로 차단됨
 - **Book/AOO 마이그레이션**: 기존 Agent-Evaluator Media/Book·Media/AOO 소스를 자동 이관
-- **RAG 집필 보조(옵션)**: `book-forge draft` — PDF/코드 저장소/텍스트 소스를 Ollama
-  임베딩으로 청크·검색해 근거 발췌문만으로 챕터 초안 또는 레퍼런스 표 생성. 생성 전
-  커버리지 점검·낮으면 대안 제안, 생성 직후 Gate 점수 즉시 노출까지 포함(아래 일반
-  능력 A–F 참고)
+- **RAG 집필 보조(옵션)**: `book-forge draft` — PDF/코드 저장소/텍스트/http(s):// URL
+  소스를 Ollama 임베딩으로 청크·검색해 근거 발췌문만으로 챕터 초안 또는 레퍼런스 표
+  생성. 생성 전 커버리지 점검·낮으면 대안 제안, 생성 직후 Gate 점수 즉시 노출까지
+  포함(아래 일반 능력 A–F 참고)
 - **지식창고 Q&A(옵션)**: `book-forge chat` — draft가 쌓은 프로젝트 지식창고에 대화형 질의
 
 ## 일반 능력 A–F (RAG 집필 보조 확장)
@@ -154,7 +154,7 @@ book-forge plan <slug> --revise
 
 | 능력 | 내용 | 구현 위치 |
 |---|---|---|
-| **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일을 확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
+| **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise) 태깅 — `reference_table`이면 서술형이 아니라 표 형태로 생성 | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시 | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py` |
 | **D. 실증 가능성 게이트** | `exercise`/`diagram` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(별도 판정 로직 아님, C의 재사용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES` |
@@ -210,7 +210,7 @@ src/book_forge/
 ├── knowledge/      # RAG — 소스 어댑터 + Ollama 임베딩 인메모리 코사인 유사도 검색 ([rag] extra)
 │   ├── embeddings.py      # Ollama /api/embeddings, 컨텍스트 길이 초과 시 자동 축소 재시도
 │   ├── store.py           # KnowledgeStore — numpy 코사인 유사도 + save/load/merge (E)
-│   ├── sources.py         # 소스 어댑터 — PDF/코드 저장소/텍스트 자동 판별 (A)
+│   ├── sources.py         # 소스 어댑터 — PDF/코드 저장소/텍스트/URL 자동 판별 (A)
 │   └── pdf_source.py      # PDF → 텍스트 청크 (pypdf), chunk_text() 공용 청커
 ├── publish/        # 마크다운 → HTML/PDF/Slides (Book/AOO 엔진 이식)
 │   ├── markdown_engine.py # @@HTML_START@@, Mermaid, base64 이미지 임베딩
@@ -316,6 +316,13 @@ python scripts/migrate_legacy_book.py \
 - **임베딩 컨텍스트 길이**: `mxbai-embed-large`는 청크가 너무 길면(코드 저장소 청크
   1200자에서 실제로 500 에러 재현) 실패합니다 — 코드 소스 청크 기본값을 500자로
   낮추고, 그래도 초과하면 절반으로 잘라 1회 자동 재시도합니다(`knowledge/embeddings.py`).
+- **URL 소스는 정적 HTML만 지원**: `--source https://...`는 표준 라이브러리
+  `html.parser`로 `<script>/<style>/<head>`만 제거하고 나머지 텍스트를 그대로
+  모읍니다(trafilatura/readability 같은 본문 추출 전용 라이브러리 미사용 — 의존성
+  최소화 원칙). 네비게이션·푸터 등 잡음이 섞여 나올 수 있고, JS로 본문을 렌더링하는
+  SPA 페이지는 텍스트를 거의 못 가져옵니다. 재귀적으로 링크를 따라가지 않고 지정한
+  URL 1개만 가져오며, 리다이렉트/robots.txt는 별도로 존중하지 않으므로 저자 본인이
+  권한이 있거나 공개된 자료만 지정하세요.
 
 ## 개발
 

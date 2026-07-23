@@ -2,7 +2,7 @@
 
 일반 능력 A(소스 어댑터)·B(콘텐츠 유형 분기)·C(근거 검증 계층)·D(실증 가능성
 게이트)·F(대안 제안)가 전부 이 명령에서 만난다:
-  - A: --source는 PDF/코드 저장소 디렉토리/텍스트 파일을 자동 판별해 받는다.
+  - A: --source는 PDF/코드 저장소 디렉토리/텍스트 파일/http(s):// URL을 자동 판별해 받는다.
   - B: 챕터의 content_type이 reference_table이면 전용 생성기로 분기한다.
   - C: 생성 전 소스 커버리지(코사인 유사도)를 점검하고, 생성 직후 Gate 점수를
        CLI에 바로 보여준다(book-forge gate를 따로 안 돌려도 됨).
@@ -41,6 +41,18 @@ _STRICT_CONTENT_TYPES = {"exercise", "diagram"}
 _STRICT_COVERAGE_BONUS = 0.15
 
 
+class _SourcePath(click.ParamType):
+    """--source 값 검증 — http(s):// URL은 그대로 통과, 그 외엔 실제 존재하는 로컬 경로여야 한다."""
+
+    name = "source"
+    _path_type = click.Path(exists=True)
+
+    def convert(self, value, param, ctx):
+        if value.startswith(("http://", "https://")):
+            return value
+        return self._path_type.convert(value, param, ctx)
+
+
 @dataclass
 class ChapterDraftResult:
     chapter_no: int
@@ -76,7 +88,7 @@ def collect_sources_into_store(project_dir: Path, sources: tuple):
 
     click.echo(f"📚 소스 {len(sources)}개 수집·임베딩 중 (Ollama)...")
     for src in sources:
-        chunks = load_source(Path(src))
+        chunks = load_source(src)
         store.add(chunks)
         click.echo(f"  {src}: {len(chunks)}개 청크")
     store.save(store_path)
@@ -115,8 +127,8 @@ def run_batch_draft(
 @click.option("--all", "draft_all", is_flag=True, help="목차의 미집필 챕터 전부를 일괄 생성 (배치 모드)")
 @click.option(
     "--source", "sources", multiple=True,
-    type=click.Path(exists=True),
-    help="RAG 소스 경로 — PDF/코드 저장소 디렉토리/텍스트 파일 (여러 번 지정 가능, 최소 1개 필수)",
+    type=_SourcePath(),
+    help="RAG 소스 경로 — PDF/코드 저장소 디렉토리/텍스트 파일/http(s):// URL (여러 번 지정 가능, 최소 1개 필수)",
 )
 @click.option("--top-k", type=int, default=8, show_default=True, help="검색할 소스 청크 수")
 @click.option(
@@ -154,7 +166,7 @@ def draft(
         ) from exc
 
     if not sources:
-        raise click.ClickException("--source를 최소 1개 지정해야 합니다 (PDF/디렉토리/텍스트 파일).")
+        raise click.ClickException("--source를 최소 1개 지정해야 합니다 (PDF/디렉토리/텍스트 파일/URL).")
 
     load_config()
     config = load_book_config(slug)
@@ -178,7 +190,7 @@ def draft(
                 )
         targets = [rc]
 
-    # E + A: 프로젝트 영속 지식창고에 소스를 청크·임베딩해 누적(PDF/코드 저장소/텍스트 자동 판별).
+    # E + A: 프로젝트 영속 지식창고에 소스를 청크·임베딩해 누적(PDF/코드 저장소/텍스트/URL 자동 판별).
     store = collect_sources_into_store(config.project_dir, sources)
 
     try:

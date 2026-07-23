@@ -1,13 +1,15 @@
-"""소스 어댑터 — PDF/코드 저장소/마크다운 등 서로 다른 입력을 동일한 청크 리스트로
-변환한다 (일반 능력 A: 소스 어댑터 다변화).
+"""소스 어댑터 — PDF/코드 저장소/마크다운/웹 URL 등 서로 다른 입력을 동일한
+청크 리스트로 변환한다 (일반 능력 A: 소스 어댑터 다변화).
 
 KnowledgeStore.add()는 청크 리스트(list[str])만 받으므로, 새 소스 타입을 추가할
 때 이 파일에 함수 하나만 더 짜면 된다 — KnowledgeStore/embeddings 쪽은 손댈
-필요가 없다. 현재 지원: PDF, 코드/텍스트 파일 1개, 코드 저장소 디렉토리.
-웹/URL 소스는 아직 없음(알려진 한계).
+필요가 없다. 현재 지원: PDF, 코드/텍스트 파일 1개, 코드 저장소 디렉토리,
+http(s):// URL 1개.
 """
 from __future__ import annotations
 
+import re
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +18,7 @@ from book_forge.knowledge.pdf_source import chunk_text, extract_pdf_text
 _CODE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".rb"}
 _TEXT_EXTS = {".md", ".txt", ".rst"}
 DEFAULT_SOURCE_EXTS = _CODE_EXTS | _TEXT_EXTS
+_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def load_pdf_source(path: Path, *, chunk_size: int = 800, overlap: int = 100) -> list[str]:
@@ -72,8 +75,81 @@ def load_code_repo_source(
     return chunks
 
 
-def load_source(path: Path, **kwargs) -> list[str]:
-    """확장자/디렉토리 여부로 알맞은 어댑터를 자동 선택한다."""
+class _HTMLTextExtractor(HTMLParser):
+    """<script>/<style>/<head> 안의 텍스트는 버리고 나머지 텍스트만 모은다.
+
+    trafilatura/readability 같은 전용 라이브러리를 쓰지 않고 표준 라이브러리
+    html.parser로 최소한만 처리한다 — PDF/코드 어댑터와 같은 "무거운 의존성을
+    추가하지 않는다" 원칙. 네비게이션·푸터 같은 잡음이 섞여 나올 수 있다(알려진
+    한계 — 필요하면 검색 커버리지 점검(C)이 사후에 걸러낸다).
+    """
+
+    _SKIP_TAGS = {"script", "style", "noscript", "head"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._skip_depth = 0
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            stripped = data.strip()
+            if stripped:
+                self._parts.append(stripped)
+
+    @property
+    def text(self) -> str:
+        return "\n".join(self._parts)
+
+
+def extract_text_from_html(html: str) -> str:
+    parser = _HTMLTextExtractor()
+    parser.feed(html)
+    return parser.text
+
+
+def load_url_source(
+    url: str, *, chunk_size: int = 800, overlap: int = 100, timeout: int = 30
+) -> list[str]:
+    """URL 하나를 가져와 본문 텍스트만 추출해 청크로 변환한다.
+
+    다른 사용자에게 자동으로 요청을 보내는 크롤러가 아니라, 저자가 --source로
+    직접 지정한 URL 하나를 그 자리에서 한 번 가져오는 동작이다(재귀적으로
+    링크를 따라가지 않음).
+    """
+    import requests  # 코어 의존성 — RAG([rag] extra) 없이도 이미 설치돼 있음
+
+    response = requests.get(
+        url, timeout=timeout, headers={"User-Agent": "Book-forge/0.1 (+https://github.com)"}
+    )
+    response.raise_for_status()
+    text = extract_text_from_html(response.text)
+    if not text.strip():
+        return []
+    tagged = f"# 출처: {url}\n{text}"
+    return chunk_text(tagged, chunk_size=chunk_size, overlap=overlap, collapse_whitespace=True)
+
+
+def load_source(source, **kwargs) -> list[str]:
+    """URL 형식/디렉토리 여부/확장자로 알맞은 어댑터를 자동 선택한다.
+
+    source는 str 또는 Path 둘 다 받는다 — 기존 호출부(Path 전달)와 새 URL
+    문자열 호출부를 모두 지원해야 한다.
+    """
+    source_str = str(source)
+    if _URL_RE.match(source_str):
+        url_kwargs = {k: v for k, v in kwargs.items() if k in ("chunk_size", "overlap", "timeout")}
+        return load_url_source(source_str, **url_kwargs)
+
+    path = Path(source)
     if path.is_dir():
         return load_code_repo_source(path, **kwargs)
 
@@ -84,5 +160,5 @@ def load_source(path: Path, **kwargs) -> list[str]:
         return load_text_source(path, **text_kwargs)
 
     raise ValueError(
-        f"지원하지 않는 소스 형식: {path} (지원: .pdf, 코드/텍스트 파일, 디렉토리)"
+        f"지원하지 않는 소스 형식: {source} (지원: .pdf, 코드/텍스트 파일, 디렉토리, http(s):// URL)"
     )

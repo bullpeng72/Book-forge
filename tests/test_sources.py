@@ -4,9 +4,11 @@ from pathlib import Path
 import pytest
 
 from book_forge.knowledge.sources import (
+    extract_text_from_html,
     load_code_repo_source,
     load_source,
     load_text_source,
+    load_url_source,
 )
 
 
@@ -64,3 +66,81 @@ def test_load_source_unsupported_extension_raises(tmp_path: Path) -> None:
     f.write_bytes(b"\x00\x01")
     with pytest.raises(ValueError, match="지원하지 않는 소스 형식"):
         load_source(f)
+
+
+def test_extract_text_from_html_strips_script_style_and_head() -> None:
+    html = """
+    <html><head><title>무시됨</title><style>body{color:red}</style></head>
+    <body>
+      <script>alert('무시됨')</script>
+      <h1>제목입니다</h1>
+      <p>본문 내용입니다.</p>
+    </body></html>
+    """
+    text = extract_text_from_html(html)
+    assert "제목입니다" in text
+    assert "본문 내용입니다" in text
+    assert "무시됨" not in text
+    assert "alert" not in text
+
+
+def test_extract_text_from_html_empty_body_returns_empty_string() -> None:
+    assert extract_text_from_html("<html><head><style>x</style></head></html>") == ""
+
+
+class _FakeResponse:
+    def __init__(self, text: str, status_code: int = 200) -> None:
+        self.text = text
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+
+def test_load_url_source_fetches_and_chunks(monkeypatch) -> None:
+    html = "<html><body><p>웹 페이지 본문입니다.</p></body></html>"
+
+    def fake_get(url, timeout=None, headers=None):
+        assert url == "https://example.com/article"
+        assert headers is not None and "User-Agent" in headers
+        return _FakeResponse(html)
+
+    import requests
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    chunks = load_url_source("https://example.com/article", chunk_size=1000, overlap=0)
+    assert len(chunks) == 1
+    assert "웹 페이지 본문입니다" in chunks[0]
+    assert "https://example.com/article" in chunks[0]  # 출처 태그 포함
+
+
+def test_load_url_source_empty_page_returns_no_chunks(monkeypatch) -> None:
+    import requests
+
+    monkeypatch.setattr(
+        requests, "get", lambda url, timeout=None, headers=None: _FakeResponse("<html></html>")
+    )
+    assert load_url_source("https://example.com/empty") == []
+
+
+def test_load_url_source_raises_on_http_error(monkeypatch) -> None:
+    import requests
+
+    monkeypatch.setattr(
+        requests, "get", lambda url, timeout=None, headers=None: _FakeResponse("", status_code=404)
+    )
+    with pytest.raises(RuntimeError, match="HTTP 404"):
+        load_url_source("https://example.com/missing")
+
+
+def test_load_source_dispatches_url_to_url_loader(monkeypatch) -> None:
+    import requests
+
+    html = "<html><body><p>디스패치 테스트</p></body></html>"
+    monkeypatch.setattr(
+        requests, "get", lambda url, timeout=None, headers=None: _FakeResponse(html)
+    )
+    chunks = load_source("https://example.com/x", chunk_size=1000, overlap=0)
+    assert any("디스패치 테스트" in c for c in chunks)

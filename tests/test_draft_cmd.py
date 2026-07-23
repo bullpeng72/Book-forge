@@ -5,9 +5,12 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+import click
+import pytest
+
 import book_forge.cli.project_utils as project_utils
 import book_forge.knowledge.store as store_module
-from book_forge.cli.commands.draft_cmd import ChapterDraftResult, _is_draftable
+from book_forge.cli.commands.draft_cmd import ChapterDraftResult, _is_draftable, _SourcePath
 from book_forge.cli.main import cli
 from book_forge.models import ChapterSpec
 from book_forge.publish.toc_loader import ResolvedChapter
@@ -162,3 +165,22 @@ def test_chapter_draft_result_dataclass_defaults() -> None:
     result = ChapterDraftResult(chapter_no=1, chapter_title="제목", status="created")
     assert result.avg_coverage is None
     assert result.gate_c_score is None
+
+
+def test_source_path_type_passes_through_urls_without_filesystem_check() -> None:
+    source_type = _SourcePath()
+    assert source_type.convert("https://example.com/doc", None, None) == "https://example.com/doc"
+    assert source_type.convert("http://example.com/doc", None, None) == "http://example.com/doc"
+
+
+def test_source_path_type_validates_local_paths_exist() -> None:
+    source_type = _SourcePath()
+    with pytest.raises(click.BadParameter):
+        source_type.convert("/no/such/path/exists", None, None)
+
+
+def test_source_path_type_accepts_existing_local_path(tmp_path: Path) -> None:
+    f = tmp_path / "source.txt"
+    f.write_text("내용", encoding="utf-8")
+    source_type = _SourcePath()
+    assert source_type.convert(str(f), None, None) == str(f)

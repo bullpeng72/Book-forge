@@ -205,6 +205,25 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
     판단. 실측 검증: 실제 Ollama로 "주제 입력 → 기획 승인 → 목차 승인 →
     스캐폴딩 → 4챕터 배치 초안"이 한 명령·76초로 완주함을 확인.
 
+12. **RAG 소스에 URL 지원을 추가할 때 무거운 파싱 라이브러리를 쓰지 않았다**:
+    `knowledge/sources.py`의 `load_url_source()`는 이미 코어 의존성인
+    `requests`로 GET 한 번 하고, 표준 라이브러리 `html.parser`
+    (`_HTMLTextExtractor`)로 `<script>/<style>/<head>`만 걸러낸 나머지 텍스트를
+    모은다 — trafilatura/readability 등 본문 추출 전용 라이브러리를 추가하지
+    않는다(PDF는 pypdf, 코드/텍스트는 stdlib만 쓰는 기존 원칙과 동일선상).
+    `load_source(source)`가 `_URL_RE`(`^https?://`)로 URL을 먼저 판별하고,
+    아니면 기존처럼 `Path(source)` 기반 디렉토리/PDF/텍스트 판별로 폴백한다 —
+    이 순서를 바꾸지 말 것(URL 문자열을 `Path()`로 잘못 해석하면 안 됨).
+    `load_source()`는 `str`과 `Path`를 둘 다 받는다(`str(source)`로 먼저
+    정규화) — 기존 호출부가 `Path` 객체를 넘기던 관행과 새 URL 문자열 호출을
+    동시에 지원해야 했기 때문. CLI 쪽은 `draft_cmd.py`의 `_SourcePath`
+    (`click.ParamType`)가 `http(s)://` 접두어면 그대로 통과시키고, 아니면
+    `click.Path(exists=True)`로 위임한다 — `new_cmd.py`도 이 타입을 그대로
+    import해서 쓴다(--source 검증 로직을 두 곳에 복제하지 않음). 알려진 한계:
+    SPA처럼 JS로 렌더링되는 페이지는 텍스트를 거의 못 가져오고, robots.txt를
+    존중하지 않으며, 재귀적으로 링크를 따라가지 않고 지정한 URL 1개만 가져온다
+    (README "알려진 한계" 참고).
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는
