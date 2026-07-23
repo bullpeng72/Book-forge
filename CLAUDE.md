@@ -34,13 +34,14 @@ book-forge build slides <slug> [--chapter N] [--without-notes]  # Reveal.js 발�
 book-forge edit <slug> [--port] [--no-browser]       # 웹 에디터
 book-forge gate <slug> [--min-gate-score X] [--tcr X] [--baseline-version TAG] [--fail-on-regression PCT] [--junit-xml PATH]
 book-forge draft <slug> <ch_no> --source a.pdf --source ./src [--top-k N] [--min-coverage F] [--yes] [--force]  # RAG 초안/레퍼런스 표 (옵션)
+book-forge draft <slug> --all --source ./src  # 미집필 챕터 전부 일괄 생성 (배치 모드, F는 확인 대신 스킵+리포트)
 book-forge chat <slug> [--top-k N]                  # 지식창고 대화형 질의 (옵션)
 
 # 마이그레이션 (Book/AOO → Book-forge 프로젝트)
 python scripts/migrate_legacy_book.py --source <Book|AOO 디렉토리> --build-module build_book --target-slug <slug>
 
 # 품질
-pytest                        # 130개 테스트
+pytest                        # 138개 테스트
 ruff check src tests scripts
 python -m build --wheel       # 패키징 검증 — editor/templates/*.html 포함 여부 반드시 확인
 ```
@@ -154,6 +155,30 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
    `embed_text()`가 그 특정 오류에 한해 텍스트를 절반으로 잘라 1회만 재시도한다
    (`_retry=False`로 무한 재귀 방지). 이 재시도 로직을 건드릴 때는 재귀 종료
    조건을 반드시 유지할 것.
+
+9. **배치 모드(`draft --all`)는 F의 정책을 "확인"에서 "스킵+리포트"로 바꾼다,
+   판정 로직 자체는 그대로다**: `draft_cmd.py`의 `_draft_one_chapter(...,
+   batch_mode=...)` 하나가 단일/배치 두 경로를 다 처리한다 — 로직을 복제하지
+   않았다. 배치 모드에서 커버리지가 낮으면 `AlternativeSuggesterAgent` 호출
+   자체를 안 한다(LLM 비용 절감 + 사람이 없는 상태에서 확인 프롬프트가 의미
+   없음). 챕터별 결과는 `eval_results/draft_ch{NN:02d}.json`으로 **개별 저장**한다
+   — 하나의 monitor로 전체를 누적 저장하면 `book-forge gate`/`load_gate_scores()`가
+   여러 챕터의 점수를 뭉뚱그려 평균 내버려 "이 챕터가 문제"라는 신호를 잃는다.
+   실측 검증: 실제 Ollama로 8챕터 배치(2분 34초) 완주, `eval_results/`에
+   `draft_ch01.json`~`draft_ch08.json` 8개 개별 파일 생성, 배치 요약에 챕터별
+   Gate C 점수가 정확히 분리되어 표시됨(`book-forge gate`의 "최신 파일 자동
+   선택"도 `draft_ch08.json`을 올바르게 집음).
+
+   **테스트 격리 관련 실측 버그(수정 완료, 이유 알아둘 것)**: `chat`/`draft`/
+   `new`/`plan` 명령은 전부 `load_config()`를 부르는데, 이건 `python-dotenv`의
+   `load_dotenv()`를 써서 `os.environ`에 **직접** 대입한다 — `monkeypatch.setenv`와
+   달리 테스트가 끝나도 자동으로 안 돌아간다. 실제 사용자 홈에
+   `~/Documents/BookForge/.env`가 존재하는 머신에서 이 명령들을 감싼 CliRunner
+   테스트를 돌리면(그 안의 `get_data_dir()`을 모킹 안 했다면) 실제 `.env` 값이
+   `os.environ`에 새어나가 이후 실행되는 다른 테스트를 오염시킨다(실측: `test_llm_provider.py`가
+   `OLLAMA_MODEL` 기본값 검증에서 실패). `tests/conftest.py`의 `_isolated_environ`
+   autouse fixture가 매 테스트 전후로 `os.environ` 전체를 스냅샷·복원해 이 문제를
+   원천 차단한다 — 이 fixture를 지우거나 우회하지 말 것.
 
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 

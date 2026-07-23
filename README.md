@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 10개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-10개(9개 동작) | 130개 테스트 | Python 3.11+
+10개(9개 동작) | 138개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -94,6 +94,13 @@ OpenAI/Anthropic을 쓰려면 `book-forge init`에서 provider를 선택하거�
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
 
+**배치 모드**: `book-forge draft <slug> --all --source ...`로 목차의 미집필 챕터 전부를
+소스 하나로 일괄 생성합니다. 단일 모드와 저커버리지 처리 정책이 다릅니다 — 단일 모드는
+F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이 결과를 나중에 확인한다고
+가정해 낮은 커버리지 챕터를 **LLM 호출 없이 건너뛰고** 종료 시 챕터별 Gate C 점수
+요약으로 보고합니다(각 챕터는 `eval_results/draft_ch{NN}.json`으로 개별 저장 — 배치
+안에서도 챕터별 점수가 뭉개지지 않습니다).
+
 ## CLI 명령
 
 | 명령 | 상태 | 설명 |
@@ -105,7 +112,7 @@ OpenAI/Anthropic을 쓰려면 `book-forge init`에서 provider를 선택하거�
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no> --source ... [--top-k] [--min-coverage] [--yes] [--force]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표 생성 |
+| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표 생성 (`--all`로 일괄) |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 대화형 질의 |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
 | `book-forge plan <slug> [--revise]` | ✅ | 기획/목차 재검토 — `--revise` 없으면 미리보기만 |
@@ -242,7 +249,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 130개 테스트
+pytest                 # 138개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```

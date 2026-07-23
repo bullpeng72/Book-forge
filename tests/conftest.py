@@ -1,7 +1,8 @@
-"""공유 pytest fixture — 최소 Book-forge 프로젝트 디렉토리."""
+"""공유 pytest fixture — 최소 Book-forge 프로젝트 디렉토리 + 환경변수 격리."""
 from __future__ import annotations
 
 import base64
+import os
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,25 @@ import pytest
 _TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_environ():
+    """모든 테스트가 os.environ 변경사항 없이 시작·종료하게 한다.
+
+    실측으로 발견한 문제: chat/draft/new/plan 명령이 부르는 load_config()는
+    python-dotenv의 load_dotenv()를 쓰는데, 이건 monkeypatch.setenv와 달리
+    os.environ에 직접 대입해 테스트가 끝나도 자동으로 되돌아가지 않는다. 실제
+    사용자 홈에 ~/Documents/BookForge/.env가 있으면(get_data_dir()을 모킹하지
+    않은 테스트가 load_config()를 부를 때) 그 값이 os.environ에 새어나가
+    이후 실행되는 다른 테스트(예: test_llm_provider.py의 OLLAMA_MODEL 기본값
+    검증)를 오염시킨다 — 실제로 이 오염 때문에 테스트가 깨지는 걸 확인했다.
+    매 테스트 전후로 전체 스냅샷을 뜨고 복원해 원천 차단한다.
+    """
+    original = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(original)
 
 TOC_MD = """# 목차
 

@@ -9,12 +9,20 @@
   - D: content_type이 exercise/diagram(실증이 필요한 유형)이면 커버리지
        임계값을 더 엄격하게 적용한다 — C의 메커니즘을 재사용할 뿐 별도 판정
        로직을 새로 만들지 않는다.
-  - F: 커버리지가 낮으면 AlternativeSuggesterAgent가 대안을 제안하고, 저자가
-       그대로 진행할지 취소할지 선택한다(자동 차단이 아니라 자문).
+  - F: 커버리지가 낮으면 AlternativeSuggesterAgent가 대안을 제안한다.
+
+--all(배치 모드) vs 단일 챕터 모드는 낮은 커버리지 처리 정책이 다르다 — 이건
+의도된 설계다: 단일 모드는 "저자가 지금 이 화면 앞에 있다"고 가정해 F의 대안을
+보여주고 진행/취소를 직접 묻는다. --all은 사람이 결과를 나중에 확인한다고
+가정해, 낮은 커버리지 챕터는 LLM 호출 없이(대안 생성 비용도 아낌) 건너뛰고
+배치 종료 시 요약에만 남긴다 — 자동화할수록 "무엇을 건너뛰었는지 명확히
+보고"가 "생성을 억지로 밀어붙이지 않는 것"보다 중요해진다는 판단.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import click
 
@@ -24,7 +32,7 @@ from book_forge.eval.gate_summary import format_gate_line, load_gate_scores
 from book_forge.eval.monitor import build_book_monitor
 from book_forge.exceptions import BookForgeError
 from book_forge.llm.provider import create_llm
-from book_forge.publish.toc_loader import load_toc
+from book_forge.publish.toc_loader import ResolvedChapter, load_toc
 
 _STUB_MARKER = "TODO: 이 챕터를 집필하세요"
 
@@ -33,9 +41,27 @@ _STRICT_CONTENT_TYPES = {"exercise", "diagram"}
 _STRICT_COVERAGE_BONUS = 0.15
 
 
+@dataclass
+class ChapterDraftResult:
+    chapter_no: int
+    chapter_title: str
+    status: str  # "created" | "skipped_low_coverage" | "cancelled"
+    avg_coverage: Optional[float] = None
+    gate_c_score: Optional[float] = None
+
+
+def _is_draftable(rc: ResolvedChapter, force: bool) -> bool:
+    if force:
+        return True
+    if not rc.exists:
+        return True
+    return _STUB_MARKER in rc.path.read_text(encoding="utf-8")
+
+
 @click.command()
 @click.argument("slug")
-@click.argument("chapter_no", type=int)
+@click.argument("chapter_no", type=int, required=False, default=None)
+@click.option("--all", "draft_all", is_flag=True, help="목차의 미집필 챕터 전부를 일괄 생성 (배치 모드)")
 @click.option(
     "--source", "sources", multiple=True,
     type=click.Path(exists=True),
@@ -46,18 +72,25 @@ _STRICT_COVERAGE_BONUS = 0.15
     "--min-coverage", type=float, default=0.5, show_default=True,
     help="생성 전 평균 소스 유사도 임계값 (참고용 휴리스틱 — 임베딩 모델마다 절대값 신뢰도가 다를 수 있음)",
 )
-@click.option("--yes", "-y", is_flag=True, help="커버리지가 낮아도 확인 없이 진행")
+@click.option("--yes", "-y", is_flag=True, help="[단일 모드] 커버리지가 낮아도 확인 없이 진행")
 @click.option("--force", is_flag=True, help="기존에 집필된 챕터도 덮어쓰기")
 def draft(
     slug: str,
-    chapter_no: int,
+    chapter_no: Optional[int],
+    draft_all: bool,
     sources: tuple,
     top_k: int,
     min_coverage: float,
     yes: bool,
     force: bool,
 ) -> None:
-    """SLUG 프로젝트의 CHAPTER_NO 챕터를 --source 기반 RAG로 초안 생성한다."""
+    """SLUG 프로젝트의 CHAPTER_NO 챕터(또는 --all로 전체 미집필 챕터)를
+    --source 기반 RAG로 초안 생성한다."""
+    if draft_all and chapter_no is not None:
+        raise click.ClickException("챕터 번호와 --all은 함께 쓸 수 없습니다.")
+    if not draft_all and chapter_no is None:
+        raise click.ClickException("챕터 번호를 지정하거나, 전체 일괄 생성은 --all을 쓰세요.")
+
     try:
         from book_forge.knowledge.sources import load_source
         from book_forge.knowledge.store import KnowledgeStore, default_store_path
@@ -71,18 +104,25 @@ def draft(
 
     load_config()
     config = load_book_config(slug)
-
     chapters = load_toc(config.project_dir)
-    rc = next((c for c in chapters if c.spec.chapter_no == chapter_no), None)
-    if rc is None:
-        raise click.ClickException(f"챕터 번호 {chapter_no}를 목차에서 찾을 수 없습니다.")
 
-    if rc.exists and not force:
-        existing = rc.path.read_text(encoding="utf-8")
-        if _STUB_MARKER not in existing:
-            raise click.ClickException(
-                f"챕터에 이미 내용이 있습니다: {rc.path}\n덮어쓰려면 --force를 쓰세요."
-            )
+    if draft_all:
+        targets = [rc for rc in chapters if _is_draftable(rc, force)]
+        if not targets:
+            click.echo("모든 챕터가 이미 집필되어 있습니다. (--force로 덮어쓸 수 있습니다)")
+            return
+        click.echo(f"🗂  일괄 생성 대상: {len(targets)}개 챕터")
+    else:
+        rc = next((c for c in chapters if c.spec.chapter_no == chapter_no), None)
+        if rc is None:
+            raise click.ClickException(f"챕터 번호 {chapter_no}를 목차에서 찾을 수 없습니다.")
+        if rc.exists and not force:
+            existing = rc.path.read_text(encoding="utf-8")
+            if _STUB_MARKER not in existing:
+                raise click.ClickException(
+                    f"챕터에 이미 내용이 있습니다: {rc.path}\n덮어쓰려면 --force를 쓰세요."
+                )
+        targets = [rc]
 
     # E: 프로젝트 영속 지식창고 — draft가 쌓은 소스를 book-forge chat이 이어서 쓴다.
     store_path = default_store_path(config.project_dir)
@@ -92,7 +132,8 @@ def draft(
     else:
         store = KnowledgeStore()
 
-    # A: 소스 어댑터 — PDF/디렉토리(코드 저장소)/텍스트 파일을 자동 판별.
+    # A: 소스 어댑터 — PDF/디렉토리(코드 저장소)/텍스트 파일을 자동 판별. 모든
+    # 대상 챕터가 이 소스를 공유한다(임베딩은 한 번만 계산).
     click.echo(f"📚 소스 {len(sources)}개 수집·임베딩 중 (Ollama)...")
     for src in sources:
         chunks = load_source(Path(src))
@@ -100,19 +141,52 @@ def draft(
         click.echo(f"  {src}: {len(chunks)}개 청크")
     store.save(store_path)
 
-    click.echo(f"🔍 '{rc.spec.chapter_title}' 관련 청크 검색 중 (top_k={top_k})...")
-    scored = store.query_with_scores(rc.spec.chapter_title, top_k=top_k)
-    if not scored:
-        raise click.ClickException("검색된 소스 청크가 없습니다 — 소스 내용을 확인하세요.")
-    avg_score = sum(s for _, s in scored) / len(scored)
-    sources_text = "\n\n---\n\n".join(chunk for chunk, _ in scored)
-
     try:
         llm = create_llm()
     except BookForgeError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    monitor = build_book_monitor(output_dir=str(config.project_dir / "eval_results"))
+    results: list[ChapterDraftResult] = []
+    for rc in targets:
+        if draft_all:
+            click.echo(f"\n── Chapter {rc.spec.chapter_no}: {rc.spec.chapter_title} ──")
+        results.append(
+            _draft_one_chapter(
+                rc, store, llm, config.project_dir,
+                top_k=top_k, min_coverage=min_coverage,
+                yes=yes, batch_mode=draft_all,
+            )
+        )
+
+    if draft_all:
+        _print_batch_summary(results)
+
+
+def _draft_one_chapter(
+    rc: ResolvedChapter,
+    store,
+    llm,
+    project_dir: Path,
+    *,
+    top_k: int,
+    min_coverage: float,
+    yes: bool,
+    batch_mode: bool,
+) -> ChapterDraftResult:
+    result = ChapterDraftResult(
+        chapter_no=rc.spec.chapter_no, chapter_title=rc.spec.chapter_title, status="cancelled"
+    )
+
+    click.echo(f"🔍 '{rc.spec.chapter_title}' 관련 청크 검색 중 (top_k={top_k})...")
+    scored = store.query_with_scores(rc.spec.chapter_title, top_k=top_k)
+    if not scored:
+        click.echo("  검색된 소스 청크가 없습니다 — 건너뜁니다.")
+        return result
+    avg_score = sum(s for _, s in scored) / len(scored)
+    result.avg_coverage = avg_score
+    sources_text = "\n\n---\n\n".join(chunk for chunk, _ in scored)
+
+    monitor = build_book_monitor(output_dir=str(project_dir / "eval_results"))
 
     # D: 실증이 필요한 유형(exercise/diagram)은 C의 임계값을 그대로 쓰되 더 엄격하게.
     effective_min_coverage = min_coverage
@@ -124,38 +198,47 @@ def draft(
         )
     click.echo(f"   평균 소스 유사도: {avg_score:.3f} (참고용 휴리스틱)")
 
-    # C(사전 점검) → F(대안 제안): 커버리지가 낮으면 경고하고 대안을 제시한다.
-    if avg_score < effective_min_coverage and not yes:
-        click.echo(
-            f"\n⚠️  소스 커버리지가 낮습니다(평균 {avg_score:.3f} < 임계값 "
-            f"{effective_min_coverage:.2f}). 근거 없는 서술이 섞일 위험이 있습니다."
-        )
-        from book_forge.agents.alternative_suggester import (
-            build_suggest_alternatives,
-            parse_alternatives,
-        )
-
-        click.echo("💡 대안을 생성하는 중...")
-        suggest_alternatives = build_suggest_alternatives(llm, monitor)
-        raw = suggest_alternatives(
-            chapter_title=rc.spec.chapter_title,
-            reason=f"평균 소스 유사도 {avg_score:.3f}로 낮음 (top_k={top_k}개 청크 검색)",
-            ground_truth=rc.spec.chapter_title,
-        )
-        alternatives = parse_alternatives(raw)
-        if alternatives:
-            click.echo("\n제안된 대안:")
-            for i, (summary, reason) in enumerate(alternatives, 1):
-                click.echo(f"  {i}. {summary}")
-                if reason:
-                    click.echo(f"     → {reason}")
-
-        if not click.confirm("\n그래도 이대로 초안을 생성하시겠습니까?", default=False):
+    if avg_score < effective_min_coverage:
+        if batch_mode:
+            # 배치 모드: LLM 호출(대안 생성) 없이 건너뛰고 요약에만 남긴다.
             click.echo(
-                "취소했습니다. --source를 추가하거나, 위 대안을 참고해 "
-                "book-forge plan --revise 로 챕터 범위를 조정한 뒤 다시 시도하세요."
+                f"⏭️  건너뜀 — 커버리지 {avg_score:.3f} < 임계값 {effective_min_coverage:.2f}"
             )
-            raise SystemExit(0)
+            result.status = "skipped_low_coverage"
+            return result
+
+        if not yes:
+            click.echo(
+                f"\n⚠️  소스 커버리지가 낮습니다(평균 {avg_score:.3f} < 임계값 "
+                f"{effective_min_coverage:.2f}). 근거 없는 서술이 섞일 위험이 있습니다."
+            )
+            from book_forge.agents.alternative_suggester import (
+                build_suggest_alternatives,
+                parse_alternatives,
+            )
+
+            click.echo("💡 대안을 생성하는 중...")
+            suggest_alternatives = build_suggest_alternatives(llm, monitor)
+            raw = suggest_alternatives(
+                chapter_title=rc.spec.chapter_title,
+                reason=f"평균 소스 유사도 {avg_score:.3f}로 낮음 (top_k={top_k}개 청크 검색)",
+                ground_truth=rc.spec.chapter_title,
+            )
+            alternatives = parse_alternatives(raw)
+            if alternatives:
+                click.echo("\n제안된 대안:")
+                for i, (summary, reason) in enumerate(alternatives, 1):
+                    click.echo(f"  {i}. {summary}")
+                    if reason:
+                        click.echo(f"     → {reason}")
+
+            if not click.confirm("\n그래도 이대로 초안을 생성하시겠습니까?", default=False):
+                click.echo(
+                    "취소했습니다. --source를 추가하거나, 위 대안을 참고해 "
+                    "book-forge plan --revise 로 챕터 범위를 조정한 뒤 다시 시도하세요."
+                )
+                result.status = "cancelled"
+                return result
 
     # B: 콘텐츠 유형에 따라 전용 생성기로 분기.
     if rc.spec.content_type == "reference_table":
@@ -171,28 +254,58 @@ def draft(
 
     draft_md = generate(
         chapter_title=rc.spec.chapter_title,
-        chapter_no=chapter_no,
+        chapter_no=rc.spec.chapter_no,
         sources=sources_text,
         ground_truth=rc.spec.chapter_title,
     )
 
     rc.path.parent.mkdir(parents=True, exist_ok=True)
     rc.path.write_text(draft_md, encoding="utf-8")
-    result_path = monitor.save_to_file("draft")
+    result_path = monitor.save_to_file(f"draft_ch{rc.spec.chapter_no:02d}")
     click.echo(f"✅ 완료: {rc.path}")
 
-    # C(사후 노출): eval_results/ 를 따로 열어보지 않아도 즉시 확인 가능하게.
-    _print_gate_summary(result_path)
+    result.status = "created"
+    result.gate_c_score = _print_gate_summary(result_path)
+    return result
 
 
-def _print_gate_summary(result_path) -> None:
+def _print_gate_summary(result_path) -> Optional[float]:
     try:
         scores = load_gate_scores(Path(result_path))
     except (OSError, ValueError):
-        return
+        return None
     click.echo("\n📈 이 초안의 Gate 점수 (참고용 — 전체 판정은 book-forge gate로):")
     for gate_key in "ABCDEFG":
         click.echo(format_gate_line(gate_key, scores.get(gate_key)))
     c_score = scores.get("C")
     if c_score is not None and c_score < 0.7:
         click.echo("\n⚠️  Gate C(신뢰성) 점수가 낮습니다 — 근거 없는 서술이 섞였을 수 있습니다. 검토하세요.")
+    return c_score
+
+
+def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
+    click.echo("\n" + "═" * 50)
+    click.echo("📋 일괄 생성 요약")
+    click.echo("═" * 50)
+    for r in results:
+        label = f"Ch{r.chapter_no:02d} {r.chapter_title}"
+        if r.status == "created":
+            if r.gate_c_score is None:
+                click.echo(f"  · {label} (Gate C: N/A)")
+            elif r.gate_c_score >= 0.7:
+                click.echo(f"  ✅ {label} (Gate C: {r.gate_c_score:.3f})")
+            else:
+                click.echo(f"  ⚠️  {label} (Gate C: {r.gate_c_score:.3f}) — 검토 필요")
+        elif r.status == "skipped_low_coverage":
+            click.echo(f"  ⏭️  {label} — 건너뜀 (커버리지 {r.avg_coverage:.3f} 미달)")
+        else:
+            click.echo(f"  ✋ {label} — 취소됨")
+
+    created = sum(1 for r in results if r.status == "created")
+    skipped = sum(1 for r in results if r.status == "skipped_low_coverage")
+    click.echo(f"\n생성 {created}개, 건너뜀 {skipped}개 (총 {len(results)}개)")
+    if skipped:
+        click.echo(
+            "건너뛴 챕터는 --source를 추가하거나 book-forge plan --revise로 "
+            "범위를 조정한 뒤 다시 시도하세요."
+        )
