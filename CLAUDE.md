@@ -224,6 +224,39 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
     존중하지 않으며, 재귀적으로 링크를 따라가지 않고 지정한 URL 1개만 가져온다
     (README "알려진 한계" 참고).
 
+13. **D(실증 가능성 게이트) 강화는 "생성 전 임계값"에 "생성 후 정적 검증"을
+    더한 것이다, 기존 pre-check를 대체하지 않는다**: 원래 설계 문서(일반 능력
+    C 정의)는 "생성 후: 콘텐츠 유형에 맞는 검증기 실행 — code 스니펫은 실제
+    실행/import 검증, reference_table은 소스 값과 표 값 대조"까지 요구했는데,
+    실제 구현은 `_STRICT_CONTENT_TYPES`로 커버리지 임계값만 엄격하게 적용하는
+    사전 점검에 그쳤다(생성된 결과물이 실제로 검증 가능한 형태인지는 한 번도
+    확인 안 함). `agents/demonstration_verifier.py`가 그 생성 후 검증을
+    채운다:
+    - `exercise` → ```python 블록을 `ast.parse()`로 문법 검증. **LLM이 생성한
+      임의 코드를 자동으로 실행하지는 않는다** — 부작용 없는 안전한 근사만
+      확인하고, 실제 실행은 저자 몫으로 남긴다(원 설계의 "실제 실행" 요구를
+      의도적으로 축소한 지점 — 재검토 시 착각하지 말 것).
+    - `diagram` → ```mermaid 블록이 알려진 다이어그램 타입(`graph`/
+      `flowchart`/`sequenceDiagram` 등)으로 시작하고 본문이 비어있지 않은지
+      최소 구조만 확인(mermaid 파서를 새로 짜지 않음).
+    - `reference_table` → 표 셀 값이 RAG 발췌문(`sources_text`)에 그대로
+      등장하는 비율을 계산(기본 임계값 50%) — 소스에 없는 값을 표로 날조하는
+      것을 잡아낸다.
+    - `exercise`/`diagram` content_type은 지금까지 `chapter_drafter.py`의
+      일반 서술형 프롬프트(`DRAFT_PROMPT`)로 생성됐다 — 검증 대상(코드/mermaid
+      블록)이 애초에 안정적으로 생성된다는 보장이 없었다. `build_draft_chapter()`에
+      `content_type` 파라미터(기본값 `"narrative"`, 하위 호환)를 추가해
+      `DRAFT_PROMPT_EXERCISE`/`DRAFT_PROMPT_DIAGRAM`(`agents/prompts.py`)로
+      분기하고, 각 프롬프트가 코드/mermaid 블록을 명시적으로 요구한다.
+    - 검증 결과는 **agent-evaluator의 Gate 점수를 바꾸지 않는다** — SDK 내부
+      판정 로직에 손대지 않고, Book-forge 자체 신호로 CLI(`🔬 실증 가능성
+      검증: ✅/⚠️`)와 배치 요약에만 노출한다. 기존 Gate C/D 노출과 같은 철학
+      — **실패해도 초안 저장/빌드를 막지 않는다**(참고용, `book-forge gate`가
+      최종 판정). 원 설계는 D 실패를 F(대안 제안)로 넘기는 흐름까지 그렸지만,
+      검증이 생성 *후*에 일어나 F가 트리거되는 생성 *전* 흐름과 시점이 달라
+      재구조화가 필요했다 — 이번엔 정보 노출까지만 구현하고 F 연동은 하지
+      않았다(향후 필요해지면 재검토).
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

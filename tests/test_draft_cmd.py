@@ -184,3 +184,83 @@ def test_source_path_type_accepts_existing_local_path(tmp_path: Path) -> None:
     f.write_text("내용", encoding="utf-8")
     source_type = _SourcePath()
     assert source_type.convert(str(f), None, None) == str(f)
+
+
+class _ExerciseLLM:
+    """content_type=exercise 프롬프트를 받으면 유효한 python 코드 블록을 낸다."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        if "실습(exercise)" in prompt:
+            return (
+                "# Chapter 1: 사과 개론\n\n## 목표\n\n덧셈을 배운다.\n\n"
+                "## 실습\n\n```python\ndef add(a, b):\n    return a + b\n```\n\n"
+                "## 해설\n\n소스에 근거한 설명."
+            )
+        return "# 생성된 챕터\n\n고정된 초안 본문입니다."
+
+
+def test_draft_single_chapter_exercise_type_runs_verification(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _ExerciseLLM())
+
+    project_dir = tmp_path / "projects" / "exercise-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = (
+        "```toc\n1|기초|1|사과 개론|exercise\n```\n"
+    )
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "exercise-slug", "1", "--source", str(source_file), "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "🔬 실증 가능성 검증: ✅" in result.output
+
+    ch1 = (part_dir / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
+    assert "```python" in ch1
+
+
+def test_draft_single_chapter_exercise_type_reports_missing_code_block(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    # FakeLLM은 content_type과 무관하게 코드 블록 없는 서술형 텍스트만 반환한다.
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    project_dir = tmp_path / "projects" / "exercise-slug2"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론|exercise\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "exercise-slug2", "1", "--source", str(source_file), "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "🔬 실증 가능성 검증: ⚠️" in result.output
+    assert "python 코드 블록이 없습니다" in result.output

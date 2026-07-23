@@ -6,9 +6,12 @@
   - B: 챕터의 content_type이 reference_table이면 전용 생성기로 분기한다.
   - C: 생성 전 소스 커버리지(코사인 유사도)를 점검하고, 생성 직후 Gate 점수를
        CLI에 바로 보여준다(book-forge gate를 따로 안 돌려도 됨).
-  - D: content_type이 exercise/diagram(실증이 필요한 유형)이면 커버리지
-       임계값을 더 엄격하게 적용한다 — C의 메커니즘을 재사용할 뿐 별도 판정
-       로직을 새로 만들지 않는다.
+  - D: content_type이 exercise/diagram(실증이 필요한 유형)이면 생성 전
+       커버리지 임계값을 더 엄격하게 적용하고(C의 메커니즘 재사용), 생성 후에는
+       demonstration_verifier.py가 exercise(코드 문법)·diagram(mermaid 구조)·
+       reference_table(소스-표 값 대조)을 정적으로 검증해 CLI/배치 요약에
+       즉시 노출한다(agent-evaluator의 Gate 점수와는 별개의 Book-forge 자체
+       신호 — 참고용, 빌드를 막지 않음).
   - F: 커버리지가 낮으면 AlternativeSuggesterAgent가 대안을 제안한다.
 
 --all(배치 모드) vs 단일 챕터 모드는 낮은 커버리지 처리 정책이 다르다 — 이건
@@ -26,6 +29,7 @@ from typing import Optional
 
 import click
 
+from book_forge.agents.demonstration_verifier import VerificationResult, verify_demonstration
 from book_forge.cli.project_utils import load_book_config
 from book_forge.config import load_config
 from book_forge.eval.gate_summary import format_gate_line, load_gate_scores
@@ -60,6 +64,7 @@ class ChapterDraftResult:
     status: str  # "created" | "skipped_low_coverage" | "cancelled"
     avg_coverage: Optional[float] = None
     gate_c_score: Optional[float] = None
+    verification: Optional[VerificationResult] = None
 
 
 def _is_draftable(rc: ResolvedChapter, force: bool) -> bool:
@@ -294,18 +299,24 @@ def _draft_one_chapter(
 
         click.echo("📊 레퍼런스 표 생성 중 (LLM 호출)...")
         generate = build_generate_reference_table(llm, monitor)
+        draft_md = generate(
+            chapter_title=rc.spec.chapter_title,
+            chapter_no=rc.spec.chapter_no,
+            sources=sources_text,
+            ground_truth=rc.spec.chapter_title,
+        )
     else:
         from book_forge.agents.chapter_drafter import build_draft_chapter
 
         click.echo("✍️  초안 생성 중 (LLM 호출)...")
         generate = build_draft_chapter(llm, monitor)
-
-    draft_md = generate(
-        chapter_title=rc.spec.chapter_title,
-        chapter_no=rc.spec.chapter_no,
-        sources=sources_text,
-        ground_truth=rc.spec.chapter_title,
-    )
+        draft_md = generate(
+            chapter_title=rc.spec.chapter_title,
+            chapter_no=rc.spec.chapter_no,
+            sources=sources_text,
+            ground_truth=rc.spec.chapter_title,
+            content_type=rc.spec.content_type,
+        )
 
     rc.path.parent.mkdir(parents=True, exist_ok=True)
     rc.path.write_text(draft_md, encoding="utf-8")
@@ -314,6 +325,7 @@ def _draft_one_chapter(
 
     result.status = "created"
     result.gate_c_score = _print_gate_summary(result_path)
+    result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
     return result
 
 
@@ -331,6 +343,25 @@ def _print_gate_summary(result_path) -> Optional[float]:
     return c_score
 
 
+def _print_verification(
+    content_type: str, draft_md: str, sources_text: str
+) -> Optional[VerificationResult]:
+    """D(실증 가능성 게이트) 강화 — exercise/diagram/reference_table 생성 결과를
+    정적으로 검증하고 CLI에 즉시 노출한다. narrative 등 대응 검증기가 없는
+    유형은 아무것도 출력하지 않는다(기존 Gate C/D와 마찬가지로 참고용이며,
+    실패해도 초안 자체는 이미 저장된 상태를 유지한다)."""
+    result = verify_demonstration(content_type, draft_md, sources_text)
+    if result is None:
+        return None
+    if result.passed:
+        click.echo(f"🔬 실증 가능성 검증: ✅ {result.detail}")
+    else:
+        click.echo(f"🔬 실증 가능성 검증: ⚠️  {result.detail}")
+        for issue in result.issues:
+            click.echo(f"     → {issue}")
+    return result
+
+
 def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
     click.echo("\n" + "═" * 50)
     click.echo("📋 일괄 생성 요약")
@@ -344,6 +375,8 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
                 click.echo(f"  ✅ {label} (Gate C: {r.gate_c_score:.3f})")
             else:
                 click.echo(f"  ⚠️  {label} (Gate C: {r.gate_c_score:.3f}) — 검토 필요")
+            if r.verification is not None and not r.verification.passed:
+                click.echo(f"       🔬 실증 검증 실패: {r.verification.detail}")
         elif r.status == "skipped_low_coverage":
             click.echo(f"  ⏭️  {label} — 건너뜀 (커버리지 {r.avg_coverage:.3f} 미달)")
         else:
@@ -351,9 +384,14 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
 
     created = sum(1 for r in results if r.status == "created")
     skipped = sum(1 for r in results if r.status == "skipped_low_coverage")
+    verification_failed = sum(
+        1 for r in results if r.verification is not None and not r.verification.passed
+    )
     click.echo(f"\n생성 {created}개, 건너뜀 {skipped}개 (총 {len(results)}개)")
     if skipped:
         click.echo(
             "건너뛴 챕터는 --source를 추가하거나 book-forge plan --revise로 "
             "범위를 조정한 뒤 다시 시도하세요."
         )
+    if verification_failed:
+        click.echo(f"🔬 실증 가능성 검증 실패 {verification_failed}개 — 위 목록에서 검토하세요.")

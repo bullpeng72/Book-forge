@@ -157,7 +157,7 @@ book-forge plan <slug> --revise
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise) 태깅 — `reference_table`이면 서술형이 아니라 표 형태로 생성 | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시 | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py` |
-| **D. 실증 가능성 게이트** | `exercise`/`diagram` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(별도 판정 로직 아님, C의 재사용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES` |
+| **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
 
@@ -206,6 +206,8 @@ src/book_forge/
 │   ├── chapter_drafter.py # ChapterDrafterAgent — RAG 소스 → 챕터 초안 (rag_mode=True, 옵션)
 │   ├── reference_table.py # ReferenceTableAgent — RAG 소스 → 레퍼런스 표 (B)
 │   ├── alternative_suggester.py # AlternativeSuggesterAgent — 낮은 커버리지 → 대안 제안 (F)
+│   ├── demonstration_verifier.py # 생성 후 정적 검증 — exercise 문법/diagram 구조/
+│   │                       # reference_table 소스 대조 (D, LLM 미호출 순수 함수)
 │   └── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
 ├── knowledge/      # RAG — 소스 어댑터 + Ollama 임베딩 인메모리 코사인 유사도 검색 ([rag] extra)
 │   ├── embeddings.py      # Ollama /api/embeddings, 컨텍스트 길이 초과 시 자동 축소 재시도
