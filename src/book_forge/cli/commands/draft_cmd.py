@@ -58,6 +58,57 @@ def _is_draftable(rc: ResolvedChapter, force: bool) -> bool:
     return _STUB_MARKER in rc.path.read_text(encoding="utf-8")
 
 
+def collect_sources_into_store(project_dir: Path, sources: tuple):
+    """소스를 프로젝트 영속 지식창고에 청크·임베딩해 누적한다.
+
+    book-forge draft와 book-forge new --source가 공유하는 로직 — 복제하지 않고
+    이 함수 하나로 유지한다.
+    """
+    from book_forge.knowledge.sources import load_source
+    from book_forge.knowledge.store import KnowledgeStore, default_store_path
+
+    store_path = default_store_path(project_dir)
+    if store_path.is_file():
+        store = KnowledgeStore.load(store_path)
+        click.echo(f"📚 기존 지식창고 불러옴: {len(store)}개 청크")
+    else:
+        store = KnowledgeStore()
+
+    click.echo(f"📚 소스 {len(sources)}개 수집·임베딩 중 (Ollama)...")
+    for src in sources:
+        chunks = load_source(Path(src))
+        store.add(chunks)
+        click.echo(f"  {src}: {len(chunks)}개 청크")
+    store.save(store_path)
+    return store
+
+
+def run_batch_draft(
+    targets: list[ResolvedChapter],
+    store,
+    llm,
+    project_dir: Path,
+    *,
+    top_k: int = 8,
+    min_coverage: float = 0.5,
+) -> list["ChapterDraftResult"]:
+    """미집필 챕터 목록을 순회하며 배치 정책(저커버리지 스킵+리포트)으로 RAG 초안을 생성한다.
+
+    book-forge draft --all과 book-forge new --source가 공유하는 로직.
+    """
+    results: list[ChapterDraftResult] = []
+    for rc in targets:
+        click.echo(f"\n── Chapter {rc.spec.chapter_no}: {rc.spec.chapter_title} ──")
+        results.append(
+            _draft_one_chapter(
+                rc, store, llm, project_dir,
+                top_k=top_k, min_coverage=min_coverage,
+                yes=False, batch_mode=True,
+            )
+        )
+    return results
+
+
 @click.command()
 @click.argument("slug")
 @click.argument("chapter_no", type=int, required=False, default=None)
@@ -92,9 +143,12 @@ def draft(
         raise click.ClickException("챕터 번호를 지정하거나, 전체 일괄 생성은 --all을 쓰세요.")
 
     try:
-        from book_forge.knowledge.sources import load_source
-        from book_forge.knowledge.store import KnowledgeStore, default_store_path
+        import numpy  # noqa: F401
+        import pypdf  # noqa: F401
     except ImportError as exc:
+        # book_forge.knowledge.* 모듈 자체는 pypdf/numpy를 함수 내부에서만 지연
+        # import하므로, 모듈을 그냥 import하는 것만으로는 [rag] extra 미설치를
+        # 잡아내지 못한다 — 실제 옵션 의존성을 직접 확인해야 한다.
         raise click.ClickException(
             'RAG 기능에 필요한 패키지가 없습니다. pip install -e ".[rag]" 로 설치하세요.'
         ) from exc
@@ -124,42 +178,24 @@ def draft(
                 )
         targets = [rc]
 
-    # E: 프로젝트 영속 지식창고 — draft가 쌓은 소스를 book-forge chat이 이어서 쓴다.
-    store_path = default_store_path(config.project_dir)
-    if store_path.is_file():
-        store = KnowledgeStore.load(store_path)
-        click.echo(f"📚 기존 지식창고 불러옴: {len(store)}개 청크")
-    else:
-        store = KnowledgeStore()
-
-    # A: 소스 어댑터 — PDF/디렉토리(코드 저장소)/텍스트 파일을 자동 판별. 모든
-    # 대상 챕터가 이 소스를 공유한다(임베딩은 한 번만 계산).
-    click.echo(f"📚 소스 {len(sources)}개 수집·임베딩 중 (Ollama)...")
-    for src in sources:
-        chunks = load_source(Path(src))
-        store.add(chunks)
-        click.echo(f"  {src}: {len(chunks)}개 청크")
-    store.save(store_path)
+    # E + A: 프로젝트 영속 지식창고에 소스를 청크·임베딩해 누적(PDF/코드 저장소/텍스트 자동 판별).
+    store = collect_sources_into_store(config.project_dir, sources)
 
     try:
         llm = create_llm()
     except BookForgeError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    results: list[ChapterDraftResult] = []
-    for rc in targets:
-        if draft_all:
-            click.echo(f"\n── Chapter {rc.spec.chapter_no}: {rc.spec.chapter_title} ──")
-        results.append(
-            _draft_one_chapter(
-                rc, store, llm, config.project_dir,
-                top_k=top_k, min_coverage=min_coverage,
-                yes=yes, batch_mode=draft_all,
-            )
-        )
-
     if draft_all:
+        results = run_batch_draft(
+            targets, store, llm, config.project_dir, top_k=top_k, min_coverage=min_coverage
+        )
         _print_batch_summary(results)
+    else:
+        _draft_one_chapter(
+            targets[0], store, llm, config.project_dir,
+            top_k=top_k, min_coverage=min_coverage, yes=yes, batch_mode=False,
+        )
 
 
 def _draft_one_chapter(

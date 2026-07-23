@@ -20,11 +20,15 @@ from book_forge.llm.provider import create_llm
 def chat(slug: str, top_k: int) -> None:
     """SLUG 프로젝트의 지식창고에 대화형으로 질문한다. /exit 로 종료."""
     try:
-        from book_forge.knowledge.store import KnowledgeStore, default_store_path
+        import numpy  # noqa: F401
     except ImportError as exc:
+        # knowledge.store 모듈 자체는 numpy를 query_with_scores() 내부에서만
+        # 지연 import하므로, 모듈 import만으로는 [rag] extra 미설치를 못 잡는다.
         raise click.ClickException(
             'RAG 기능에 필요한 패키지가 없습니다. pip install -e ".[rag]" 로 설치하세요.'
         ) from exc
+
+    from book_forge.knowledge.store import KnowledgeStore, default_store_path
 
     load_config()
     config = load_book_config(slug)

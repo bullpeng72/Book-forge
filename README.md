@@ -6,11 +6,12 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 10개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-10개(9개 동작) | 138개 테스트 | Python 3.11+
+10개(9개 동작) | 140개 테스트 | Python 3.11+
 
 ## 목차
 
-- [빠른 시작](#빠른-시작)
+- [설치](#설치)
+- [사용자 작업 흐름](#사용자-작업-흐름)
 - [기능](#기능)
 - [일반 능력 A–F (RAG 집필 보조 확장)](#일반-능력-af-rag-집필-보조-확장)
 - [CLI 명령](#cli-명령)
@@ -20,39 +21,105 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 - [알려진 한계](#알려진-한계)
 - [개발](#개발)
 
-## 빠른 시작
+## 설치
 
 ```bash
-# 설치 (개발 모드)
 pip install -e ".[dev]"          # 코어 + 테스트 도구
 pip install -e ".[pdf]"          # + Playwright (PDF 빌드용)
 pip install -e ".[serve]"        # + Flask (웹 에디터용)
 pip install -e ".[rag]"          # + pypdf/numpy (RAG 집필 보조용, Ollama 임베딩 필요)
 playwright install chromium      # [pdf] 설치 시 1회
 
-# 설정 (기본 Ollama — API 키 불필요)
-book-forge init
-
-# 신규 프로젝트: 주제 → 기획안 → 목차, 저자 승인까지 대화형 반복
-book-forge new "AI 에이전트 평가 입문" --constraints "초보자 대상, 실습 예제 포함"
-
-# Part_X/Chapter_XX.md 를 직접 집필한 뒤:
-book-forge build html <slug>      # 단일 자기완결 HTML
-book-forge build pdf <slug>       # 챕터별 PDF (Playwright)
-book-forge build slides <slug>    # Reveal.js 발표자료
-book-forge edit <slug>            # 웹 에디터 (Part/Chapter 트리 + 이미지 갤러리)
-book-forge gate <slug>            # Harness Gate A-G 판정
-
-# (옵션) RAG로 소스 기반 챕터 초안 생성 — PDF/코드 저장소 디렉토리/텍스트 파일 모두 지원
-book-forge draft <slug> 1 --source paper.pdf --source ./src --top-k 8 --min-coverage 0.5
-
-# (옵션) 프로젝트 지식창고(draft가 쌓은 소스)에 대화형으로 질문
-book-forge chat <slug>
+book-forge init                  # LLM Provider 설정 (기본 Ollama — API 키 불필요)
 ```
 
 OpenAI/Anthropic을 쓰려면 `book-forge init`에서 provider를 선택하거나 `.env`에
 `LLM_PROVIDER=openai`(+ `OPENAI_API_KEY`) 또는 `LLM_PROVIDER=anthropic`(+
 `ANTHROPIC_API_KEY`)을 설정하세요.
+
+## 사용자 작업 흐름
+
+```
+1. 주제 입력
+   book-forge new "<제목>" [--constraints "..."]
+           │
+           ▼
+2. 기획안 승인 루프 ── LLM이 초안 생성 → Enter(승인) / 텍스트 입력(수정 요청, 반복)
+           │
+           ▼
+3. 목차 승인 루프 ── Part/Chapter 구조, 같은 승인 방식
+           │
+           ▼
+4. 스캐폴딩 ── Part_X_.../Chapter_XX_....md 빈 파일 자동 생성
+           │
+           ▼
+5. 집필 ── 아래 세 경로 중 선택(섞어 써도 됨. 챕터마다 달라도 무방)
+   ┌───────────────┬──────────────────────┬───────────────────────────┐
+   │ (a) 직접 작성  │ (b) RAG, 챕터 하나씩  │ (c) RAG, 배치/완전자동     │
+   │ 에디터로 편집  │ book-forge draft      │ book-forge draft --all     │
+   │ book-forge edit│   <slug> <ch> --source│   <slug> --source ...      │
+   │   <slug>       │   ...                 │ 또는 애초에 2번에서        │
+   │                │ 낮은 커버리지 시 대안 │ book-forge new --source로  │
+   │                │ 제시 + 진행/취소 확인 │ 2~5를 한 번에              │
+   └───────────────┴──────────────────────┴───────────────────────────┘
+           │
+           ▼
+6. 산출물 생성
+   book-forge build html <slug>      # 단일 자기완결 HTML
+   book-forge build pdf <slug>       # 챕터별 PDF
+   book-forge build slides <slug>    # 발표자료(Reveal.js)
+           │
+           ▼
+7. 품질 확인
+   book-forge gate <slug>            # Gate A-G 종합 판정 (CI 연동 가능)
+           │
+           ▼
+8. 필요하면 반복
+   book-forge plan <slug> --revise   # 기획/목차 재조정 (기존 챕터 파일은 보존)
+   book-forge draft ... --force      # 특정 챕터만 재생성
+   book-forge chat <slug>            # 쌓인 지식창고에 질문하며 보충 자료 확인
+```
+
+### 단계별 명령 예시
+
+**1~4. 기획부터 스캐폴딩까지 (필수, 모든 경로 공통)**
+```bash
+book-forge new "AI 에이전트 평가 입문" --constraints "초보자 대상, 실습 예제 포함"
+# → 기획안 표시 → Enter(승인) 또는 피드백 입력 → 재표시 → ... → 승인
+# → 목차 표시 → 같은 방식으로 승인
+# → Part_X/Chapter_XX.md 스캐폴드 자동 생성
+```
+
+**5. 집필 — 상황에 맞는 경로 선택**
+
+| 상황 | 명령 |
+|---|---|
+| 저자가 모든 내용을 직접 씀 | `book-forge edit <slug>` (웹 에디터, Part/Chapter 트리 + 이미지 갤러리) |
+| 특정 챕터 하나만 자료 기반으로 초안이 필요 | `book-forge draft <slug> <chapter_no> --source paper.pdf` |
+| 자료가 있는 챕터 전부를 한 번에 채우고 싶음 | `book-forge draft <slug> --all --source ./papers --source ./src` |
+| 주제 입력만으로 끝까지 자동으로 밀고 싶음 | `book-forge new "<제목>" --source ./papers` (2~5를 한 번에, 실측 76초/4챕터) |
+
+RAG 경로((b)(c))는 생성 전 소스 커버리지를 점검해 낮으면 경고·대안을 보여줍니다
+(단일 모드는 진행/취소를 직접 묻고, 배치·완전자동 모드는 건너뛰고 요약에만
+남깁니다 — [일반 능력 A–F](#일반-능력-af-rag-집필-보조-확장) 참고). RAG로
+생성한 챕터도 (a)처럼 `book-forge edit`으로 나중에 손볼 수 있습니다 — 세 경로는
+배타적이지 않습니다.
+
+**6~7. 산출물 + 품질 확인**
+```bash
+book-forge build html <slug>
+book-forge build pdf <slug>
+book-forge build slides <slug>
+book-forge gate <slug> --min-gate-score 0.6   # 기준 미달 시 exit code 1 (CI 게이팅에 활용)
+```
+
+**8. 반복 — 기획/목차를 바꿔야 할 때**
+```bash
+book-forge plan <slug> --revise
+# 기획안·목차를 다시 보여주고 승인 루프 재진입 — 목차가 바뀌면 기존에 쓴
+# 챕터 본문은 chapter_no 기준으로 보존/이동하고, 삭제된 챕터는 자동 삭제하지
+# 않고 목록만 보고합니다.
+```
 
 ## 기능
 
@@ -101,12 +168,18 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 요약으로 보고합니다(각 챕터는 `eval_results/draft_ch{NN}.json`으로 개별 저장 — 배치
 안에서도 챕터별 점수가 뭉개지지 않습니다).
 
+**완전 자동화**: `book-forge new "<제목>" --source ...`처럼 `new`에 `--source`를 주면
+기획/목차 승인 직후 스캐폴딩에 이어 곧바로 배치 모드로 전체 챕터 초안까지 이어갑니다 —
+새 로직이 아니라 `draft --all`과 동일한 함수(`collect_sources_into_store()`/
+`run_batch_draft()`)를 그대로 재사용합니다. 실측: 실제 Ollama로 "주제 입력 → 승인 →
+4챕터 완성"을 한 명령·76초로 완주했습니다.
+
 ## CLI 명령
 
 | 명령 | 상태 | 설명 |
 |---|---|---|
 | `book-forge init` | ✅ | LLM Provider(Ollama/OpenAI/Anthropic) 및 API 키 설정 |
-| `book-forge new <title>` | ✅ | 기획→목차 대화형 루프 + 스캐폴드 생성 |
+| `book-forge new <title> [--source ...] [--top-k] [--min-coverage]` | ✅ | 기획→목차 대화형 루프 + 스캐폴드 생성 (`--source` 주면 전체 챕터 자동 배치 초안까지) |
 | `book-forge build html <slug>` | ✅ | 단일 HTML |
 | `book-forge build pdf <slug> [--chapter N]` | ✅ | 챕터별 PDF |
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
@@ -249,7 +322,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 138개 테스트
+pytest                 # 140개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```

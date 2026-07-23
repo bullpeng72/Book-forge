@@ -35,13 +35,14 @@ book-forge edit <slug> [--port] [--no-browser]       # 웹 에디터
 book-forge gate <slug> [--min-gate-score X] [--tcr X] [--baseline-version TAG] [--fail-on-regression PCT] [--junit-xml PATH]
 book-forge draft <slug> <ch_no> --source a.pdf --source ./src [--top-k N] [--min-coverage F] [--yes] [--force]  # RAG 초안/레퍼런스 표 (옵션)
 book-forge draft <slug> --all --source ./src  # 미집필 챕터 전부 일괄 생성 (배치 모드, F는 확인 대신 스킵+리포트)
+book-forge new "<제목>" --source ./src         # 기획→목차→스캐폴딩 직후 전체 챕터 자동 배치 초안까지 한 번에
 book-forge chat <slug> [--top-k N]                  # 지식창고 대화형 질의 (옵션)
 
 # 마이그레이션 (Book/AOO → Book-forge 프로젝트)
 python scripts/migrate_legacy_book.py --source <Book|AOO 디렉토리> --build-module build_book --target-slug <slug>
 
 # 품질
-pytest                        # 138개 테스트
+pytest                        # 140개 테스트
 ruff check src tests scripts
 python -m build --wheel       # 패키징 검증 — editor/templates/*.html 포함 여부 반드시 확인
 ```
@@ -179,6 +180,30 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
    `OLLAMA_MODEL` 기본값 검증에서 실패). `tests/conftest.py`의 `_isolated_environ`
    autouse fixture가 매 테스트 전후로 `os.environ` 전체를 스냅샷·복원해 이 문제를
    원천 차단한다 — 이 fixture를 지우거나 우회하지 말 것.
+
+10. **`get_data_dir()`은 모듈마다 별도로 바인딩돼 있다 — 테스트에서 하나만
+    패치하면 안 된다(실측으로 두 번 걸림)**: `book_forge/config.py`가 원본을
+    정의하고, `cli/project_utils.py`가 `from book_forge.config import
+    get_data_dir`로 재import한다. `monkeypatch.setattr(project_utils,
+    "get_data_dir", ...)`는 `project_utils.resolve_project_dir()`(draft/build/
+    gate/edit/chat/home이 씀)에만 영향을 준다 — `new_cmd.py`는 `project_utils`를
+    거치지 않고 `config.ensure_project_dir()`을 직접 호출하므로 **반드시
+    `monkeypatch.setattr(book_forge.config, "get_data_dir", ...)`로 따로
+    패치해야 한다**. 안 그러면 테스트가 실제 사용자의 `~/Documents/BookForge/`에
+    실제로 파일을 쓴다 — 실측: 이 실수로 `~/Documents/BookForge/projects/`에
+    테스트 프로젝트가 실제로 생성된 적 있음(정리 완료). 새 명령을 추가할 때
+    `new_cmd.py`처럼 `project_utils`를 안 거치는 경로를 또 만들지 않는 게
+    최선이지만, 만들게 되면 이 노트를 기억할 것.
+
+11. **`new --source`는 `draft --all`과 완전히 같은 배치 로직을 재사용한다,
+    복제하지 않는다**: `draft_cmd.py`의 `collect_sources_into_store()`/
+    `run_batch_draft()`/`_is_draftable()`/`_print_batch_summary()`를
+    `new_cmd.py`가 그대로 import해서 스캐폴딩 직후에 호출한다. 저커버리지
+    정책도 배치 모드와 동일(스킵+리포트, 확인 프롬프트 없음) — `new`는 이미
+    기획/목차 리뷰 루프로 사람이 붙어있었으니, 이어지는 배치 단계까지 매
+    챕터 확인을 요구하면 "자동으로 진행"이라는 요청의 취지가 없어진다는
+    판단. 실측 검증: 실제 Ollama로 "주제 입력 → 기획 승인 → 목차 승인 →
+    스캐폴딩 → 4챕터 배치 초안"이 한 명령·76초로 완주함을 확인.
 
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
