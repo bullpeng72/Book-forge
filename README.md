@@ -6,7 +6,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 바로 시작할 수 있습니다.
 
 **핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 229개 테스트 | Python 3.11+
+11개(10개 동작) | 239개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -15,6 +15,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 - [기능](#기능)
 - [일반 능력 A–F (RAG 집필 보조 확장)](#일반-능력-af-rag-집필-보조-확장)
 - [일반 능력 G — 자기실증 예제 (멀티에이전트 협업)](#일반-능력-g--자기실증-예제-멀티에이전트-협업)
+- [일반 능력 H — 구조적 코드 인덱싱](#일반-능력-h--구조적-코드-인덱싱)
 - [CLI 명령](#cli-명령)
 - [아키텍처](#아키텍처)
 - [Gate A–G 계측](#gate-ag-계측)
@@ -170,7 +171,7 @@ book-forge plan <slug> --revise
 
 | 능력 | 내용 | 구현 위치 |
 |---|---|---|
-| **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별 | `knowledge/sources.py` |
+| **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별. 코드 저장소는 텍스트 청크에 더해 정적 분석 구조 요약도 자동 포함(H) | `knowledge/sources.py`, `knowledge/code_index.py` |
 | **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 SDK 버전을 프로젝트별로 `sdk_versions.json`에 고정하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
 | **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
@@ -299,6 +300,35 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 `PropagationConfig`(정보 전파 충실도)는 이번 범위에 포함하지 않았습니다 — 자유 텍스트
 근거를 key_facts로 어휘 매칭하는 건 한국어 토큰 분할 특성상 오탐이 잦습니다.
 
+## 일반 능력 H — 구조적 코드 인덱싱
+
+"개념 설명 + 동작 설명 + **특정 프로젝트 소스코드 분석** + 활용"형 강의를 분석하며
+도출한 능력입니다. A(소스 어댑터)의 코드 저장소 어댑터는 파일을 텍스트로 청크·임베딩할
+뿐입니다 — "이 프로젝트에 어떤 모듈이 있는가", "A가 B를 어떻게 의존하는가" 같은
+**파일 간 구조적 관계**는 청크 유사도 검색으로 잘 안 잡힙니다(import문이 청크
+경계에서 잘리거나, 애초에 그래프 구조가 텍스트 나열에는 없습니다).
+
+`knowledge/code_index.py`가 `.py` 파일을 표준 라이브러리 `ast`로 정적 분석해
+모듈/클래스/함수 인벤토리 + 내부/외부 의존 관계를 뽑아내고, `load_code_repo_source()`가
+이 결과를 별도 청크로 **추가**합니다(청크 검색을 대체하는 게 아니라 보강) — 기본으로
+켜져 있고, `book-forge draft ... --source <코드 저장소>`를 쓰면 자동으로 포함됩니다.
+
+- **Python만 지원**: `ast`가 표준 라이브러리라 새 의존성이 필요 없습니다(tree-sitter 등
+  다국어 파서는 추가하지 않았습니다 — 의존성 최소화 원칙). `.py`가 없는 저장소는 조용히
+  건너뛰고 기존 청크 검색 경로만 씁니다.
+- **내부/외부 의존 구분**: import의 첫 세그먼트가 인덱싱 루트 디렉토리 자신의 이름이거나
+  바로 아래 서브디렉토리 이름과 같으면 "내부 의존"으로 분류합니다 — 완벽한 import
+  해석기가 아니라(상대 import·`sys.path` 조작까지는 못 따라감) "대략 구분하는 근거"가
+  목적인 휴리스틱입니다.
+- **문법 오류 파일은 조용히 제외**: 저장소 하나에 문법 오류 파일이 있어도 전체 인덱싱이
+  중단되지 않습니다.
+
+실측(실제 Ollama): Book-forge 자신의 `agents/` 패키지(18개 모듈)를 `--source`로 써서
+"agents 패키지 구조 분석" 챕터를 생성했더니, `PlannerAgent`/`AlternativeSuggesterAgent`/
+`ChiefEditorAgent` 등 실제 클래스·역할을 정확히 서술하고 `demonstration_verifier.py`/
+`diagram_generator.py` 같은 실제 모듈명까지 정확히 언급하는 걸 확인했습니다 — 순수
+청크 검색만으로는 이 정도의 구조적 일관성을 기대하기 어렵습니다.
+
 ## CLI 명령
 
 | 명령 | 상태 | 설명 |
@@ -349,6 +379,8 @@ src/book_forge/
 │   ├── embeddings.py      # Ollama /api/embeddings, 컨텍스트 길이 초과 시 자동 축소 재시도
 │   ├── store.py           # KnowledgeStore — numpy 코사인 유사도 + save/load/merge (E)
 │   ├── sources.py         # 소스 어댑터 — PDF/코드 저장소/텍스트/URL 자동 판별 (A)
+│   ├── code_index.py      # 구조적 코드 인덱싱 — ast 정적 분석으로 모듈/클래스/
+│   │                       # 함수 인벤토리 + 내부/외부 의존 관계 추출 (H, LLM 미호출)
 │   └── pdf_source.py      # PDF → 텍스트 청크 (pypdf), chunk_text() 공용 청커
 ├── publish/        # 마크다운 → HTML/PDF/Slides (Book/AOO 엔진 이식)
 │   ├── markdown_engine.py # @@HTML_START@@, Mermaid, base64 이미지 임베딩
@@ -474,7 +506,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 229개 테스트
+pytest                 # 239개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```

@@ -5,6 +5,10 @@ KnowledgeStore.add()는 청크 리스트(list[str])만 받으므로, 새 소스 
 때 이 파일에 함수 하나만 더 짜면 된다 — KnowledgeStore/embeddings 쪽은 손댈
 필요가 없다. 현재 지원: PDF, 코드/텍스트 파일 1개, 코드 저장소 디렉토리,
 http(s):// URL 1개.
+
+코드 저장소 디렉토리는 텍스트 청크에 더해 일반 능력 H(구조적 코드 인덱싱,
+`code_index.py`)의 정적 분석 요약도 함께 넣는다 — "이 프로젝트에 어떤 모듈이
+있는가" 같은 구조 질문은 텍스트 유사도 검색만으로는 잘 안 잡히기 때문이다.
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
 
+from book_forge.knowledge.code_index import build_structure_index, format_structure_summary
 from book_forge.knowledge.pdf_source import chunk_text, extract_pdf_text
 
 _CODE_EXTS = {".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".rb"}
@@ -38,6 +43,7 @@ def load_code_repo_source(
     max_files: int = 200,
     chunk_size: int = 500,
     overlap: int = 80,
+    include_structure_index: bool = True,
 ) -> list[str]:
     """디렉토리를 재귀 탐색해 소스 파일들을 청크로 변환한다.
 
@@ -50,6 +56,13 @@ def load_code_repo_source(
     통째로 밀려나거나 임베딩 품질이 떨어질 수 있어, 파일 내용 앞에 상대경로를
     붙인 뒤 chunk_text()로 분할한다 — 청크에 "# 파일: xxx.py"가 남아 있어야
     검색 결과가 어느 파일에서 왔는지 저자가 알 수 있다.
+
+    include_structure_index=True(기본값)면 일반 능력 H(구조적 코드 인덱싱) —
+    .py 파일을 ast로 정적 분석해 모듈/클래스/함수 인벤토리 + 내부/외부 의존
+    관계를 별도 청크로 추가한다. 청크 검색을 대체하는 게 아니라 보강한다 —
+    "이 프로젝트에 어떤 모듈이 있는가" 같은 구조 질문은 텍스트 유사도 검색보다
+    이 요약이 훨씬 정확한 근거가 된다. LLM을 호출하지 않고, .py가 하나도 없으면
+    빈 결과로 조용히 건너뛴다(다른 언어 저장소에서도 예외 없이 동작).
     """
     exts = extensions or _CODE_EXTS
     files = sorted(
@@ -72,6 +85,18 @@ def load_code_repo_source(
         chunks.extend(
             chunk_text(tagged, chunk_size=chunk_size, overlap=overlap, collapse_whitespace=False)
         )
+
+    if include_structure_index:
+        summaries = build_structure_index(directory, max_files=max_files)
+        structure_text = format_structure_summary(summaries, directory)
+        if structure_text:
+            chunks.extend(
+                chunk_text(
+                    structure_text, chunk_size=chunk_size, overlap=overlap,
+                    collapse_whitespace=False,
+                )
+            )
+
     return chunks
 
 

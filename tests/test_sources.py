@@ -48,6 +48,33 @@ def test_load_code_repo_source_skips_pycache_and_git(tmp_path: Path) -> None:
     assert "keep me" in joined
 
 
+def test_load_code_repo_source_includes_structure_index_by_default(tmp_path: Path) -> None:
+    # 일반 능력 H — 청크 검색과 별개로 정적 분석 구조 요약 청크도 함께 나와야 한다.
+    pkg = tmp_path / "myrepo"
+    (pkg / "agents").mkdir(parents=True)
+    (pkg / "agents" / "worker.py").write_text(
+        "import os\n\n\ndef build_worker(name):\n    return name\n", encoding="utf-8"
+    )
+
+    chunks = load_code_repo_source(pkg, chunk_size=1000, overlap=0)
+    joined = "\n".join(chunks)
+    assert "정적 분석" in joined
+    assert "build_worker" in joined
+    assert "외부 의존: os" in joined
+
+
+def test_load_code_repo_source_can_disable_structure_index(tmp_path: Path) -> None:
+    pkg = tmp_path / "myrepo"
+    (pkg / "agents").mkdir(parents=True)
+    (pkg / "agents" / "worker.py").write_text(
+        "def build_worker(name):\n    return name\n", encoding="utf-8"
+    )
+
+    chunks = load_code_repo_source(pkg, chunk_size=1000, overlap=0, include_structure_index=False)
+    joined = "\n".join(chunks)
+    assert "정적 분석" not in joined
+
+
 def test_load_source_dispatches_by_directory(tmp_path: Path) -> None:
     (tmp_path / "x.py").write_text("print('hi')", encoding="utf-8")
     chunks = load_source(tmp_path)

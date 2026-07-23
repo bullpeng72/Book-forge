@@ -501,6 +501,49 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       예외(AssertionError/ImportError)/타임아웃 3가지 실패 경로는 별도로 이미
       검증 완료).
 
+21. **`knowledge/code_index.py`(구조적 코드 인덱싱, 일반 능력 H)는
+    `load_code_repo_source()`의 청크 검색을 대체하는 게 아니라 보강하는
+    것이다 — 별도 저장소·별도 검색 경로를 만들지 않았다**: "이 프로젝트에
+    어떤 모듈이 있는가"류 구조 질문은 텍스트 유사도 검색으로 잘 안 잡힌다
+    (import문이 청크 경계에서 잘리거나, 애초에 그래프 구조가 청크 텍스트
+    나열에는 없음). `build_structure_index()` + `format_structure_summary()`가
+    만든 결과를 `chunk_text()`로 쪼개 **기존 chunks 리스트에 그대로 append**
+    한다 — `KnowledgeStore`/`embeddings.py` 등 검색 파이프라인 전체를 하나도
+    안 건드리고, 그냥 검색 가능한 청크가 하나 더 늘어난 것처럼 취급된다.
+    - **Python(`.py`)만 지원한다 — 의도적 스코프 축소, 다국어 파서를 추가하지
+      않는다**: `ast`가 표준 라이브러리라 새 의존성이 필요 없다는 게
+      이유다(PDF는 `pypdf`, HTML은 stdlib `html.parser`를 쓰는 기존
+      "무거운 파싱 라이브러리를 안 쓴다" 원칙과 같은 선상). tree-sitter 등
+      다국어 지원은 재검토 시에도 신중할 것 — 코드 저장소 어댑터가 이미
+      `_CODE_EXTS`(`.ts`/`.go`/`.rs`/`.java`/`.rb` 등)를 다국어로 지원하는데,
+      구조 인덱싱은 Python만 되므로 다른 언어 저장소는 구조 요약 없이 기존
+      청크 검색만으로 커버된다(자연스러운 축소 — `.py`가 하나도 없으면
+      `format_structure_summary()`가 빈 문자열을 반환해 조용히 스킵됨,
+      예외 없음).
+    - **내부/외부 의존 분류는 완벽한 import 해석기가 아니라 휴리스틱이다**:
+      import의 첫 세그먼트가 인덱싱 루트 디렉토리 자신의 이름이거나 바로
+      아래 서브디렉토리 이름과 같으면 "내부"로 분류한다(`_internal_import_roots()`).
+      상대 import나 `sys.path` 조작까지는 못 따라간다 — "정확한 의존 그래프"가
+      아니라 "대략 구분하는 근거"가 목적이라는 걸 재검토 시 잊지 말 것.
+      실측(Book-forge 자신의 `src/book_forge` 인덱싱): `from
+      book_forge.agents.prompts import X`가 정확히 "내부"로, `agent_evaluator`
+      import가 정확히 "외부"로 분류됨을 확인.
+    - **문법 오류 파일은 조용히 건너뛴다, 저장소 전체 인덱싱을 중단시키지
+      않는다**: `extract_module_summary()`가 `ast.parse()`의 `SyntaxError`를
+      잡아 `None`을 반환한다 — `demonstration_verifier.py`의 다른 검증기들과
+      같은 "실패해도 전체를 막지 않는다" 원칙.
+    - `load_code_repo_source(..., include_structure_index=True)`가 기본값
+      True다 — LLM을 호출하지 않고 결정론적·빠르므로(순수 `ast.parse()`)
+      옵트아웃 방식을 택했다(다른 새 검증기들이 옵트인인 것과 다른 이유:
+      이건 검증이 아니라 검색 품질을 높이는 소스 추가이고, 실패 시 위험이
+      없다 — LLM 코드 실행(`--execute-examples`)처럼 명시적 동의가 필요한
+      위험이 아님).
+    - 실측(실제 Ollama): Book-forge 자신의 `agents/` 패키지(18개 모듈)를
+      `--source`로 써서 "agents 패키지 구조 분석" 챕터를 생성했더니,
+      `PlannerAgent`/`AlternativeSuggesterAgent`/`ChiefEditorAgent` 등 실제
+      클래스·역할과 `demonstration_verifier.py`/`diagram_generator.py` 같은
+      실제 모듈명을 정확히 서술함을 확인.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는
