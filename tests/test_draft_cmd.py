@@ -311,3 +311,112 @@ def test_draft_single_chapter_diagram_type_routes_to_diagram_generator(
 
     ch1 = (part_dir / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
     assert "```mermaid" in ch1
+
+
+class _RealSymbolLLM:
+    """실제로 존재하는 agent_evaluator 심볼만 언급 — 정합성 검사 통과 케이스."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return (
+            "# 생성된 챕터\n\n`ScopeConfig`는 도구 이름 기반이며 "
+            "`ScopeConfig.allowed_tools` 필드로 허용 도구를 지정합니다."
+        )
+
+
+class _FakeSymbolLLM:
+    """실제로 존재하지 않는 심볼을 언급 — 정합성 검사 실패 케이스."""
+
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return "# 생성된 챕터\n\n`ScopeConfig`는 `ScopeConfig.path`로 파일 경로를 제한합니다."
+
+
+def test_draft_check_package_passes_for_real_symbols(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _RealSymbolLLM())
+
+    project_dir = tmp_path / "projects" / "consistency-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "consistency-slug", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator",
+        ]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "🔗 코드-본문 정합성: ✅" in result.output
+
+
+def test_draft_check_package_flags_nonexistent_symbol(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: _FakeSymbolLLM())
+
+    project_dir = tmp_path / "projects" / "consistency-slug2"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, [
+            "draft", "consistency-slug2", "1", "--source", str(source_file), "-y",
+            "--check-package", "agent_evaluator",
+        ]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "🔗 코드-본문 정합성: ⚠️" in result.output
+    assert "ScopeConfig.path" in result.output
+
+
+def test_draft_without_check_package_skips_consistency_check(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    project_dir = tmp_path / "projects" / "no-check-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    toc_md = "```toc\n1|기초|1|사과 개론\n```\n"
+    (project_dir / "01_목차.md").write_text(toc_md, encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "no-check-slug", "1", "--source", str(source_file), "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "코드-본문 정합성" not in result.output

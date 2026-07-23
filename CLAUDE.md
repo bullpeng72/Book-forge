@@ -327,6 +327,36 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       챕터에서는 두 검토자가 서로 다른 근거로 REVISE 판정, 편집장이 두 근거를
       모두 반영해 최종 REVISE로 결론 내는 것도 확인.
 
+16. **`agents/code_consistency_checker.py`(코드-본문 정합성 검사)는 `hasattr()`만
+    쓰면 안 된다 — `dataclasses.field(default_factory=...)` 필드는 클래스 레벨에
+    노출되지 않는다(실측 확인: `hasattr(ScopeConfig, "allowed_tools")`가 `False`)**:
+    `@dataclass`는 `default_factory`가 있는 필드에 클래스 속성을 남기지 않는다
+    (인스턴스별로 계산해야 하므로 클래스 레벨엔 애초에 값이 없음). 이 프로젝트가
+    실제로 겪은 버그(ScopeConfig가 경로가 아니라 도구 이름 기반이라는 걸 소스로
+    직접 확인 안 했으면 잘못된 설계를 밀어붙였을 뻔했던 사례)를 재현하는 게 이
+    체커의 목적인데, 정작 `ScopeConfig.allowed_tools`(실제로 있는 필드,
+    `default_factory=list`)를 `hasattr()`로만 검사하면 거짓 음성(실제로 있는데
+    "없다"고 오탐)이 났을 것이다. `_has_attr_or_field()`가 `hasattr()` 실패 시
+    `dataclasses.fields(obj)`도 추가로 확인해 이 문제를 막는다 — 재검토 시
+    `hasattr()` 단독 검사로 되돌리지 말 것.
+    - **`None`/`ValueError` 같은 Python 표준 어휘를 대상 패키지 소속으로 오판하는
+      실측 버그도 발견·수정했다**: 실제 Ollama가 생성한 ScopeConfig 설명 챕터에서
+      "음수인 경우 `None`으로 보정됩니다" 같은 정상 문장의 백틱 `None`이 "본문이
+      언급했지만 target_package에 없다"고 오탐으로 잡혔다(대문자 시작+소문자
+      포함 4자 이상이라는 CamelCase 휴리스틱만으로는 `None`을 걸러내지 못함).
+      `_BUILTIN_EXCLUSIONS = dir(builtins) | dir(typing)`(대문자로 시작하는
+      이름만)를 백틱 심볼 필터에 추가해 해결 — Python 표준 예외/타입 이름은
+      "그 패키지 소속이라고 주장한 적 없는" 정상 어휘이므로 애초에 검사 대상이
+      아니다. 백틱 심볼 검증 로직을 건드릴 때는 이 제외 목록을 유지할 것.
+    - CLI는 `book-forge draft ... --check-package <패키지명>`(옵트인, 기본
+      검사 없음) — `run_batch_draft()`/`new --source`에도 동일하게 전파된다.
+      content_type과 무관하게 동작하므로(narrative 챕터도 프로즈 중에 클래스명을
+      언급) `demonstration_verifier.py`의 content_type 분기와 별개로 호출된다
+      (`draft_cmd.py`의 `_print_code_consistency()`, `check_package`가 주어질
+      때만 실행). LLM을 호출하지 않고 `importlib.import_module()`로 저자가
+      CLI에서 명시적으로 지정한 패키지만 로드한다 — 임의 원격 코드 실행이
+      아니다.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

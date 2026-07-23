@@ -1,0 +1,161 @@
+"""코드-본문 정합성 검사 — 챕터 본문이 언급한 심볼이 실제 설치된 패키지에
+존재하는지 검증한다(9개 후보 기능의 6번, C(근거 검증 계층)의 새 검증기 종류).
+
+`demonstration_verifier.verify_exercise_code()`는 코드 블록의 "문법"만
+확인한다 — `from agent_evaluator import ScopeConfig`가 문법적으로 완벽해도
+ScopeConfig가 실제로 그 이름으로 존재하는지, `ScopeConfig.path`처럼 존재하지
+않는 필드를 언급했는지는 검증하지 않는다. 이 세션 초반 "ScopeConfig는 경로가
+아니라 도구 이름 기반"이라는 걸 소스 코드로 직접 확인 안 했으면 잘못된 설계를
+그대로 밀어붙일 뻔했던 것과 같은 종류의 오류를, 이 모듈이 생성 직후 자동으로
+잡는다.
+
+content_type과 무관하게 동작한다(narrative 챕터도 프로즈 중에 클래스/설정
+이름을 언급하므로) — demonstration_verifier.py의 content_type 분기와는 별개
+축이라, draft_cmd.py가 --check-package가 주어졌을 때만 별도로 호출한다.
+"""
+from __future__ import annotations
+
+import builtins
+import dataclasses
+import importlib
+import re
+import typing
+
+from book_forge.agents.demonstration_verifier import VerificationResult
+
+_FROM_IMPORT_RE = re.compile(r"^\s*from\s+([\w.]+)\s+import\s+(.+)$", re.MULTILINE)
+_IMPORT_RE = re.compile(r"^\s*import\s+([\w.]+(?:\s*,\s*[\w.]+)*)\s*$", re.MULTILINE)
+_BACKTICK_RE = re.compile(r"`([A-Za-z_][A-Za-z0-9_.]*)`")
+# 대문자로 시작 + 소문자 포함(길이 4자 이상) — URL/PDF/API 같은 두문자어를 걸러내는
+# 최소 휴리스틱. 완벽하지 않지만 오탐(엉뚱한 걸 위반으로 보고)보다는 누락(검증
+# 대상에서 조용히 제외)을 택한다.
+_CAMEL_CASE_RE = re.compile(r"^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)*$")
+# None/True/False, ValueError 같은 표준 예외, Optional/List 같은 typing 이름은
+# "본문이 언급했지만 target_package 소속이 아닌" 정상적인 Python 어휘다 — 실측
+# 확인: "음수인 경우 None으로 보정됩니다" 같은 문장에서 `None`이 오탐으로
+# 잡혔었다(target_package에 없다고 보고했지만 애초에 target_package 소속이라고
+# 주장한 적 없는 문장이었음).
+_BUILTIN_EXCLUSIONS = frozenset(
+    name for name in (set(dir(builtins)) | set(dir(typing))) if name[:1].isupper()
+)
+
+
+def _split_import_names(names_part: str) -> list[str]:
+    """``X, Y as Z, (A, B)`` 형태에서 실제로 import되는 이름만 뽑는다(별칭은 원래 이름)."""
+    cleaned = names_part.strip().strip("()")
+    names = []
+    for part in cleaned.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        name = part.split(" as ")[0].strip()
+        if name and name != "*":
+            names.append(name)
+    return names
+
+
+def _extract_imports(text: str) -> list[tuple[str, list[str]]]:
+    """(모듈 경로, [이름들]) 쌍 목록. ``import X``는 이름 없이 모듈 자체만 확인한다."""
+    imports: list[tuple[str, list[str]]] = []
+    for module, names_part in _FROM_IMPORT_RE.findall(text):
+        imports.append((module, _split_import_names(names_part)))
+    for names_part in _IMPORT_RE.findall(text):
+        for module in _split_import_names(names_part):
+            imports.append((module, []))
+    return imports
+
+
+def _looks_like_class_name(name: str) -> bool:
+    base = name.split(".")[0]
+    if base in _BUILTIN_EXCLUSIONS:
+        return False
+    return bool(_CAMEL_CASE_RE.match(base)) and len(base) >= 4
+
+
+def _extract_backtick_symbols(text: str) -> list[str]:
+    seen: list[str] = []
+    for name in _BACKTICK_RE.findall(text):
+        if _looks_like_class_name(name) and name not in seen:
+            seen.append(name)
+    return seen
+
+
+def _has_attr_or_field(obj, name: str) -> bool:
+    """hasattr()만 쓰면 dataclasses.field(default_factory=...) 필드를 놓친다 —
+    @dataclass는 default_factory 필드에 클래스 레벨 속성을 남기지 않는다(실측
+    확인: ScopeConfig.allowed_tools가 hasattr()로는 False로 나옴). fields()도
+    함께 확인해야 이런 필드를 올바르게 "존재함"으로 판정한다."""
+    if hasattr(obj, name):
+        return True
+    if dataclasses.is_dataclass(obj):
+        return any(f.name == name for f in dataclasses.fields(obj))
+    return False
+
+
+def _resolve_dotted(root_module, path: list[str]) -> bool:
+    obj = root_module
+    for attr in path:
+        if not _has_attr_or_field(obj, attr):
+            return False
+        obj = getattr(obj, attr, None)
+        if obj is None and attr != path[-1]:
+            return False
+    return True
+
+
+def verify_code_consistency(draft_md: str, *, target_package: str) -> VerificationResult:
+    """본문이 언급한 import/심볼이 target_package에 실제로 존재하는지 검증한다.
+
+    LLM을 호출하지 않고, target_package를 실제로 import해 대조한다
+    (importlib.import_module — 저자가 CLI에서 명시적으로 지정한 패키지만
+    로드한다, 임의 원격 코드 실행이 아니다).
+    """
+    try:
+        root_module = importlib.import_module(target_package)
+    except ImportError as exc:
+        return VerificationResult(
+            content_type="code_consistency",
+            passed=False,
+            detail=f"대조 대상 패키지를 import할 수 없습니다: {target_package} ({exc})",
+        )
+
+    issues: list[str] = []
+    checked = 0
+
+    for module_path, names in _extract_imports(draft_md):
+        if not (module_path == target_package or module_path.startswith(target_package + ".")):
+            continue  # 표준 라이브러리 등 다른 패키지 import는 대조 대상이 아님
+        checked += 1
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError:
+            issues.append(f"본문의 `import {module_path}` — 실제로 존재하지 않는 모듈입니다.")
+            continue
+        for name in names:
+            if not _has_attr_or_field(module, name):
+                issues.append(
+                    f"본문의 `from {module_path} import {name}` — "
+                    f"{module_path}에 {name}이(가) 없습니다."
+                )
+
+    for symbol in _extract_backtick_symbols(draft_md):
+        checked += 1
+        if not _resolve_dotted(root_module, symbol.split(".")):
+            issues.append(f"본문이 언급한 `{symbol}` — {target_package}에서 확인되지 않습니다.")
+
+    if checked == 0:
+        return VerificationResult(
+            content_type="code_consistency",
+            passed=True,
+            detail=f"{target_package} 관련 import/심볼 언급이 없어 대조할 항목이 없습니다.",
+        )
+
+    passed = not issues
+    detail = (
+        f"{checked}개 항목 모두 {target_package}에서 확인됨"
+        if passed
+        else f"{checked}개 항목 중 {len(issues)}개가 {target_package}에 없음"
+    )
+    return VerificationResult(
+        content_type="code_consistency", passed=passed, detail=detail, issues=issues
+    )

@@ -40,8 +40,14 @@ from book_forge.publish.toc_loader import load_toc
     "--min-coverage", type=float, default=0.5, show_default=True,
     help="[--source] 자동 초안 생성 전 평균 소스 유사도 임계값",
 )
+@click.option(
+    "--check-package", default=None,
+    help="[--source] 본문이 언급한 import/백틱 심볼이 이 패키지에 실제로 존재하는지 정적으로 대조"
+         "(옵트인, 미지정 시 검사 없음)",
+)
 def new(
-    title: str, constraints: str, sources: tuple, top_k: int, min_coverage: float
+    title: str, constraints: str, sources: tuple, top_k: int, min_coverage: float,
+    check_package: str,
 ) -> None:
     """주제(TITLE)로 신규 프로젝트를 만들고 기획→목차 대화형 루프를 진행한다."""
     if sources:
@@ -153,6 +159,9 @@ def new(
     fresh_chapters = load_toc(project_dir)
     targets = [rc for rc in fresh_chapters if _is_draftable(rc, force=False)]
     store = collect_sources_into_store(project_dir, sources)
-    results = run_batch_draft(targets, store, llm, project_dir, top_k=top_k, min_coverage=min_coverage)
+    results = run_batch_draft(
+        targets, store, llm, project_dir, top_k=top_k, min_coverage=min_coverage,
+        check_package=check_package,
+    )
     _print_batch_summary(results)
     click.echo(f"\n   완료. {project_dir} 에서 결과를 확인하세요.")

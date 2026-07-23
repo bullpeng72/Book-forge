@@ -13,6 +13,9 @@
        즉시 노출한다(agent-evaluator의 Gate 점수와는 별개의 Book-forge 자체
        신호 — 참고용, 빌드를 막지 않음).
   - F: 커버리지가 낮으면 AlternativeSuggesterAgent가 대안을 제안한다.
+  - C(확장): --check-package를 주면 본문이 언급한 import/백틱 심볼이 실제로
+       그 패키지에 존재하는지 code_consistency_checker.py가 정적으로 대조한다
+       (LLM 미호출, content_type과 무관하게 동작 — 옵트인, 기본은 검사 없음).
 
 --all(배치 모드) vs 단일 챕터 모드는 낮은 커버리지 처리 정책이 다르다 — 이건
 의도된 설계다: 단일 모드는 "저자가 지금 이 화면 앞에 있다"고 가정해 F의 대안을
@@ -65,6 +68,7 @@ class ChapterDraftResult:
     avg_coverage: Optional[float] = None
     gate_c_score: Optional[float] = None
     verification: Optional[VerificationResult] = None
+    code_consistency: Optional[VerificationResult] = None
 
 
 def _is_draftable(rc: ResolvedChapter, force: bool) -> bool:
@@ -108,6 +112,7 @@ def run_batch_draft(
     *,
     top_k: int = 8,
     min_coverage: float = 0.5,
+    check_package: Optional[str] = None,
 ) -> list["ChapterDraftResult"]:
     """미집필 챕터 목록을 순회하며 배치 정책(저커버리지 스킵+리포트)으로 RAG 초안을 생성한다.
 
@@ -120,7 +125,7 @@ def run_batch_draft(
             _draft_one_chapter(
                 rc, store, llm, project_dir,
                 top_k=top_k, min_coverage=min_coverage,
-                yes=False, batch_mode=True,
+                yes=False, batch_mode=True, check_package=check_package,
             )
         )
     return results
@@ -142,6 +147,11 @@ def run_batch_draft(
 )
 @click.option("--yes", "-y", is_flag=True, help="[단일 모드] 커버리지가 낮아도 확인 없이 진행")
 @click.option("--force", is_flag=True, help="기존에 집필된 챕터도 덮어쓰기")
+@click.option(
+    "--check-package", default=None,
+    help="본문이 언급한 import/백틱 심볼이 이 패키지에 실제로 존재하는지 정적으로 대조"
+         "(예: --check-package agent_evaluator, 옵트인, 미지정 시 검사 없음)",
+)
 def draft(
     slug: str,
     chapter_no: Optional[int],
@@ -151,6 +161,7 @@ def draft(
     min_coverage: float,
     yes: bool,
     force: bool,
+    check_package: Optional[str],
 ) -> None:
     """SLUG 프로젝트의 CHAPTER_NO 챕터(또는 --all로 전체 미집필 챕터)를
     --source 기반 RAG로 초안 생성한다."""
@@ -205,13 +216,15 @@ def draft(
 
     if draft_all:
         results = run_batch_draft(
-            targets, store, llm, config.project_dir, top_k=top_k, min_coverage=min_coverage
+            targets, store, llm, config.project_dir, top_k=top_k, min_coverage=min_coverage,
+            check_package=check_package,
         )
         _print_batch_summary(results)
     else:
         _draft_one_chapter(
             targets[0], store, llm, config.project_dir,
             top_k=top_k, min_coverage=min_coverage, yes=yes, batch_mode=False,
+            check_package=check_package,
         )
 
 
@@ -225,6 +238,7 @@ def _draft_one_chapter(
     min_coverage: float,
     yes: bool,
     batch_mode: bool,
+    check_package: Optional[str] = None,
 ) -> ChapterDraftResult:
     result = ChapterDraftResult(
         chapter_no=rc.spec.chapter_no, chapter_title=rc.spec.chapter_title, status="cancelled"
@@ -337,6 +351,8 @@ def _draft_one_chapter(
     result.status = "created"
     result.gate_c_score = _print_gate_summary(result_path)
     result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
+    if check_package:
+        result.code_consistency = _print_code_consistency(check_package, draft_md)
     return result
 
 
@@ -373,6 +389,22 @@ def _print_verification(
     return result
 
 
+def _print_code_consistency(check_package: str, draft_md: str) -> VerificationResult:
+    """C(근거 검증 계층) 확장 — 본문이 언급한 import/백틱 심볼이 실제로
+    check_package에 존재하는지 정적으로 대조하고 CLI에 즉시 노출한다.
+    LLM을 호출하지 않으며, 실패해도 초안 저장을 막지 않는다(참고용)."""
+    from book_forge.agents.code_consistency_checker import verify_code_consistency
+
+    result = verify_code_consistency(draft_md, target_package=check_package)
+    if result.passed:
+        click.echo(f"🔗 코드-본문 정합성: ✅ {result.detail}")
+    else:
+        click.echo(f"🔗 코드-본문 정합성: ⚠️  {result.detail}")
+        for issue in result.issues:
+            click.echo(f"     → {issue}")
+    return result
+
+
 def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
     click.echo("\n" + "═" * 50)
     click.echo("📋 일괄 생성 요약")
@@ -388,6 +420,8 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
                 click.echo(f"  ⚠️  {label} (Gate C: {r.gate_c_score:.3f}) — 검토 필요")
             if r.verification is not None and not r.verification.passed:
                 click.echo(f"       🔬 실증 검증 실패: {r.verification.detail}")
+            if r.code_consistency is not None and not r.code_consistency.passed:
+                click.echo(f"       🔗 코드-본문 정합성 실패: {r.code_consistency.detail}")
         elif r.status == "skipped_low_coverage":
             click.echo(f"  ⏭️  {label} — 건너뜀 (커버리지 {r.avg_coverage:.3f} 미달)")
         else:
@@ -398,6 +432,9 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
     verification_failed = sum(
         1 for r in results if r.verification is not None and not r.verification.passed
     )
+    consistency_failed = sum(
+        1 for r in results if r.code_consistency is not None and not r.code_consistency.passed
+    )
     click.echo(f"\n생성 {created}개, 건너뜀 {skipped}개 (총 {len(results)}개)")
     if skipped:
         click.echo(
@@ -406,3 +443,5 @@ def _print_batch_summary(results: list[ChapterDraftResult]) -> None:
         )
     if verification_failed:
         click.echo(f"🔬 실증 가능성 검증 실패 {verification_failed}개 — 위 목록에서 검토하세요.")
+    if consistency_failed:
+        click.echo(f"🔗 코드-본문 정합성 실패 {consistency_failed}개 — 위 목록에서 검토하세요.")
