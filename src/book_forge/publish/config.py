@@ -17,6 +17,11 @@ class BookConfig:
     project_dir: Path
     title: str
     accent_color: str = "#1a237e"
+    # 일반 능력 AI — 출판 전면부(표지 페이지). 전부 빈 문자열이면 표지 페이지
+    # 자체를 렌더링하지 않는다(publish/front_matter.py::FrontMatter.is_empty).
+    author: str = ""
+    license_notice: str = ""
+    edition: str = ""
 
     @property
     def title_slug(self) -> str:
@@ -41,3 +46,7 @@ class BookConfig:
     @property
     def pdf_output_dir(self) -> Path:
         return self.outputs_dir / "pdf"
+
+    @property
+    def epub_output_path(self) -> Path:
+        return self.outputs_dir / f"{self.title_slug}.epub"

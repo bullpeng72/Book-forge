@@ -13,6 +13,7 @@ import book_forge.knowledge.store as store_module
 from book_forge.cli.commands.draft_cmd import (
     ChapterDraftResult,
     _append_references_section,
+    _build_structure_summary_from_sources,
     _cited_url_sources,
     _is_draftable,
     _SourcePath,
@@ -960,3 +961,193 @@ def test_draft_without_source_uses_existing_store(tmp_path: Path, monkeypatch) -
     assert "기존 지식창고를 그대로 사용합니다" in result.output
     ch1 = (project_dir / "Part_1_과일학" / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
     assert "고정된 초안 본문" in ch1
+
+
+# ── module_reference (일반 능력 T) ──────────────────────────────────────────
+
+
+def test_build_structure_summary_from_sources_indexes_local_directories(tmp_path: Path) -> None:
+    pkg_dir = tmp_path / "mypkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "a.py").write_text(
+        "class Foo:\n    \"\"\"Foo 클래스.\"\"\"\n    def bar(self):\n        pass\n",
+        encoding="utf-8",
+    )
+    summary = _build_structure_summary_from_sources((str(pkg_dir),))
+    assert summary is not None
+    assert "Foo" in summary
+
+
+def test_build_structure_summary_from_sources_skips_urls_and_non_directories(tmp_path: Path) -> None:
+    text_file = tmp_path / "notes.txt"
+    text_file.write_text("텍스트 파일", encoding="utf-8")
+    summary = _build_structure_summary_from_sources(
+        ("https://example.com/page", str(text_file))
+    )
+    assert summary is None
+
+
+def test_build_structure_summary_from_sources_no_sources_returns_none() -> None:
+    assert _build_structure_summary_from_sources(()) is None
+
+
+class _ModuleReferenceLLM:
+    model = "fake"
+
+    def generate(self, prompt: str, *, system=None, max_tokens=4000) -> str:
+        return (
+            "# Chapter 01: agents 레퍼런스\n\n"
+            "| 모듈 | 이름 | 설명 |\n|---|---|---|\n"
+            "| a.py | Foo | Foo 클래스 |\n"
+        )
+
+
+def test_draft_module_reference_uses_structure_index_not_rag_chunks(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr(
+        "book_forge.cli.commands.draft_cmd.create_llm", lambda: _ModuleReferenceLLM()
+    )
+
+    # --source로 줄 실제 코드 저장소 디렉토리 — a.py 하나짜리 최소 패키지.
+    pkg_dir = tmp_path / "mypkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "a.py").write_text(
+        "class Foo:\n    \"\"\"Foo 클래스.\"\"\"\n    def bar(self):\n        pass\n",
+        encoding="utf-8",
+    )
+
+    project_dir = tmp_path / "projects" / "modref-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text(
+        "```toc\n1|기초|1|agents 레퍼런스|module_reference\n```\n", encoding="utf-8"
+    )
+    (part_dir / "Chapter_01_agents_레퍼런스.md").write_text(
+        "# Chapter 01: agents 레퍼런스\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "modref-slug", "1", "--source", str(pkg_dir), "--yes"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "구조 인덱스 기반 레퍼런스 생성" in result.output
+    # 커버리지 검증기(T)가 실행돼 실증 가능성 검증 줄이 출력됐는지 확인.
+    assert "실증 가능성 검증" in result.output
+    chapter_md = (part_dir / "Chapter_01_agents_레퍼런스.md").read_text(encoding="utf-8")
+    assert "Foo" in chapter_md
+
+
+def test_draft_module_reference_without_directory_source_falls_back(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr(
+        "book_forge.cli.commands.draft_cmd.create_llm", lambda: _ModuleReferenceLLM()
+    )
+
+    project_dir = tmp_path / "projects" / "modref-fallback-slug"
+    part_dir = project_dir / "Part_1_기초"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text(
+        "```toc\n1|기초|1|agents 레퍼런스|module_reference\n```\n", encoding="utf-8"
+    )
+    (part_dir / "Chapter_01_agents_레퍼런스.md").write_text(
+        "# Chapter 01: agents 레퍼런스\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "notes.txt"
+    source_file.write_text("사과에 대한 텍스트 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "modref-fallback-slug", "1", "--source", str(source_file), "--yes"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "구조 요약을 만들 수 없습니다" in result.output
+
+
+# 일반 능력 AG — --enable-llm-judge/--judge-model이 build_book_monitor()까지 실제로 전달되는지.
+def test_draft_passes_llm_judge_flags_to_monitor(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    captured_kwargs = {}
+    import book_forge.cli.commands.draft_cmd as draft_cmd_module
+
+    original_build_monitor = draft_cmd_module.build_book_monitor
+
+    def _spy_build_monitor(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return original_build_monitor(*args, **kwargs)
+
+    monkeypatch.setattr(draft_cmd_module, "build_book_monitor", _spy_build_monitor)
+
+    project_dir = tmp_path / "projects" / "judge-slug"
+    part_dir = project_dir / "Part_1_과일학"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text("```toc\n1|과일학|1|사과 개론\n```\n", encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "draft", "judge-slug", "1", "--source", str(source_file), "--yes",
+            "--enable-llm-judge", "--judge-model", "claude-haiku-4-5-20251001",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs.get("enable_llm_judge") is True
+    assert captured_kwargs.get("judge_model") == "claude-haiku-4-5-20251001"
+
+
+def test_draft_llm_judge_defaults_to_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    captured_kwargs = {}
+    import book_forge.cli.commands.draft_cmd as draft_cmd_module
+
+    original_build_monitor = draft_cmd_module.build_book_monitor
+
+    def _spy_build_monitor(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return original_build_monitor(*args, **kwargs)
+
+    monkeypatch.setattr(draft_cmd_module, "build_book_monitor", _spy_build_monitor)
+
+    project_dir = tmp_path / "projects" / "no-judge-slug"
+    part_dir = project_dir / "Part_1_과일학"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text("```toc\n1|과일학|1|사과 개론\n```\n", encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "no-judge-slug", "1", "--source", str(source_file), "--yes"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs.get("enable_llm_judge") is False
+    assert captured_kwargs.get("judge_model") is None

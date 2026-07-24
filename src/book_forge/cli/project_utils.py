@@ -7,6 +7,7 @@ import click
 
 from book_forge.config import get_data_dir
 from book_forge.publish.config import BookConfig
+from book_forge.publish.front_matter import load_front_matter
 
 
 def resolve_project_dir(slug: str) -> Path:
@@ -35,4 +36,11 @@ def load_title(project_dir: Path) -> str:
 
 def load_book_config(slug: str) -> BookConfig:
     project_dir = resolve_project_dir(slug)
-    return BookConfig(project_dir=project_dir, title=load_title(project_dir))
+    front_matter = load_front_matter(project_dir)
+    return BookConfig(
+        project_dir=project_dir,
+        title=load_title(project_dir),
+        author=front_matter.author,
+        license_notice=front_matter.license_notice,
+        edition=front_matter.edition,
+    )

@@ -69,7 +69,7 @@ from book_forge.publish.toc_loader import ResolvedChapter, load_toc
 _STUB_MARKER = "TODO: 이 챕터를 집필하세요"
 
 # D: 실증이 필요한 콘텐츠 유형은 서술형보다 엄격한 커버리지 기준을 적용한다.
-_STRICT_CONTENT_TYPES = {"exercise", "diagram", "capstone"}
+_STRICT_CONTENT_TYPES = {"exercise", "diagram", "capstone", "module_reference"}
 _STRICT_COVERAGE_BONUS = 0.15
 _SOLUTION_SUFFIX = "_정답"
 
@@ -171,6 +171,9 @@ def run_batch_draft(
     check_package: Optional[str] = None,
     execute_examples: bool = False,
     max_per_source: Optional[int] = None,
+    sources: tuple = (),
+    enable_llm_judge: bool = False,
+    judge_model: Optional[str] = None,
 ) -> list["ChapterDraftResult"]:
     """미집필 챕터 목록을 순회하며 배치 정책(저커버리지 스킵+리포트)으로 RAG 초안을 생성한다.
 
@@ -185,6 +188,7 @@ def run_batch_draft(
                 top_k=top_k, min_coverage=min_coverage,
                 yes=False, batch_mode=True, check_package=check_package,
                 execute_examples=execute_examples, max_per_source=max_per_source,
+                sources=sources, enable_llm_judge=enable_llm_judge, judge_model=judge_model,
             )
         )
     return results
@@ -223,6 +227,14 @@ def run_batch_draft(
          "검증(타임아웃 10초, 격리 실행이지만 파일시스템/네트워크는 OS 수준으로 격리되지 않음. "
          "LLM이 생성한 코드를 실행하는 위험을 인지하고 켤 것)",
 )
+@click.option(
+    "--enable-llm-judge", is_flag=True,
+    help="일부 샘플에 LLM 채점(faithfulness 등)을 추가 적용 (기본 off — 비용/지연 증가)",
+)
+@click.option(
+    "--judge-model", default=None,
+    help="[--enable-llm-judge] 채점에 쓸 모델 (미지정 시 API 키 기반 자동 결정)",
+)
 def draft(
     slug: str,
     chapter_no: Optional[int],
@@ -235,6 +247,8 @@ def draft(
     force: bool,
     check_package: Optional[str],
     execute_examples: bool,
+    enable_llm_judge: bool,
+    judge_model: Optional[str],
 ) -> None:
     """SLUG 프로젝트의 CHAPTER_NO 챕터(또는 --all로 전체 미집필 챕터)를
     --source 기반 RAG로 초안 생성한다."""
@@ -313,7 +327,8 @@ def draft(
         results = run_batch_draft(
             targets, store, llm, config.project_dir, top_k=top_k, min_coverage=min_coverage,
             check_package=check_package, execute_examples=execute_examples,
-            max_per_source=max_per_source,
+            max_per_source=max_per_source, sources=sources,
+            enable_llm_judge=enable_llm_judge, judge_model=judge_model,
         )
         _print_batch_summary(results)
     else:
@@ -321,8 +336,33 @@ def draft(
             targets[0], store, llm, config.project_dir,
             top_k=top_k, min_coverage=min_coverage, yes=yes, batch_mode=False,
             check_package=check_package, execute_examples=execute_examples,
-            max_per_source=max_per_source,
+            max_per_source=max_per_source, sources=sources,
+            enable_llm_judge=enable_llm_judge, judge_model=judge_model,
         )
+
+
+def _build_structure_summary_from_sources(sources: tuple) -> Optional[str]:
+    """--source 중 로컬 디렉토리인 것들을 H(구조적 코드 인덱싱)로 정적 분석해
+    하나의 구조 요약 텍스트로 합친다 — module_reference(일반 능력 T)와
+    diagram(일반 능력 U)이 공유하는 헬퍼다.
+
+    URL/PDF/단일 텍스트 파일 소스는 건너뛴다 — H는 디렉토리 단위 정적 분석만
+    지원한다(code_index.py와 같은 전제). 디렉토리 소스가 하나도 없으면 None을
+    반환해, 호출부가 "구조 요약을 못 만들었다"를 판단할 수 있게 한다.
+    """
+    from book_forge.knowledge.code_index import build_structure_index, format_structure_summary
+
+    parts: list[str] = []
+    for src in sources:
+        if str(src).startswith(("http://", "https://")):
+            continue
+        src_path = Path(src)
+        if not src_path.is_dir():
+            continue
+        text = format_structure_summary(build_structure_index(src_path), src_path)
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts) if parts else None
 
 
 def _draft_one_chapter(
@@ -338,6 +378,9 @@ def _draft_one_chapter(
     check_package: Optional[str] = None,
     execute_examples: bool = False,
     max_per_source: Optional[int] = None,
+    sources: tuple = (),
+    enable_llm_judge: bool = False,
+    judge_model: Optional[str] = None,
 ) -> ChapterDraftResult:
     result = ChapterDraftResult(
         chapter_no=rc.spec.chapter_no, chapter_title=rc.spec.chapter_title, status="cancelled"
@@ -354,7 +397,33 @@ def _draft_one_chapter(
     result.avg_coverage = avg_score
     sources_text = "\n\n---\n\n".join(chunk for chunk, _ in scored)
 
-    monitor = build_book_monitor(output_dir=str(project_dir / "eval_results"))
+    # T/U: module_reference·diagram은 RAG 청크 대신 H가 만든 결정론적 구조
+    # 요약(모듈/클래스/함수 목록 + "내부 의존:"/"외부 의존:" 관계)을 실제
+    # 생성 입력으로 쓴다. module_reference(T)는 "어떤 항목을 다룰지"를,
+    # diagram(U)은 "어떤 관계로 그래프를 그릴지"를 임베딩 유사도가 아니라
+    # 정적 분석이 정하게 한다 — 실측: 구조 요약 없이는 "패키지 구조"
+    # 다이어그램을 요청해도 파일 1개의 내부 관계만 그려지는 스코프 불일치가
+    # 났다. --source에 코드 저장소 디렉토리가 없으면(PDF/URL만 준 경우)
+    # 구조 요약을 못 만들므로 일반 RAG 소스로 조용히 대체한다(에러로 막지
+    # 않음 — 저자가 이 유형을 골랐다는 이유만으로 실패시킬 이유는 없다).
+    effective_sources_text = sources_text
+    if rc.spec.content_type in ("module_reference", "diagram"):
+        structure_summary = _build_structure_summary_from_sources(sources)
+        if structure_summary is None:
+            click.echo(
+                "   ⚠️  --source에 코드 저장소 디렉토리가 없어 구조 요약을 만들 수 "
+                "없습니다 — 일반 RAG 소스로 대체합니다"
+                + ("(전체 커버리지 보장 안 됨)." if rc.spec.content_type == "module_reference"
+                   else "(그래프가 실제 코드 구조를 반영한다는 보장 없음).")
+            )
+        else:
+            effective_sources_text = structure_summary
+
+    monitor = build_book_monitor(
+        output_dir=str(project_dir / "eval_results"),
+        enable_llm_judge=enable_llm_judge,
+        judge_model=judge_model,
+    )
 
     # D: 실증이 필요한 유형(exercise/diagram)은 C의 임계값을 그대로 쓰되 더 엄격하게.
     effective_min_coverage = min_coverage
@@ -418,7 +487,18 @@ def _draft_one_chapter(
         draft_md = generate(
             chapter_title=rc.spec.chapter_title,
             chapter_no=rc.spec.chapter_no,
-            sources=sources_text,
+            sources=effective_sources_text,
+            ground_truth=rc.spec.chapter_title,
+        )
+    elif rc.spec.content_type == "module_reference":
+        from book_forge.agents.module_reference import build_generate_module_reference
+
+        click.echo("📖 구조 인덱스 기반 레퍼런스 생성 중 (LLM 호출)...")
+        generate = build_generate_module_reference(llm, monitor)
+        draft_md = generate(
+            chapter_title=rc.spec.chapter_title,
+            chapter_no=rc.spec.chapter_no,
+            sources=effective_sources_text,
             ground_truth=rc.spec.chapter_title,
         )
     elif rc.spec.content_type == "diagram":
@@ -429,7 +509,7 @@ def _draft_one_chapter(
         draft_md = generate(
             chapter_title=rc.spec.chapter_title,
             chapter_no=rc.spec.chapter_no,
-            sources=sources_text,
+            sources=effective_sources_text,
             ground_truth=rc.spec.chapter_title,
         )
     elif rc.spec.content_type == "capstone":
@@ -443,7 +523,7 @@ def _draft_one_chapter(
         raw = generate(
             chapter_title=rc.spec.chapter_title,
             chapter_no=rc.spec.chapter_no,
-            sources=sources_text,
+            sources=effective_sources_text,
             ground_truth=rc.spec.chapter_title,
         )
         draft_md, solution_md = parse_capstone_response(raw)
@@ -455,7 +535,7 @@ def _draft_one_chapter(
         draft_md = generate(
             chapter_title=rc.spec.chapter_title,
             chapter_no=rc.spec.chapter_no,
-            sources=sources_text,
+            sources=effective_sources_text,
             ground_truth=rc.spec.chapter_title,
             content_type=rc.spec.content_type,
         )
@@ -480,7 +560,9 @@ def _draft_one_chapter(
     if rc.spec.content_type == "capstone":
         result.verification = _print_capstone_verification(draft_md, solution_md or "")
     else:
-        result.verification = _print_verification(rc.spec.content_type, draft_md, sources_text)
+        result.verification = _print_verification(
+            rc.spec.content_type, draft_md, effective_sources_text
+        )
     if check_package:
         result.code_consistency = _print_code_consistency(check_package, draft_md, project_dir)
     if execute_examples:

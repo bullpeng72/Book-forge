@@ -7,6 +7,7 @@ from book_forge.agents.demonstration_verifier import (
     verify_demonstration,
     verify_diagram,
     verify_exercise_code,
+    verify_module_reference_coverage,
     verify_reference_table,
 )
 
@@ -105,6 +106,45 @@ graph TD
     assert "비어 있음" in result.issues[0]
 
 
+# ── diagram 그라운딩(일반 능력 U, 옵트인) ────────────────────────────────────
+
+
+def test_verify_diagram_grounding_passes_when_nodes_match_source() -> None:
+    # 실제 LLM 다이어그램 출력과 같은 대괄호 라벨 문법(예: A[PlannerAgent])을 쓴다 —
+    # _MERMAID_NODE_LABEL_RE는 대괄호 라벨만 노드로 인식한다.
+    draft = """```mermaid
+graph TD
+    A[PlannerAgent] --> B[ChatAgent]
+```
+"""
+    sources = "## planner.py\n- 클래스 `PlannerAgent`\n## chat_agent.py\n- 클래스 `ChatAgent`"
+    result = verify_diagram(draft, sources)
+    assert result.passed is True
+
+
+def test_verify_diagram_grounding_fails_when_nodes_are_invented() -> None:
+    draft = """```mermaid
+graph TD
+    A[CompletelyMadeUpNode] --> B[AnotherFakeNode]
+```
+"""
+    sources = "## planner.py\n- 클래스 `PlannerAgent`\n## chat_agent.py\n- 클래스 `ChatAgent`"
+    result = verify_diagram(draft, sources)
+    assert result.passed is False
+    assert any("소스에서" in issue for issue in result.issues)
+
+
+def test_verify_diagram_grounding_skipped_when_no_sources_given() -> None:
+    # 하위 호환: sources_text를 안 주면(기존 호출부) 그라운딩 검사를 건너뛴다.
+    draft = """```mermaid
+graph TD
+    A[CompletelyMadeUpNode] --> B[AnotherFakeNode]
+```
+"""
+    result = verify_diagram(draft)
+    assert result.passed is True
+
+
 # ── reference_table (소스-표 값 대조) ──────────────────────────────────────
 
 
@@ -137,6 +177,44 @@ def test_verify_reference_table_fails_with_no_table() -> None:
     assert "없습니다" in result.detail
 
 
+# ── module_reference (T: H가 나열한 항목이 전부 본문에 등장하는지) ──────────
+
+
+_SAMPLE_STRUCTURE_SUMMARY = (
+    "# 프로젝트 구조 요약 (정적 분석, 2개 모듈)\n\n"
+    "## planner.py\n- 클래스 `PlannerAgent` — 기획안을 생성한다\n"
+    "## chat_agent.py\n- 클래스 `ChatAgent` — 질문에 답한다\n"
+    "- 함수 `build_answer_question(llm, monitor)` — 답변 함수를 만든다\n"
+)
+
+
+def test_verify_module_reference_coverage_passes_when_all_names_present() -> None:
+    draft = (
+        "| 모듈 | 이름 |\n|---|---|\n"
+        "| planner.py | PlannerAgent |\n"
+        "| chat_agent.py | ChatAgent |\n"
+        "| chat_agent.py | build_answer_question |\n"
+    )
+    result = verify_module_reference_coverage(draft, _SAMPLE_STRUCTURE_SUMMARY)
+    assert result.passed is True
+    assert result.content_type == "module_reference"
+    assert not result.issues
+
+
+def test_verify_module_reference_coverage_fails_when_names_missing() -> None:
+    draft = "| 모듈 | 이름 |\n|---|---|\n| planner.py | PlannerAgent |\n"
+    result = verify_module_reference_coverage(draft, _SAMPLE_STRUCTURE_SUMMARY)
+    assert result.passed is False
+    assert any("ChatAgent" in issue for issue in result.issues)
+    assert any("build_answer_question" in issue for issue in result.issues)
+
+
+def test_verify_module_reference_coverage_no_items_in_summary_passes() -> None:
+    result = verify_module_reference_coverage("아무 본문", "구조 요약에 항목이 없음")
+    assert result.passed is True
+    assert "찾지 못했습니다" in result.detail
+
+
 # ── dispatcher ─────────────────────────────────────────────────────────────
 
 
@@ -151,6 +229,11 @@ def test_verify_demonstration_dispatches_by_content_type() -> None:
     assert verify_demonstration("reference_table", table_draft, "x y").content_type == (
         "reference_table"
     )
+
+    module_ref_draft = "| 모듈 | 이름 |\n|---|---|\n| planner.py | PlannerAgent |\n"
+    assert verify_demonstration(
+        "module_reference", module_ref_draft, "- 클래스 `PlannerAgent`"
+    ).content_type == "module_reference"
 
 
 def test_verify_demonstration_returns_none_for_narrative_and_unknown() -> None:

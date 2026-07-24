@@ -121,6 +121,15 @@ def md_to_html(text: str) -> str:
     return html
 
 
+def guess_image_media_type(filename: str) -> str:
+    """이미지 파일명 → MIME 타입. EPUB manifest의 media-type 속성에도 재사용한다."""
+    return (
+        _IMG_MIME_OVERRIDES.get(Path(filename).suffix.lower())
+        or mimetypes.guess_type(filename)[0]
+        or "application/octet-stream"
+    )
+
+
 def embed_images_as_data_uri(html_str: str, md_dir: Path) -> str:
     """img src를 base64 data URI로 인라인 임베드해 HTML이 이미지 파일 없이도
     독립적으로(다른 PC로 옮기거나 이메일 첨부만 해도) 열리도록 만든다.
@@ -135,12 +144,38 @@ def embed_images_as_data_uri(html_str: str, md_dir: Path) -> str:
         abs_path = (md_dir / src).resolve()
         if not abs_path.is_file():
             return m.group(0)
-        mime = (
-            _IMG_MIME_OVERRIDES.get(abs_path.suffix.lower())
-            or mimetypes.guess_type(abs_path.name)[0]
-            or "application/octet-stream"
-        )
+        mime = guess_image_media_type(abs_path.name)
         encoded = base64.b64encode(abs_path.read_bytes()).decode("ascii")
         return f'src="data:{mime};base64,{encoded}"'
 
     return re.sub(r'src="([^"]+)"', _to_data_uri, html_str)
+
+
+def rewrite_images_for_epub(html_str: str, md_dir: Path, prefix: str) -> tuple[str, list[tuple[Path, str]]]:
+    """img src를 EPUB 컨테이너 내부 상대 경로(``images/<prefix>_<파일명>``)로 재작성한다.
+
+    EPUB은 base64 데이터 URI를 신뢰성 있게 지원하지 않는 리더가 많아
+    (embed_images_as_data_uri()와 다른 지점 — HTML은 이메일 첨부 등 "파일
+    하나로 이동" 요구가 있어 인라인이 맞지만, EPUB은 컨테이너 자체가 이미
+    "파일 여러 개를 담는 zip"이라 실제 파일로 넣는 쪽이 표준을 따른다),
+    실제 이미지 파일 경로를 zip에 넣을 목록으로 함께 반환한다.
+
+    prefix(보통 챕터 id)를 파일명 앞에 붙이는 이유: 서로 다른 챕터
+    디렉토리의 동일 파일명(예: ``images/diagram.png``)이 EPUB 컨테이너
+    안에서 하나의 ``images/`` 폴더로 합쳐질 때 충돌하지 않게 한다.
+    """
+    collected: list[tuple[Path, str]] = []
+
+    def _rewrite(m: re.Match) -> str:
+        src = m.group(1)
+        if src.startswith(("http://", "https://", "data:", "file://", "#")):
+            return m.group(0)
+        abs_path = (md_dir / src).resolve()
+        if not abs_path.is_file():
+            return m.group(0)
+        target_name = f"{prefix}_{abs_path.name}"
+        collected.append((abs_path, target_name))
+        return f'src="images/{target_name}"'
+
+    rewritten = re.sub(r'src="([^"]+)"', _rewrite, html_str)
+    return rewritten, collected

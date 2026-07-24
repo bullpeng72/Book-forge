@@ -1,7 +1,13 @@
 """markdown_engine.py — md_to_html() / embed_images_as_data_uri() 테스트."""
 import base64
+from pathlib import Path
 
-from book_forge.publish.markdown_engine import embed_images_as_data_uri, md_to_html
+from book_forge.publish.markdown_engine import (
+    embed_images_as_data_uri,
+    guess_image_media_type,
+    md_to_html,
+    rewrite_images_for_epub,
+)
 
 
 def test_md_to_html_basic_heading_and_paragraph() -> None:
@@ -64,3 +70,34 @@ def test_embed_images_as_data_uri_leaves_remote_url_untouched() -> None:
     html = '<img src="https://example.com/a.png">'
     result = embed_images_as_data_uri(html, __import__("pathlib").Path("/tmp"))
     assert result == html
+
+
+# ── EPUB 전용 이미지 재작성(일반 능력 AJ) ────────────────────────────────────
+
+
+def test_guess_image_media_type_known_and_svg_override() -> None:
+    assert guess_image_media_type("a.png") == "image/png"
+    assert guess_image_media_type("a.svg") == "image/svg+xml"
+    assert guess_image_media_type("a.unknownext") == "application/octet-stream"
+
+
+def test_rewrite_images_for_epub_rewrites_src_and_collects_file(tmp_path: Path) -> None:
+    img_path = tmp_path / "images" / "sample.png"
+    img_path.parent.mkdir()
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    img_path.write_bytes(png_bytes)
+
+    html = '<img src="./images/sample.png" alt="샘플">'
+    rewritten, collected = rewrite_images_for_epub(html, tmp_path, prefix="chap01")
+
+    assert 'src="images/chap01_sample.png"' in rewritten
+    assert collected == [(img_path.resolve(), "chap01_sample.png")]
+
+
+def test_rewrite_images_for_epub_leaves_missing_and_remote_untouched(tmp_path: Path) -> None:
+    html = '<img src="./images/missing.png"><img src="https://example.com/a.png">'
+    rewritten, collected = rewrite_images_for_epub(html, tmp_path, prefix="chap01")
+    assert rewritten == html
+    assert collected == []

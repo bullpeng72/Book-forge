@@ -79,8 +79,24 @@ def verify_exercise_code(draft_md: str) -> VerificationResult:
     return VerificationResult(content_type="exercise", passed=passed, detail=detail, issues=issues)
 
 
-def verify_diagram(draft_md: str) -> VerificationResult:
-    """```mermaid 블록이 있고, 알려진 다이어그램 타입 + 실제 내용을 갖췄는지 확인한다."""
+_MERMAID_NODE_LABEL_RE = re.compile(r"\[([^\[\]]{2,80})\]")
+_IDENTIFIER_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
+
+
+def verify_diagram(
+    draft_md: str, sources_text: str = "", *, min_grounding_ratio: float = 0.3
+) -> VerificationResult:
+    """```mermaid 블록이 있고, 알려진 다이어그램 타입 + 실제 내용을 갖췄는지 확인한다.
+
+    sources_text(일반 능력 U, 옵트인): 주어지면 그래프 노드 라벨에서 뽑은
+    식별자가 소스(RAG 청크든 H의 구조 요약이든)에 실제로 등장하는 비율도
+    확인한다 — `verify_reference_table()`의 "값이 소스에 있는가" 원칙과
+    같다. 다이어그램은 100% LLM이 재구성한 것이라 실제 코드 구조와 무관한
+    노드/엣지를 만들어낼 위험이 있다(실측: "패키지 구조" 요청에 파일 1개의
+    내부 관계만 그려진 스코프 불일치 사례) — 문법만 보던 기존 검증에 최소
+    근거 대조를 추가한다. sources_text가 빈 문자열이면(기존 호출부와
+    하위 호환) 이 검사를 건너뛴다.
+    """
     blocks = _MERMAID_FENCE_RE.findall(draft_md)
     if not blocks:
         return VerificationResult(
@@ -89,6 +105,7 @@ def verify_diagram(draft_md: str) -> VerificationResult:
             detail="mermaid 코드 블록이 없습니다 — diagram 유형인데 다이어그램이 생성되지 않았습니다.",
         )
     issues = []
+    node_labels: list[str] = []
     for i, block in enumerate(blocks, 1):
         lines = [line for line in block.strip().splitlines() if line.strip()]
         first_line = lines[0] if lines else ""
@@ -98,6 +115,23 @@ def verify_diagram(draft_md: str) -> VerificationResult:
             )
         elif len(lines) < 2:
             issues.append(f"다이어그램 블록 {i}: 내용이 비어 있음(타입 선언만 있음)")
+        else:
+            node_labels.extend(_MERMAID_NODE_LABEL_RE.findall(block))
+
+    if sources_text and node_labels and not issues:
+        identifiers = {
+            tok for label in node_labels for tok in _IDENTIFIER_TOKEN_RE.findall(label)
+        }
+        if identifiers:
+            grounded = sum(1 for tok in identifiers if tok in sources_text)
+            ratio = grounded / len(identifiers)
+            if ratio < min_grounding_ratio:
+                issues.append(
+                    f"노드 라벨의 식별자 {len(identifiers)}개 중 {grounded}개만 소스에서 "
+                    f"확인됨({ratio:.0%} < 기준 {min_grounding_ratio:.0%}) — 그래프 구조가 "
+                    "소스 근거 없이 만들어졌을 수 있습니다."
+                )
+
     passed = not issues
     detail = (
         f"다이어그램 블록 {len(blocks)}개 구조 검증 통과"
@@ -132,6 +166,40 @@ def verify_reference_table(
     issues = [] if passed else [f"소스 대조 비율 {ratio:.0%} < 기준 {min_match_ratio:.0%}"]
     return VerificationResult(
         content_type="reference_table", passed=passed, detail=detail, issues=issues
+    )
+
+
+_STRUCTURE_ITEM_NAME_RE = re.compile(r"^- (?:클래스|함수) `([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
+
+
+def verify_module_reference_coverage(draft_md: str, structure_summary: str) -> VerificationResult:
+    """T(구조 인덱스 기반 레퍼런스)의 핵심 보장 — `format_structure_summary()`가
+    나열한 모든 클래스/함수 이름이 실제로 챕터 본문에 하나도 빠짐없이
+    등장하는지 확인한다.
+
+    `verify_reference_table()`의 "값을 지어내지 않았는가"와 반대 방향이다 —
+    여기서는 "빠뜨리지 않았는가"를 본다(T의 문제의식은 날조가 아니라 누락).
+    이름이 본문 어딘가에 문자열로 등장하기만 하면 통과로 본다(표 셀 안에
+    있든 설명 문장 안에 있든 상관없음 — 엄격한 표 구조 검증이 아니라
+    "언급이라도 됐는가"의 최소 근사).
+    """
+    names = sorted(set(_STRUCTURE_ITEM_NAME_RE.findall(structure_summary)))
+    if not names:
+        return VerificationResult(
+            content_type="module_reference",
+            passed=True,
+            detail="구조 요약에서 대조할 클래스/함수 이름을 찾지 못했습니다.",
+        )
+    missing = [name for name in names if name not in draft_md]
+    passed = not missing
+    detail = (
+        f"{len(names)}개 항목 모두 본문에 포함됨"
+        if passed
+        else f"{len(names)}개 항목 중 {len(missing)}개가 본문에서 빠짐"
+    )
+    issues = [f"`{name}`이(가) 본문에 없습니다." for name in missing]
+    return VerificationResult(
+        content_type="module_reference", passed=passed, detail=detail, issues=issues
     )
 
 
@@ -190,7 +258,9 @@ def verify_demonstration(
     if content_type == "exercise":
         return verify_exercise_code(draft_md)
     if content_type == "diagram":
-        return verify_diagram(draft_md)
+        return verify_diagram(draft_md, sources_text)
     if content_type == "reference_table":
         return verify_reference_table(draft_md, sources_text)
+    if content_type == "module_reference":
+        return verify_module_reference_coverage(draft_md, sources_text)
     return None

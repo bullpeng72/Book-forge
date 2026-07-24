@@ -11,8 +11,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from book_forge.publish.book_index import build_index_entries
 from book_forge.publish.config import BookConfig
-from book_forge.publish.html_builder import CSS, HTML_FOOTER, HTML_HEAD, chapter_anchor_id
+from book_forge.publish.html_builder import (
+    CSS,
+    HTML_FOOTER,
+    HTML_HEAD,
+    build_index_section,
+    build_title_page,
+    chapter_anchor_id,
+)
 from book_forge.publish.markdown_engine import embed_images_as_data_uri, md_to_html
 from book_forge.publish.toc_loader import ResolvedChapter, load_toc
 
@@ -62,7 +70,55 @@ def _render_chapter_pdf(browser, rc: ResolvedChapter, config: BookConfig, out_pa
     page.close()
 
 
-def build_pdf(config: BookConfig, chapter_no: Optional[int] = None) -> list[Path]:
+def _render_title_page_pdf(browser, config: BookConfig, out_path: Path) -> None:
+    """표지 페이지만 담은 별도 PDF를 만든다(일반 능력 AI).
+
+    PDF는 챕터별로 따로 파일을 만드는 구조라(도서 전체를 한 파일로 묶는
+    개념이 없음) "표지"도 자연스럽게 같은 패턴으로 별도 파일 하나로
+    만든다 — 기존 챕터 렌더링 경로(`_standalone_chapter_html`)를 그대로
+    재사용, 새 렌더링 로직 없음.
+    """
+    section = build_title_page(config)
+    full_html = _standalone_chapter_html(config.title, section, config.accent_color)
+
+    page = browser.new_page()
+    page.set_content(full_html, wait_until="networkidle")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    page.pdf(
+        path=str(out_path),
+        format="A4",
+        margin={"top": "22mm", "right": "20mm", "bottom": "25mm", "left": "25mm"},
+        print_background=True,
+    )
+    page.close()
+
+
+def _render_index_pdf(browser, entries, config: BookConfig, out_path: Path) -> None:
+    """찾아보기 페이지만 담은 별도 PDF를 만든다(일반 능력 AL).
+
+    표지(AI)와 같은 패턴 — 챕터별 개별 파일 구조라 "찾아보기"도 자연스럽게
+    별도 파일 하나로 만든다. with_links=False: 다른 챕터 PDF를 가리키는
+    앵커가 실제로 존재하지 않으므로(파일이 분리돼 있음) 챕터 번호/제목
+    텍스트만 표기한다.
+    """
+    section = build_index_section(entries, with_links=False)
+    full_html = _standalone_chapter_html("찾아보기", section, config.accent_color)
+
+    page = browser.new_page()
+    page.set_content(full_html, wait_until="networkidle")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    page.pdf(
+        path=str(out_path),
+        format="A4",
+        margin={"top": "22mm", "right": "20mm", "bottom": "25mm", "left": "25mm"},
+        print_background=True,
+    )
+    page.close()
+
+
+def build_pdf(
+    config: BookConfig, chapter_no: Optional[int] = None, *, with_index: bool = False
+) -> list[Path]:
     from playwright.sync_api import sync_playwright  # lazy import — [pdf] extra, 무거운 의존성
 
     chapters = load_toc(config.project_dir)
@@ -75,6 +131,13 @@ def build_pdf(config: BookConfig, chapter_no: Optional[int] = None) -> list[Path
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         try:
+            # 표지는 책 전체 개념이라 특정 챕터만 뽑아 만들 때(chapter_no
+            # 지정)는 안 만든다 — 매번 재생성하는 챕터 PDF에 표지가 섞이면
+            # 오히려 헷갈린다.
+            if chapter_no is None and build_title_page(config):
+                title_page_path = config.pdf_output_dir / "00_표지.pdf"
+                _render_title_page_pdf(browser, config, title_page_path)
+                outputs.append(title_page_path)
             for rc in chapters:
                 if not rc.exists:
                     continue
@@ -83,6 +146,18 @@ def build_pdf(config: BookConfig, chapter_no: Optional[int] = None) -> list[Path
                 ).with_suffix(".pdf")
                 _render_chapter_pdf(browser, rc, config, out_path)
                 outputs.append(out_path)
+
+            # 찾아보기도 표지와 같은 이유로 책 전체 빌드(chapter_no=None)일
+            # 때만 만든다. 옵트인(with_index)인 이유: 매 빌드마다 전체
+            # 챕터를 다시 읽어 용어를 재추출하는 추가 비용이 있고, 아직
+            # 초안이 미완성인 프로젝트에서는 결과가 자주 바뀌어 의미가
+            # 적다 — 저자가 필요할 때만 켜도록 둔다.
+            if chapter_no is None and with_index:
+                entries = build_index_entries(chapters)
+                if entries:
+                    index_path = config.pdf_output_dir / "99_찾아보기.pdf"
+                    _render_index_pdf(browser, entries, config, index_path)
+                    outputs.append(index_path)
         finally:
             browser.close()
     return outputs

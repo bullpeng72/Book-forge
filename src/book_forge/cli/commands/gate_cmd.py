@@ -9,6 +9,16 @@ agent-evaluator의 검증된 `agent-eval gate` CLI를 그대로 위임 호출한
 플래그는 `agent-eval gate --help`(agent_evaluator/cli/main.py의 gate_p 파서)
 전체를 그대로 노출한다 — 일부만 골라 전달하면 CI에서 골든셋 회귀·baseline 저장
 같은 기능이 book-forge 쪽에서만 안 되는 불일치가 생긴다.
+
+일반 능력 AF(SPEC.md 4부) — `--file`을 안 주면 예전엔 eval_results/의
+mtime 기준 최신 파일 **하나만** 골랐다. 그런데 `draft_cmd.py`는 챕터마다
+별도 PerformanceMonitor로 `draft_ch{N}.json`을 따로 저장한다 — "책 전체가
+배포 가능한가"를 물어야 할 `book-forge gate <slug>`가 실제로는 저자가
+가장 최근에 건드린 챕터 하나만 판정하는 걸 실측으로 확인했다(6챕터 책에서
+Chapter 5 하나만 게이팅됨, 나머지 5개 무시). agent-evaluator에 이미 있는
+`PerformanceMonitor.load_from_file()`/`.merge()`(새 판정 로직이 아니라 이미
+검증된 SDK 기능)로 eval_results/의 모든 결과 파일을 하나로 합친 뒤 그 병합
+리포트를 게이팅한다 — 파일이 하나뿐이면 기존 동작과 완전히 동일(하위 호환).
 """
 from __future__ import annotations
 
@@ -21,12 +31,40 @@ import click
 
 from book_forge.cli.project_utils import resolve_project_dir
 
+_MERGED_RESULT_FILENAME = "_merged_gate_result.json"
+_NON_REPORT_FILENAMES = {"baseline.json", _MERGED_RESULT_FILENAME}
 
-def _latest_result_file(eval_dir: Path) -> Optional[Path]:
+
+def _all_result_files(eval_dir: Path) -> list[Path]:
+    """eval_results/의 챕터별 결과 JSON 전부를 이름순으로 반환한다.
+
+    baseline.json(리포트가 아니라 --save-baseline이 저장한 비교 기준)과
+    이 함수 스스로 만드는 병합 산출물(_merged_gate_result.json)은 제외한다
+    — 후자를 안 걸러내면 다음 gate 실행 때 이전 병합 결과가 또 병합
+    입력으로 들어가는 피드백 루프가 생긴다.
+    """
     if not eval_dir.is_dir():
-        return None
-    files = sorted(eval_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return files[0] if files else None
+        return []
+    return sorted(
+        p for p in eval_dir.glob("*.json") if p.name not in _NON_REPORT_FILENAMES
+    )
+
+
+def _merge_result_files(files: list[Path]) -> Path:
+    """여러 챕터 결과 파일을 하나의 PerformanceMonitor로 합쳐 저장하고 그 경로를 반환한다.
+
+    PerformanceMonitor.load_from_file()/.merge()는 agent-evaluator가 이미
+    제공하는 SDK 기능이다(D8) — Book-forge가 직접 병합 로직을 구현하지
+    않는다. files는 최소 1개 이상이어야 한다(호출부가 보장).
+    """
+    from agent_evaluator import PerformanceMonitor
+
+    merged = PerformanceMonitor.load_from_file(str(files[0]))
+    for extra in files[1:]:
+        merged = merged.merge(PerformanceMonitor.load_from_file(str(extra)))
+    output_path = files[0].parent / _MERGED_RESULT_FILENAME
+    merged.save_to_file(str(output_path))
+    return output_path
 
 
 @click.command()
@@ -87,12 +125,26 @@ def gate(
     project_dir = resolve_project_dir(slug)
     eval_dir = project_dir / "eval_results"
 
-    target = Path(result_file) if result_file else _latest_result_file(eval_dir)
-    if target is None:
-        raise click.ClickException(
-            f"평가 결과 파일이 없습니다: {eval_dir} "
-            "(book-forge new 또는 build slides 를 먼저 실행하세요)"
-        )
+    if result_file:
+        target = Path(result_file)
+    else:
+        # AF: --file을 안 주면 eval_results/의 모든 챕터 결과를 책 전체
+        # 하나로 집계한다 — 파일이 1개뿐이면 그 파일 자체를 그대로 쓰므로
+        # (병합 왕복 없이) 단일 챕터 프로젝트에서는 기존 동작과 동일하다.
+        files = _all_result_files(eval_dir)
+        if not files:
+            raise click.ClickException(
+                f"평가 결과 파일이 없습니다: {eval_dir} "
+                "(book-forge new 또는 build slides 를 먼저 실행하세요)"
+            )
+        if len(files) == 1:
+            target = files[0]
+        else:
+            target = _merge_result_files(files)
+            click.echo(
+                f"📚 {len(files)}개 결과 파일을 책 전체로 집계했습니다: "
+                + ", ".join(f.name for f in files)
+            )
 
     cmd = [
         sys.executable, "-m", "agent_evaluator.cli.main", "gate", str(target),

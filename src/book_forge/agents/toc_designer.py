@@ -16,7 +16,7 @@ from agent_evaluator import (
 )
 from agent_evaluator.decorators import EvalMetadata
 
-from book_forge.agents.prompts import TOC_PROMPT, TOC_SYSTEM_PROMPT
+from book_forge.agents.prompts import _CODE_STRUCTURE_BLOCK, TOC_PROMPT, TOC_SYSTEM_PROMPT
 from book_forge.llm.provider import LLM
 
 DesignTocFn = Callable[..., str]
@@ -33,9 +33,23 @@ def build_design_toc(llm: LLM, monitor: PerformanceMonitor) -> DesignTocFn:
         subtask_tracking=SubtaskConfig(),
         context_retention=ContextRetentionConfig(),
     )
-    def design_toc(proposal_md: str, ground_truth: str = "") -> tuple[str, EvalMetadata]:
-        prompt = TOC_PROMPT.format(proposal=proposal_md)
+    def design_toc(
+        proposal_md: str, code_structure: str = "", ground_truth: str = ""
+    ) -> tuple[str, EvalMetadata]:
+        # 일반 능력 S — code_structure(H가 만든 정적 분석 구조 요약)가 주어지면
+        # 목차 설계 시점에 실제 모듈/클래스/함수 목록을 컨텍스트로 넣는다.
+        # 지금까지는 --source가 draft 단계에서만 쓰여 목차가 코드를 전혀 못
+        # 봤다 — 빈 문자열이면(코드 저장소 소스가 없거나 --source 자체가
+        # 없는 기존 흐름) 기존 프롬프트와 동일하게 동작한다(하위 호환).
+        code_structure_block = (
+            _CODE_STRUCTURE_BLOCK.format(code_structure=code_structure[:6000])
+            if code_structure
+            else ""
+        )
+        prompt = TOC_PROMPT.format(proposal=proposal_md, code_structure_block=code_structure_block)
         toc_md = llm.generate(prompt, system=TOC_SYSTEM_PROMPT, max_tokens=6000)
-        return toc_md, EvalMetadata(extra={"phase": "toc_design"})
+        return toc_md, EvalMetadata(
+            extra={"phase": "toc_design", "code_structure_used": bool(code_structure)}
+        )
 
     return design_toc

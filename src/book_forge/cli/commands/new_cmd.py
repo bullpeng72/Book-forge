@@ -10,6 +10,8 @@ RAG 초안 생성까지 한 번에 이어간다("주제 입력 → 완성된 초
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import click
 from agent_evaluator.gates.live_guardrail import GuardrailBlockedError
 
@@ -18,17 +20,29 @@ from book_forge.agents.review_loop import build_revise, run_review_loop
 from book_forge.agents.scaffold import scaffold_project
 from book_forge.agents.toc_designer import build_design_toc
 from book_forge.cli.commands.draft_cmd import _SourcePath
-from book_forge.config import ensure_project_dir, load_config
+from book_forge.config import ensure_project_dir, load_config, project_dir_for
 from book_forge.eval.monitor import build_book_monitor
 from book_forge.exceptions import BookForgeError
 from book_forge.llm.provider import create_llm
 from book_forge.models import parse_toc_manifest, slugify
+from book_forge.publish.front_matter import FrontMatter, save_front_matter
 from book_forge.publish.toc_loader import load_toc
 
 
 @click.command()
 @click.argument("title")
 @click.option("--constraints", default="", help="저자 제약/요구사항 (자유 텍스트, 선택)")
+@click.option("--author", default="", help="저자명 — HTML/PDF 표지 페이지에 표기 (선택, LLM 미생성)")
+@click.option("--license-notice", "license_notice", default="", help="저작권/라이선스 고지 문구 (선택)")
+@click.option("--edition", default="", help="판(edition) 표기, 예: '1판' (선택)")
+@click.option(
+    "--enable-llm-judge", is_flag=True,
+    help="일부 샘플에 LLM 채점(faithfulness 등)을 추가 적용 (기본 off — 비용/지연 증가)",
+)
+@click.option(
+    "--judge-model", default=None,
+    help="[--enable-llm-judge] 채점에 쓸 모델 (미지정 시 API 키 기반 자동 결정)",
+)
 @click.option(
     "--source", "sources", multiple=True,
     type=_SourcePath(),
@@ -50,9 +64,15 @@ from book_forge.publish.toc_loader import load_toc
     help="[--source, --check-package와 함께] python 코드 블록을 subprocess에서 실제 실행해 검증"
          "(LLM이 생성한 코드를 실행하는 위험을 인지하고 켤 것)",
 )
+@click.option(
+    "--force", is_flag=True,
+    help="이미 존재하는 프로젝트(같은 제목/슬러그)의 기획안·목차를 확인 없이 덮어쓰기",
+)
 def new(
     title: str, constraints: str, sources: tuple, top_k: int, min_coverage: float,
-    check_package: str, execute_examples: bool,
+    check_package: str, execute_examples: bool, force: bool,
+    author: str, license_notice: str, edition: str,
+    enable_llm_judge: bool, judge_model: Optional[str],
 ) -> None:
     """주제(TITLE)로 신규 프로젝트를 만들고 기획→목차 대화형 루프를 진행한다."""
     if sources:
@@ -68,9 +88,33 @@ def new(
 
     load_config()
 
+    # 일반 능력 AH — ensure_project_dir()은 mkdir(exist_ok=True)만 쓰므로, 같은
+    # 제목(슬러그)으로 다시 book-forge new를 실행하면 기존 00_기획안.md/
+    # 01_목차.md가 경고 없이 덮어써졌다(실측 확인된 문제). 디렉토리를 실제로
+    # 만들기 *전에* 기획안 파일 존재 여부만 확인한다 — 스캐폴딩된 빈 챕터
+    # 파일은 덮어쓰기 판단 기준이 아니다(어차피 scaffold_project가 기존
+    # 챕터는 건너뛴다).
     slug = slugify(title)
+    existing_project_dir = project_dir_for(slug)
+    if not force and (existing_project_dir / "00_기획안.md").is_file():
+        if not click.confirm(
+            f"\n⚠️  이미 존재하는 프로젝트입니다({existing_project_dir}). "
+            "기존 기획안/목차를 덮어쓰시겠습니까?",
+            default=False,
+        ):
+            click.echo("취소했습니다. 다른 제목을 쓰거나 --force로 덮어쓰세요.")
+            raise SystemExit(0)
+
     project_dir = ensure_project_dir(slug)
     click.echo(f"📁 프로젝트 디렉토리: {project_dir}\n")
+
+    # 일반 능력 AI — 저자명/저작권 고지/판 표기는 LLM이 창작할 대상이 아니라
+    # 저자가 직접 입력한 값을 그대로 저장한다(front_matter.py 참고 — 별도
+    # JSON 파일로 분리해 00_기획안.md의 기존 파싱 계약을 안 건드림). 전부
+    # 빈 문자열이면 파일 자체를 안 만든다(save_front_matter의 is_empty 가드).
+    save_front_matter(
+        project_dir, FrontMatter(author=author, license_notice=license_notice, edition=edition)
+    )
 
     try:
         llm = create_llm()
@@ -78,11 +122,30 @@ def new(
         click.echo(f"❌ {exc}")
         raise SystemExit(1) from exc
 
-    monitor = build_book_monitor(output_dir=str(project_dir / "eval_results"))
+    monitor = build_book_monitor(
+        output_dir=str(project_dir / "eval_results"),
+        enable_llm_judge=enable_llm_judge,
+        judge_model=judge_model,
+    )
 
     propose_plan = build_propose_plan(llm, monitor)
     design_toc = build_design_toc(llm, monitor)
     revise = build_revise(llm, monitor)
+
+    # 일반 능력 S — --source에 코드 저장소 디렉토리가 있으면, 목차 설계
+    # *이전에* H(구조적 코드 인덱싱)로 실제 모듈/클래스/함수 목록을 미리
+    # 뽑아둔다. 순수 AST 정적 분석이라 임베딩/LLM 호출 없이 빠르다 — 소스를
+    # 지식창고에 청크·임베딩하는 무거운 작업(아래 --source 자동 초안 단계)과는
+    # 별개다. 실측 확인된 문제: 이 컨텍스트 없이는 "이 프로젝트를 분석"이라는
+    # 제약을 자유 텍스트로 줘도 LLM이 존재하지 않는 서브시스템을 챕터로
+    # 지어냈다(예: "컴포넌트 간 통신 메커니즘" — 실제 코드엔 없는 개념).
+    code_structure = ""
+    if sources:
+        from book_forge.cli.commands.draft_cmd import _build_structure_summary_from_sources
+
+        code_structure = _build_structure_summary_from_sources(sources) or ""
+        if code_structure:
+            click.echo("🔍 --source의 코드 저장소 구조를 미리 분석했습니다(목차 설계에 반영).")
 
     def render(md: str) -> None:
         click.echo("\n" + "─" * 60)
@@ -116,7 +179,7 @@ def new(
     click.echo(f"\n✅ 기획안 확정: {proposal_path}")
 
     click.echo("\n📋 목차 설계 중 (LLM 호출)...")
-    toc_md = design_toc(proposal_md=proposal_md)
+    toc_md = design_toc(proposal_md=proposal_md, code_structure=code_structure)
     toc_md = run_review_loop(
         kind="toc",
         initial_md=toc_md,

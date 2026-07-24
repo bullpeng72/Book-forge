@@ -5,8 +5,8 @@ HTML/PDF/발표자료. 전 과정을 [agent-evaluator](https://pypi.org/project/
 Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(로컬)** — API 키 없이
 바로 시작할 수 있습니다.
 
-**핵심 통계**: 13개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-13개(12개 동작) | 314개 테스트 | Python 3.11+
+**핵심 통계**: 14개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
+15개(14개 동작) | 408개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -44,6 +44,11 @@ book-forge init                  # LLM Provider 설정 (기본 Ollama — API �
 OpenAI/Anthropic을 쓰려면 `book-forge init`에서 provider를 선택하거나 `.env`에
 `LLM_PROVIDER=openai`(+ `OPENAI_API_KEY`) 또는 `LLM_PROVIDER=anthropic`(+
 `ANTHROPIC_API_KEY`)을 설정하세요.
+
+Gate 판정 가중치(`gate_a_tcr_weight`/`gate_c_tcr_weight`/`gate_b_loop_weight`,
+agent-evaluator 기본값 사용)를 프로젝트마다 다르게 쓰려면 `.env`에
+`BOOK_FORGE_GATE_A_TCR_WEIGHT`/`BOOK_FORGE_GATE_C_TCR_WEIGHT`/
+`BOOK_FORGE_GATE_B_LOOP_WEIGHT`를 설정하세요(미지정 시 기존 기본값 그대로).
 
 ## 사용자 작업 흐름
 
@@ -133,12 +138,17 @@ book-forge plan <slug> --revise
 
 - **기획/목차 대화형 루프**: 주제 입력 → `PlannerAgent`가 기획안 초안 → 저자가 Enter(승인)
   또는 수정 요청 입력 → 승인될 때까지 반복 → `TOCDesignerAgent`가 목차 설계 → 같은 승인
-  루프 → 승인된 목차로 `Part_X/Chapter_XX.md` 스캐폴드 자동 생성
+  루프 → 승인된 목차로 `Part_X/Chapter_XX.md` 스캐폴드 자동 생성. `book-forge new --source
+  <코드 저장소>`를 주면 목차 설계 **이전에** H로 실제 모듈/클래스 목록을 미리 분석해
+  반영한다(일반 능력 S) — 존재하지 않는 서브시스템을 챕터로 지어내는 걸 방지
 - **HTML 빌드**: 단일 자기완결 HTML — 이미지 base64 인라인 임베드(파일 첨부 없이도 열림),
-  Mermaid/코드하이라이팅(CDN), `01_목차.md`에서 사이드바 자동 생성
-- **PDF 빌드**: Playwright로 챕터별 A4 PDF, 이미지 자동 리사이즈
+  Mermaid/코드하이라이팅(CDN), `01_목차.md`에서 사이드바 자동 생성. `--author` 등을
+  지정했으면 표지 페이지(제목/저자/판/저작권 고지) 자동 삽입(일반 능력 AI)
+- **PDF 빌드**: Playwright로 챕터별 A4 PDF, 이미지 자동 리사이즈. 표지 정보가 있으면
+  `00_표지.pdf`를 별도 파일로 함께 생성
 - **발표자료**: 챕터를 섹션 단위로 LLM이 압축(제목 35자 이내) — Reveal.js, 발표자 노트
-  기본 포함
+  기본 포함. 코드/mermaid 펜스는 LLM 요약 이전에 분리해 원문 그대로 별도
+  슬라이드로 보존(Mermaid.js/highlight.js CDN 로드 포함, 일반 능력 P/Q)
 - **웹 에디터**: Part/Chapter 트리 + EasyMDE 마크다운 편집 + 이미지 갤러리(클릭 삽입) +
   실시간 미리보기(HTML 빌드와 동일 렌더 엔진)
 - **품질 게이팅**: `book-forge gate` — agent-evaluator의 `agent-eval gate` CLI를 그대로
@@ -178,9 +188,9 @@ book-forge plan <slug> --revise
 | 능력 | 내용 | 구현 위치 |
 |---|---|---|
 | **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별. 코드 저장소는 텍스트 청크에 더해 정적 분석 구조 요약도 자동 포함(H) | `knowledge/sources.py`, `knowledge/code_index.py` |
-| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py` |
+| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone/module_reference) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**, `module_reference`(T)는 RAG 대신 H의 구조 인덱스를 그대로 순회해 **전체 커버리지가 보장되는** 표로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py`, `agents/module_reference.py` |
 | **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지(설치된 패키지 또는 로컬 디렉토리, I)에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 버전을 프로젝트별로 `sdk_versions.json`에 고정(패키지는 pip 버전, 로컬은 git 커밋)하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(로컬 대상은 PYTHONPATH 자동 주입, 타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
-| **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
+| **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone`/`module_reference` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조 + (옵트인) 노드 라벨이 소스에 등장하는지 그라운딩 대조(U), `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음), `module_reference`는 H가 나열한 항목이 전부 본문에 등장하는지(T)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
 | **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
 | **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
 
@@ -556,16 +566,18 @@ URL 소스(`# 출처:` 태그)만 중복 없이 순서대로 모아 챕터 말�
 | 명령 | 상태 | 설명 |
 |---|---|---|
 | `book-forge init` | ✅ | LLM Provider(Ollama/OpenAI/Anthropic) 및 API 키 설정 |
-| `book-forge new <title> [--source ...] [--top-k] [--min-coverage]` | ✅ | 기획→목차 대화형 루프 + 스캐폴드 생성 (`--source` 주면 전체 챕터 자동 배치 초안까지) |
-| `book-forge build html <slug>` | ✅ | 단일 HTML |
-| `book-forge build pdf <slug> [--chapter N]` | ✅ | 챕터별 PDF |
+| `book-forge new <title> [--source ...] [--top-k] [--min-coverage] [--force] [--author] [--license-notice] [--edition] [--enable-llm-judge] [--judge-model]` | ✅ | 기획→목차 대화형 루프 + 스캐폴드 생성 (`--source` 주면 전체 챕터 자동 배치 초안까지). 같은 제목/슬러그의 기존 프로젝트가 있으면 덮어쓰기 전 확인(`--force`로 스킵). `--author`/`--license-notice`/`--edition`을 주면 HTML/PDF에 표지 페이지 자동 생성. `--enable-llm-judge`로 계측에 LLM 채점(faithfulness 등)을 옵트인 추가(OpenAI/Anthropic 키 필요, 기본 off) |
+| `book-forge build html <slug> [--with-index]` | ✅ | 단일 HTML. `--with-index`로 책 끝에 찾아보기(색인) 섹션 추가(일반 능력 AL) |
+| `book-forge build pdf <slug> [--chapter N] [--with-index]` | ✅ | 챕터별 PDF. `--with-index`로 `99_찾아보기.pdf` 추가 생성(`--chapter` 지정 시 무시) |
+| `book-forge build epub <slug>` | ✅ | EPUB 3 전자책(zip, Playwright 불필요, 일반 능력 AJ). 실제 유통 채널 제출 전에는 `epubcheck`로 별도 검증 권장(이 프로젝트는 구조적 검증(zip 무결성 + well-formed XML)까지만 자동화) |
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
-| `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no>\|--all [--source ...] [--top-k] [--min-coverage] [--max-per-source] [--yes] [--force] [--check-package] [--execute-examples]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+버전 고정, `--execute-examples`로 실제 실행 검증 — 둘 다 로컬 디렉토리 대상도 지원. `--source`는 지식창고가 이미 있으면 생략 가능 — `book-forge research`로 미리 채워두면 됨) |
+| `book-forge gate <slug> [--file] [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과). `--file` 미지정 시 챕터별 결과를 책 전체로 자동 집계 후 판정 |
+| `book-forge draft <slug> <ch_no>\|--all [--source ...] [--top-k] [--min-coverage] [--max-per-source] [--yes] [--force] [--check-package] [--execute-examples] [--enable-llm-judge] [--judge-model]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+버전 고정, `--execute-examples`로 실제 실행 검증 — 둘 다 로컬 디렉토리 대상도 지원. `--source`는 지식창고가 이미 있으면 생략 가능 — `book-forge research`로 미리 채워두면 됨. `--enable-llm-judge`는 `new`와 동일) |
 | `book-forge research <slug> <chapter_no> [--max-queries] [--max-results-per-query] [--yes]` | ✅ (선택, `[rag]`) | 챕터 제목에서 검색 쿼리 생성(LLM) → 실제 웹 검색(DuckDuckGo) → 저자가 후보 URL 선택 → 지식창고에 추가 |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
+| `book-forge lint <slug> [--fail-on-inconsistency]` | ✅ | 챕터 간 기술 용어 표기 불일치 후보 발견·보고(자동 수정 없음, 일반 능력 AK) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
 | `book-forge plan <slug> [--revise]` | ✅ | 기획/목차 재검토 — `--revise` 없으면 미리보기만 |
 | `book-forge scaffold <slug>` | 🚧 | (현재 `new`/`plan --revise`에 통합됨 — 독립 실행 미구현) |
@@ -653,8 +665,11 @@ src/book_forge/
 > REQ-5, Non-Goal). 저자 리뷰 루프에서 `LoopDetectionConfig`가 실제로 작동해야 하므로,
 > 각 라운드를 독립된 TaskResult로 기록하는 `@agent_eval` 개별 호출 방식을 씁니다.
 
-`book-forge gate <slug>`는 최신 `eval_results/*.json`을 대상으로 agent-evaluator의
-`agent-eval gate` CLI를 그대로 위임 호출합니다(새 판정 로직 없음).
+`book-forge gate <slug>`는 `--file`을 안 주면 `eval_results/`의 챕터별 결과
+전부를 `PerformanceMonitor.merge()`(agent-evaluator 기존 기능, 새 판정 로직
+아님)로 책 한 권 분량으로 집계한 뒤 agent-evaluator의 `agent-eval gate` CLI를
+그대로 위임 호출합니다(일반 능력 AF) — 파일이 하나뿐이면 병합 없이 그대로
+씁니다. 특정 챕터 하나만 다시 보고 싶으면 `--file`로 명시하세요.
 
 ## Book/AOO 마이그레이션
 
@@ -750,7 +765,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 314개 테스트
+pytest                 # 408개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```

@@ -862,6 +862,171 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       `## 참고 자료`(항목 29)에 자동으로 나타나는 것까지 파이프라인
       전체를 확인했다.
 
+31. **슬라이드 파이프라인의 세 가지 실측 결함(P/Q/R, SPEC.md 2부)을
+    `slide_builder.py` 한 곳에서 함께 고쳤다.** Book-forge 자신의
+    `src/book_forge/agents/`를 --source로 실제 강의자료를 만들어보고
+    발견했다 — "프로젝트 코드 → 도서(html/pdf) → 강의자료(slide)" 파이프라인의
+    부족한 점을 찾아달라는 요청에 대한 실측 조사 중 나온 결과다.
+    - **P(코드 블록 손실)**: `condense_section()`에 섹션 전체(코드 포함)를
+      그대로 넘기면 LLM이 코드를 프로즈 요약으로 바꿔버린다 — 실측: 코드
+      예제 4개짜리 챕터로 슬라이드를 만들었더니 결과 HTML에 `<pre>`/`<code>`
+      가 0개였다. `extract_code_blocks()`로 코드/mermaid 펜스를 LLM 호출
+      **전에** 뽑아내고, 프로즈만 조건 요약한 뒤 코드는 `render_code_slide_html()`/
+      `render_mermaid_slide_html()`로 원문 그대로 별도 슬라이드에 붙인다 —
+      둘 다 LLM을 호출하지 않는다(환각 위험 없음, 문자열 조립일 뿐).
+    - **Q(렌더링 자산 미로드)**: `html_builder.py`(도서)는 CDN으로
+      mermaid.js/highlight.js를 로드하는데 `slide_builder.py`는 reveal.js
+      코어만 로드했다 — 코드/다이어그램이 슬라이드에 살아남아도 렌더링될
+      수 없었다. `html_builder.py`와 정확히 같은 CDN URL·버전
+      (`mermaid@10`, `highlight.js@11.9.0`)과 초기화 방식을 맞췄다 — 도서와
+      발표자료가 같은 소스에서 나온 코드/다이어그램을 다르게 렌더링할
+      이유가 없다.
+    - **R(빈 슬라이드 버그)**: `split_chapter_into_sections()`는 `# `/`## `
+      헤딩이 하나도 없으면 섹션을 하나도 못 찾는다. 실측 재현: diagram
+      content_type 챕터가 헤딩 없이 ` ```mermaid `로 바로 시작하자(LLM이
+      "# Chapter N:"으로 시작하라는 프롬프트 지시를 이번엔 안 지킴)
+      슬라이드가 조용히 0장 생성됐다 — 에러 없이 낮은 가시성의 경고
+      한 줄(`generate_report() called with no recorded tasks`)만 남았다.
+      `fallback_heading` 파라미터를 추가해, 헤딩이 전혀 없어도 본문이
+      있으면 챕터 제목을 헤딩 삼아 최소 1개 섹션은 만들도록 고쳤다.
+    - `tests/test_slide_builder.py`에 12개 테스트 추가 — 세 결함 각각의
+      단위 테스트 + 종단 테스트(`test_build_slides_preserves_code_blocks_verbatim`,
+      `test_build_slides_diagram_only_chapter_produces_at_least_one_slide`).
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경): exercise
+      타입 챕터(`import unittest`로 시작하는 실제 코드 포함)로 슬라이드를
+      만드니 그 코드가 `<pre><code class="language-python">`에 원문 그대로
+      나타났고, `highlight.min.js`/`mermaid.min.js` 둘 다 로드됐다.
+    - **S/U(같은 조사에서 발견, 아직 미구현)**: 기획/목차 설계가 코드
+      구조를 전혀 못 보는 것(S), 다이어그램이 H의 정확한 의존 관계 데이터를
+      활용 안 하는 것(U) — SPEC.md 2부에 문제/해법/우선순위 기록. T(전체
+      커버리지 미보장)는 항목 32에서 이어서 구현.
+
+32. **`module_reference` content_type(일반 능력 T, SPEC.md 2부)을 추가해,
+    RAG 유사도에 좌우되던 "전체를 다룬다" 문제를 고쳤다.** 항목 31과 같은
+    조사(Book-forge 자신의 agents/ 13개 파일을 실제로 분석)에서 발견 —
+    `reference_table`은 top-k RAG 검색으로 뽑힌 것만 표에 담기 때문에,
+    실측: agents 13개 파일 중 우연히 4개만 다뤄지고 나머지 9개는 왜
+    빠졌는지 아무 신호도 없이 조용히 사라졌다.
+    - `agents/module_reference.py::build_generate_module_reference()` —
+      `reference_table.py`와 같은 패턴(rag_mode=True, LLM이 값을 지어내지
+      않게 지시)이지만, LLM에게 넘기는 `sources`가 RAG 청크가 아니라
+      H(`build_structure_index`+`format_structure_summary`, 새 파싱 로직
+      없이 기존 인프라 재사용)가 만든 **결정론적 전체 목록**이다 — "어떤
+      항목이 존재하는가"는 코드가 이미 정했고, LLM은 각 항목의 설명 문구만
+      채운다.
+    - `draft_cmd.py::_build_module_reference_summary(sources)` — `--source`
+      중 로컬 디렉토리인 것만 골라 H로 정적 분석한다. 디렉토리 소스가
+      하나도 없으면(PDF/URL만 준 경우) `None`을 반환하고, 호출부가 일반
+      RAG 소스로 조용히 대체한다(에러로 막지 않음 — module_reference를
+      골랐다는 이유만으로 실패시킬 이유는 없음, 대신 "전체 커버리지 보장
+      안 됨"을 경고).
+    - **`effective_sources_text`로 통일**: `_draft_one_chapter()`가
+      module_reference일 때만 `sources_text`(RAG 청크)를 구조 요약으로
+      바꿔치기하고, 생성 호출과 사후 검증(`_print_verification`) 양쪽에
+      같은 값을 쓰도록 통일했다 — 다른 content_type은 기존 RAG 청크
+      그대로라 회귀가 없다.
+    - `agents/demonstration_verifier.py::verify_module_reference_coverage()` —
+      구조 요약에서 뽑은 클래스/함수 이름이 전부 본문에 등장하는지 확인한다
+      (`verify_reference_table()`의 "값을 지어내지 않았는가"와 반대 방향 —
+      여기서는 "빠뜨리지 않았는가"). **구현 중 발견한 버그**: 이름 추출
+      정규식에 `re.MULTILINE`을 빼먹어서 항상 빈 목록만 매치됐다 — "이름이
+      없으면 통과"라는 폴백 때문에 실패 테스트를 짜기 전까지는 통과
+      테스트가 (엉뚱한 이유로) 계속 초록불이었다. 실패 시나리오
+      테스트(`test_verify_module_reference_coverage_fails_when_names_missing`)를
+      쓰고 나서야 잡혔다 — "통과하는 테스트 하나"보다 "의도한 이유로
+      통과/실패하는 테스트 쌍"이 왜 중요한지 보여주는 사례.
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경, 항목 31과
+      같은 `agents/` 디렉토리로 재현): 44개 항목(클래스+함수)을 전부
+      결정론적으로 나열했고, 실제 생성된 표에는 28개가 담겼다 — 나머지
+      16개(주로 `build_*`/`parse_*` 팩토리 함수)는 CLI에 `` `이름`이(가)
+      본문에 없습니다 `` 형태로 정확히 무엇이 빠졌는지 보고됐다. 이전엔
+      "13개 중 4개, 이유 불명"이었던 것이 "44개 항목을 전부 알고 있고,
+      그중 몇 개가 왜 빠졌는지도 안다"로 바뀐 것 — LLM이 표를 100% 채우는
+      것까지 보장하진 않지만(그건 이 항목의 목표가 아니었음), 최소한
+      "무엇이 빠졌는지 조용히 모르는" 상태에서는 벗어났다.
+
+33. **diagram content_type이 H의 구조 요약을 활용하도록 확장하고,
+    `verify_diagram()`에 그라운딩 체크를 추가했다(일반 능력 U, SPEC.md
+    2부).** 항목 31/32와 같은 조사에서 발견 — 다이어그램은 100% LLM이
+    RAG 텍스트 조각에서 재구성한 것이라, 실측: "패키지 구조" 다이어그램을
+    요청했는데 파일 1개(`planner.py`)의 내부 데코레이터 관계만 그려졌다
+    (로컬로는 정확하지만 스코프가 틀림). 기존 검증도 mermaid 문법만 보지,
+    실제 코드 관계와 일치하는지는 확인 안 했다.
+    - **T의 헬퍼를 그대로 재사용**: 처음엔 "코드로 노드/엣지를 직접
+      조립"까지 고려했으나, T가 이미 만든
+      `_build_structure_summary_from_sources()`(H의 구조 요약, "내부
+      의존:"/"외부 의존:" 표기 포함)를 diagram content_type에도 그대로
+      적용하는 게 더 간단하고 T와 일관됐다 — 함수 이름을
+      `_build_module_reference_summary`에서 `_build_structure_summary_from_sources`로
+      리네이밍해 T/U 공유 헬퍼임을 드러냈다. `effective_sources_text`
+      오버라이드 조건을 `content_type in ("module_reference", "diagram")`로
+      확장한 게 전부다 — 새 파이프라인이 아니라 기존 T 배선의 자연스러운
+      확장.
+    - `agents/diagram_generator.py::DIAGRAM_PROMPT`에 "소스에 '내부
+      의존:'/'외부 의존:' 표기가 있으면 그 관계를 노드/엣지로 그대로
+      옮기라"는 지시를 추가했다 — 그래프 구조를 LLM이 처음부터
+      창작하지 말고, 있으면 정적 분석 결과를 우선 반영하게 유도.
+    - `agents/demonstration_verifier.py::verify_diagram()`에 옵트인
+      `sources_text` 파라미터를 추가했다(`verify_diagram(draft_md,
+      sources_text="")` — 하위 호환, 빈 문자열이면 기존 동작 그대로).
+      주어지면 그래프 노드 라벨(`\[...\]`)에서 뽑은 식별자가 소스에 실제로
+      등장하는 비율을 확인한다 — `verify_reference_table()`의 "값이
+      소스에 있는가" 원칙을 다이어그램에도 적용한 것. 이 체크는
+      diagram뿐 아니라 기존 RAG 기반 diagram 생성에도 그대로 적용된다
+      (sources_text가 RAG 청크든 구조 요약이든 상관없이 동작하는 일반화).
+    - `tests/test_demonstration_verifier.py`에 그라운딩 통과/실패/스킵
+      3개 테스트를 추가하면서, 대괄호 없는 노드(`PlannerAgent --> ChatAgent`)
+      로 처음 짰다가 `_MERMAID_NODE_LABEL_RE`가 대괄호 라벨(`A[PlannerAgent]`)
+      만 인식한다는 걸 깨닫고 실제 LLM 출력과 같은 문법으로 고쳐 썼다 —
+      고치기 전엔 node_labels가 항상 빈 리스트라 그라운딩 검사 자체가
+      조용히 스킵되는, 항목 32와 같은 유형의 "의도와 다른 이유로 통과하는
+      테스트" 함정이었다(수동으로 `_MERMAID_NODE_LABEL_RE.findall()`을
+      돌려 실제로 식별자가 뽑히는지 확인하고 나서야 안심했다).
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경, 항목 31/32와
+      같은 `agents/` 디렉토리로 재현): "agents 패키지의 모듈 의존 관계"
+      다이어그램을 요청하니, 19개 파일 전체를 아우르는 모듈 의존 그래프가
+      나왔다 — 각 파일의 실제 import 문(예: `code_consistency_checker.py`
+      → `pkgutil`/`importlib`)과 정확히 일치했다. 이전엔 파일 1개짜리
+      스코프 불일치였던 것이 패키지 전체 스코프로 바뀐 것이 U의 실질적
+      성과.
+
+34. **`book-forge new --source`가 목차 설계 *이전*에 코드 구조를 미리
+    분석하도록 고쳤다(일반 능력 S, SPEC.md 2부) — 항목 31~33과 같은
+    조사에서 발견한 가장 근본적인 격차.** `propose_plan()`/`design_toc()`는
+    저자가 타이핑한 자유 텍스트만 보고, `--source`는 목차 확정 **이후**
+    draft 단계에서만 쓰였다 — 실측: "Book-forge의 agents 패키지 구조를
+    분석"이라는 제약을 줘도 실제로 존재하지 않는 "에이전트 컴포넌트 간
+    상호작용 및 통신 메커니즘" 같은 챕터가 만들어졌다. H가 이미 정확한
+    모듈 인벤토리를 갖고 있는데도 기획/목차 단계에 전혀 연결돼 있지
+    않았던 게 원인.
+    - `agents/prompts.py::_CODE_STRUCTURE_BLOCK` — TOC_PROMPT에 `{code_structure_block}`
+      플레이스홀더를 추가하고, 빈 문자열이면 자연스럽게 접히도록(추가
+      공백 한 줄 외엔 흔적 없음) 별도 블록 상수로 분리했다 — 프롬프트
+      두 벌을 만들지 않기 위함.
+    - `agents/toc_designer.py::design_toc()`에 옵트인 `code_structure: str = ""`
+      파라미터를 추가했다 — 주어지면 `_CODE_STRUCTURE_BLOCK`을 채워 넣고,
+      비어 있으면(기존 호출부, PDF/URL 소스, `--source` 자체가 없는 경우)
+      기존 프롬프트와 완전히 동일하게 동작한다(하위 호환).
+    - `cli/commands/new_cmd.py` — `--source`가 있으면 `llm`/`monitor`
+      준비 직후, **기획안 생성보다도 먼저** `_build_structure_summary_from_sources()`
+      (T/U가 이미 만든 헬퍼, 항목 32 재사용)를 호출해 `code_structure`를
+      계산한다. 순수 AST 정적 분석이라 임베딩·LLM 호출 없이 빠르다 —
+      지식창고에 소스를 청크·임베딩하는 무거운 작업(스캐폴딩 이후 자동
+      배치 초안 단계)과는 완전히 별개 경로다.
+    - `tests/test_toc_designer.py`(신규) + `tests/test_new_cmd.py`에 구조
+      요약 유무에 따라 TOC 프롬프트 내용이 달라지는지 확인하는 테스트를
+      추가했다 — `RecordingLLM`으로 실제 프롬프트 문자열을 캡처해 대조.
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경, 항목 31~33과
+      같은 시나리오 — "Book-forge 아키텍처 해설", `--source`를 `new`
+      시점부터 지정): 목차가 "Chapter 5. 챕터 초안 작성자
+      (chapter_drafter.py)", "Chapter 7. 코드 일관성 검증기
+      (code_consistency_checker.py)"처럼 **실제 파일명을 챕터 제목에 직접
+      인용**하는 수준으로 바뀌었다 — 이전 실측에서 나왔던 존재하지 않는
+      서브시스템("컴포넌트 간 통신 메커니즘" 등)이 완전히 사라졌다. 이후
+      `--source`가 트리거하는 전체 챕터 자동 배치 초안(12개 챕터)까지
+      돌리다 5분 foreground 타임아웃에 걸렸지만, 목차 자체는 이미
+      완성된 뒤였고 그게 이 항목이 검증하려던 것이었다.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는
@@ -918,6 +1083,285 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
 9/15 인젝션 키가 매칭 실패)로 보아 신중해야 한다: 실패한 키들은 대부분 앵커가
 "##"이 아니라 다른 구조이거나 챕터가 아닌 대상(README, 부록)이었다.
 
+35. **`book-forge new`가 슬러그 충돌 시 확인 없이 기존 기획안/목차를
+    덮어쓰던 문제를 고쳤다(일반 능력 AH, SPEC.md 4부).** "주제 입력 →
+    소스 수집 → ... → Config 관리 → 최종 선정" 전 과정을 분석해달라는
+    요청 중 발견 — `ensure_project_dir()`이 `mkdir(exist_ok=True)`만 써서,
+    같은 제목으로 `book-forge new`를 두 번 실행하면 `00_기획안.md`/
+    `01_목차.md`가 경고 없이 새로 써졌다.
+    - `new_cmd.py`에서 `ensure_project_dir()`(디렉토리를 실제로 만듦) 호출
+      **전에**, `00_기획안.md` 존재 여부만 확인해 있으면
+      `click.confirm(..., default=False)`로 확인을 받는다. 거부하면
+      `SystemExit(0)`(에러가 아니라 저자가 선택한 정상 취소 — 다른
+      cancel 경로들과 같은 관례). `--force` 플래그로 확인을 건너뛸 수
+      있다(`draft`의 `--force`와 같은 이름 재사용, 자동화/스크립트용).
+    - **구현 중 발견한 진짜 함정**: 처음엔 `new_cmd.py`가
+      `from book_forge.config import get_data_dir`로 직접 import해서 썼는데,
+      기존 테스트가 `monkeypatch.setattr(config_module, "get_data_dir", ...)`로
+      **`config.py` 모듈의 속성**을 패치하는 방식이라, `new_cmd.py`가 이미
+      import 시점에 스냅샷해둔 별도 바인딩에는 그 패치가 반영되지 않는다
+      (Python의 `from X import Y`는 실시간 참조가 아니라 그 시점의 값
+      복사). `ensure_project_dir()`는 이 문제가 없었던 이유는 함수 본문이
+      `config.py` **자기 자신의** 전역 네임스페이스에서 `get_data_dir`을
+      찾기 때문 — 어느 모듈이 `ensure_project_dir`을 import해서 쓰든
+      상관없이 항상 최신 패치를 본다. 이 차이를 이용해 `config.py`에
+      `project_dir_for(slug)`(디렉토리를 안 만들고 경로만 계산) 헬퍼를
+      추가하고 `new_cmd.py`가 그걸 쓰도록 해서 우회했다 — 새 로직이
+      아니라 기존 함정을 피해가는 배선 문제였다.
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경): 같은
+      제목으로 두 번째 `new`를 실행하니 "이미 존재하는 프로젝트입니다"
+      확인 프롬프트가 뜨고, 콘솔에서 `n`을 입력하니 기존 기획안이 그대로
+      보존됐다.
+
+36. **`book-forge gate`가 책 전체가 아니라 챕터 하나만 판정하던 문제를
+    고쳤다(일반 능력 AF, SPEC.md 4부) — 이 파이프라인 분석에서 나온 가장
+    심각한 발견.** `draft_cmd.py::_draft_one_chapter()`가 챕터마다 새
+    `PerformanceMonitor`를 만들어 `draft_ch{N}.json`으로 따로 저장한다 —
+    책 전체를 누적하는 프로젝트 단위 모니터가 없었다. `gate_cmd.py`의
+    옛 `_latest_result_file()`은 `--file` 없이 부르면 mtime 기준 가장
+    최근 파일 하나만 골랐다.
+    - **실측 재현(고치기 전)**: 실제 6챕터 프로젝트(`AI_에이전트_평가_입문`)에서
+      `book-forge gate "AI_에이전트_평가_입문" --min-gate-score 0.0`을
+      실행하니 `draft_ch05.json` 하나만 게이팅됐다 — Chapter 1/2/3/4/6은
+      완전히 무시됐다(그 시점에 마지막으로 재생성한 챕터가 5였을 뿐인데도).
+    - **agent-evaluator에 이미 있는 병합 기능을 처음 실제로 썼다**: 별도
+      조사로 `PerformanceMonitor.merge()`/`.load_from_file()`가
+      `core/trackers/monitor.py`에 이미 있고(D8), `agent-eval gate` CLI
+      자체는 파일 하나만 받는 구조라는 걸 확인했다. `merge()`는
+      `self.merge(other)`가 `self`의 설정을 기준으로 한 **새 인스턴스**를
+      반환하는 순수 함수형 API라, N개 파일을 fold로 접었다:
+      `merged = load_from_file(files[0]); for f in files[1:]: merged =
+      merged.merge(load_from_file(f))`.
+    - `gate_cmd.py::_all_result_files(eval_dir)` — `eval_results/*.json`
+      전부를 모으되 `baseline.json`(`--save-baseline`이 만드는 비교
+      기준, 리포트가 아님)과 자기 자신이 만드는
+      `_merged_gate_result.json`은 제외한다 — 후자를 안 걸러내면 다음
+      `gate` 실행 때 이전 병합 결과가 또 병합 입력으로 들어가는 피드백
+      루프가 생긴다(구현하면서 바로 알아채고 처음부터 제외 목록에 넣음).
+    - **계획과 살짝 다르게 구현**: SPEC에 적을 때는 `--all` 플래그를
+      제안했지만, 실제로는 `--file` 없이 부르는 **기본 동작 자체**를
+      바꿨다 — 파일이 1개뿐이면(대부분의 초기/소규모 프로젝트) 병합 왕복
+      없이 그 파일을 그대로 쓰므로 기존 단일-챕터 프로젝트의 동작과
+      완전히 동일하다(하위 호환 깨짐 없음, `tests/test_gate_cmd.py`의
+      기존 5개 테스트가 코드 변경 없이 그대로 통과함으로 확인). `--file`을
+      명시하면 여전히 특정 챕터 하나만 다시 보고 싶을 때 쓸 수 있다.
+    - `tests/test_gate_cmd.py`에 4개 테스트 추가 — 6챕터 집계
+      (`total_tasks == 6`), baseline/이전 병합본 제외 확인(두 번 연속
+      실행해도 입력 파일 수가 안 늘어남), 단일 파일일 때 기존 동작
+      그대로임을 명시적으로 고정.
+    - 실측(실제 `AI_에이전트_평가_입문` 프로젝트 — 이 문제를 원래 발견한
+      바로 그 프로젝트): 수정 후 `book-forge gate`가 7개 파일(챕터 6개 +
+      `planning.json`)을 자동으로 집계해 `_merged_gate_result.json` 하나로
+      게이팅했다. 두 번 연속 실행해도 매번 정확히 같은 7개 파일만
+      입력으로 잡혀 피드백 루프가 없음을 확인했다. 집계된 Gate 점수(A
+      0.286 fail, D 0.164 fail, G 0.000 fail)는 어떤 단일 챕터의 점수와도
+      다르게 나왔다 — 개별 챕터 시점에는 안 보이던, 책 전체 수준에서만
+      드러나는 문제가 실제로 있었다는 뜻이라 AF가 해결하려던 문제가
+      허구가 아니었음을 다시 한번 확인해준다.
+
+37. **표지·저작권·저자 정보(front matter)를 처음으로 추가했다(일반 능력
+    AI, SPEC.md 4부).** "출판 가능한 기술 서적" 수준에 필요한 기능을
+    분석해달라는 요청 중 발견 — `BookConfig`는 `title`/`accent_color`
+    두 필드뿐이었고, `html_builder.py`/`pdf_builder.py`/`PLAN_PROMPT`
+    어디에도 저자/저작권/판 개념이 없었다(`grep` 0건 확인).
+    - **저자명을 `00_기획안.md`에 안 끼워 넣은 이유**: 그 파일은
+      `PlannerAgent`가 생성하는 순수 프로즈(`## 목적`으로 시작)에
+      `new_cmd.py`가 저장 시점에 `# {title}\n\n` 접두어만 붙인다는
+      계약이 이미 있고, `plan_cmd.py::_strip_title_h1()`이 정확히 이
+      형식을 가정해 접두어를 벗겨낸 뒤 리뷰 루프에 다시 넣는다. 저자명
+      한 줄을 그 사이에 끼워 넣으면 이 계약이 깨진다 — 완전히 별도
+      파일(`publish/front_matter.py`의 `front_matter.json`)로 분리해
+      기존 파싱/리뷰 로직을 전혀 안 건드렸다.
+    - `FrontMatter`(author/license_notice/edition, 전부 기본값 빈
+      문자열) + `load_front_matter()`/`save_front_matter()` — 전부
+      빈 값이면 파일 자체를 안 만든다(`is_empty` 가드, 기존 프로젝트에
+      영향 없음). `new_cmd.py`에 `--author`/`--license-notice`/`--edition`
+      옵션을 추가했다 — **LLM을 호출하지 않는다**, 저자가 입력한 값을
+      그대로 저장할 뿐이라 창작 대상이 아니다(환각 위험 자체가 없음).
+    - `project_utils.py::load_book_config()`가 front_matter.json을 읽어
+      `BookConfig`에 채워 넣는다. `html_builder.py::build_title_page()`가
+      제목+저자+판+저작권 고지를 `<section class="title-page">`로
+      조립한다(순수 문자열 조립, 전부 `html.escape` 처리). `<main>` 맨
+      앞, 첫 챕터 섹션 바로 앞에 삽입.
+    - **PDF는 챕터별 개별 파일 구조라 "표지"도 같은 패턴**: `pdf_builder.py`가
+      `html_builder.py`의 `build_title_page()`/`_standalone_chapter_html()`을
+      재사용해 `00_표지.pdf`라는 별도 파일을 챕터 PDF들보다 먼저 생성한다
+      (`chapter_no` 지정한 단일 챕터 재생성 모드에서는 표지를 다시 안
+      만든다 — 매번 헷갈리지 않게).
+    - **구현 중 또 발견한 같은 종류의 함정(항목 35와 동일 패턴)**:
+      `test_project_utils.py`의 새 테스트를 처음엔
+      `monkeypatch.setattr(config_module, "get_data_dir", ...)`로 짰다가
+      실패했다 — `project_utils.py::resolve_project_dir()`은 `config.py`가
+      아니라 **`project_utils.py` 자기 자신**에 import된 `get_data_dir`
+      바인딩을 쓰므로, 패치 대상도 `project_utils.get_data_dir`이어야
+      한다(기존 `test_gate_cmd.py`/`test_draft_cmd.py`가 이미 이 패턴을
+      쓰고 있었는데 새로 테스트를 짤 때 놓쳤다). **일반화된 교훈**: 이
+      프로젝트에서 `from X import get_data_dir`로 가져온 함수를 호출하는
+      코드를 테스트할 때는, 그 함수가 **정의된 모듈**이 아니라 **그
+      함수를 import해서 실제로 호출하는 모듈**의 네임스페이스를
+      패치해야 한다 — 이미 두 번(항목 35, 이번) 같은 함정에 걸렸다.
+    - 실측(실제 Ollama, 실제 Playwright, `/tmp` 격리 환경): `--author
+      김성우 --license-notice "..." --edition "1판 1쇄"`로 프로젝트를
+      만들고 HTML/PDF를 둘 다 빌드해, HTML에는 표지 섹션이 올바른 값
+      그대로 렌더링됐고 PDF에는 `00_표지.pdf`(46KB, 실제 내용 있음)가
+      챕터 PDF들보다 먼저 만들어짐을 확인했다.
+
+38. **agent-evaluator Config가 전부 하드코딩돼 있던 문제를 고쳤다(일반
+    능력 AG, SPEC.md 4부).** 데이터 수집→주제 입력→Config 관리→최종
+    판정까지 전 과정을 분석해달라는 요청 중 발견 — `LLMJudgeConfig` 계열
+    파라미터가 CLI 어디에도 노출돼 있지 않았고(플래그는 이미 존재하되
+    `build_book_monitor()`까지 실제로 이어지지 않음), Gate 가중치
+    (`gate_a_tcr_weight` 등)도 `PerformanceMonitor` 기본값 그대로 고정돼
+    있었다.
+    - **범위를 의도적으로 좁혔다**: 33개 Harness Config 전부를 CLI/설정
+      파일로 노출하는 대신, SPEC.md 자체가 제시한 두 선택지 중 더 단순한
+      쪽만 구현했다 — `new`/`draft`에 `--enable-llm-judge`/`--judge-model`
+      옵트인 플래그를 배선하고, Gate 가중치 3종(`gate_a_tcr_weight`/
+      `gate_c_tcr_weight`/`gate_b_loop_weight` — agent-evaluator가 이미
+      지원, 위 아키텍처 섹션에 문서화됨)만 `.env` 환경변수로 노출했다.
+      `book_forge_config.toml` 같은 새 설정 파일 형식은 만들지 않았다 —
+      LLM Provider 선택이 이미 `.env`를 쓰고 있어 같은 메커니즘을 재사용하는
+      편이 새 형식을 하나 더 배우게 하는 것보다 나았다.
+    - `eval/monitor.py`에 `_GATE_WEIGHT_ENV_VARS`(env 이름→kwarg 이름
+      매핑 3쌍) + `_gate_weight_overrides()`(미지정 시 건너뜀, 파싱 실패
+      시 조용히 무시 — 이 프로젝트의 "관대한 파싱" 관례와 동일)를 추가하고,
+      `build_book_monitor()`가 `**_gate_weight_overrides()`로
+      `PerformanceMonitor`에 전달한다. `new_cmd.py`/`draft_cmd.py`
+      모두에 `enable_llm_judge`/`judge_model` 파라미터를 관통시켜(이미
+      이번 세션에서 `sources`/`max_per_source`에 썼던 것과 동일한 스레딩
+      패턴) `build_book_monitor()` 호출까지 실제로 이어지게 했다 — 새
+      판정 로직은 없다, 이미 존재하던 파라미터를 실제로 연결한 것뿐.
+    - **실측 범위가 두 갈래로 갈린 이유**: agent-evaluator의 `LLMJudge`가
+      OpenAI/Anthropic 모델만 지원하고 Ollama 연동이 전혀 없음을
+      `grep -n "ollama\|Ollama" llm_judge.py` 0건으로 확인했다 — 실제
+      채점 호출을 검증하려면 유료 API 키가 필요해, 명시적 허락 없이
+      비용을 쓰지 않기로 하고 오프라인 스파이 테스트(플래그가
+      `build_book_monitor()`까지 정확히 전달되는지)로만 검증했다. Gate
+      가중치 오버라이드는 API 키가 필요 없어, 실제 `.env` 파일(
+      `BOOK_FORGE_GATE_A_TCR_WEIGHT=0.9`) → 실제 `load_config()`(HOME
+      오버라이드한 격리 환경) → `os.environ` → `PerformanceMonitor`
+      전체 경로를 몽키패치 없이 직접 실행해 `_gate_a_tcr_weight == 0.9`
+      로 반영됨을 확인했다.
+
+39. **챕터 간 기술 용어 표기 불일치를 찾아 보고하는 `book-forge lint`를
+    추가했다(일반 능력 AK, SPEC.md 4부).** 각 챕터가 독립된 LLM 호출 +
+    독립된 RAG 컨텍스트로 생성되므로 같은 대상을 챕터마다 다르게 표기할
+    구조적 위험이 있다는 점을 이 세션 중 배치 재생성에서 실제로 관찰한
+    적이 있다.
+    - **범위를 SPEC이 명시한 대로 의도적으로 좁혔다**: 전체 도서 대상의
+      NLP 기반 동의어 탐지(예: "Gate" vs "게이트" 같은 한영 개념 매칭)는
+      과설계 위험이 커서 제외했다. 대신 `code_consistency_checker.py`가
+      이미 갖고 있던 `_BACKTICK_RE`(백틱 식별자 추출)/`_BUILTIN_EXCLUSIONS`
+      (None/True 같은 표준 어휘 제외 목록)를 그대로 재사용해(새 정규식을
+      또 안 만듦), 대소문자·구두점을 지운 "접힌 키"가 같은데 실제 표기가
+      다른 경우만 후보로 잡는다 — `ToolCallAnalyzer` vs
+      `tool_call_analyzer` vs `Tool-Call-Analyzer`처럼 순수하게 구조적으로
+      판정 가능한 변형만 다룬다.
+    - 새 모듈 `agents/term_consistency_checker.py`: `find_term_variants()`가
+      (챕터 라벨, 본문) 쌍 목록을 받아 `TermVariantGroup`(접힌 키 + 표기별
+      등장 챕터 목록) 리스트를 반환한다 — 표기가 하나뿐인(이미 일관된)
+      용어는 결과에서 제외한다.
+    - 새 명령 `cli/commands/lint_cmd.py`: `book-forge lint <slug>`가
+      `load_toc()`로 전체 챕터 본문을 모아 위 함수를 호출하고, 후보
+      목록을 표기별 등장 챕터와 함께 출력한다. **자동으로 통일하지
+      않는다** — LLM이 직접 고치지 않고 저자에게 후보만 보여준다는 SPEC의
+      원칙 그대로. CI 연동이 필요할 수 있어 `--fail-on-gate-warn` 같은
+      기존 opt-in 실패 플래그 관례를 따라 `--fail-on-inconsistency`
+      (지정 시 후보가 하나라도 있으면 exit 1)만 추가했다 — 기본값은
+      항상 exit 0(보고만, 게이팅 아님).
+    - 실측(실제 `~/Documents/BookForge/projects/AI_에이전트_평가_입문`,
+      이 세션에서 AF 검증에도 썼던 실제 6챕터 프로젝트, 읽기 전용이라
+      부작용 없음): `generate_report`(Chapter 3) vs `_generate_report`
+      (Chapter 5), `Settings` vs `_settings`(둘 다 Chapter 3 안에서도
+      혼용) 두 건의 실제 표기 불일치를 찾아냈다 — LLM이 이미 실제로
+      만들어낸 드리프트를 사후에 잡아내는 첫 실증 사례.
+
+40. **책 끝 찾아보기(색인)를 자동 생성하는 `--with-index`를 HTML/PDF
+    빌드에 추가했다(일반 능력 AL, SPEC.md 4부).** 실제 기술 서적은 거의
+    항상 키워드→위치 찾아보기가 끝에 있는데, `grep`으로 "찾아보기"/
+    "색인"/"index"를 검색해도 소스 어디에도 없었다.
+    - **새 추출 규칙을 또 안 만들었다**: AK(항목 39)가 이미 검증해둔
+      `term_consistency_checker._extract_terms()`(백틱 식별자 추출 +
+      builtin 제외 + 최소 길이 필터)를 그대로 재사용한다. 새 모듈
+      `publish/book_index.py::build_index_entries(chapters)`가 챕터
+      본문을 읽어 용어별로 등장 챕터 목록을 모으고(가나다/알파벳 순
+      정렬), `html_builder.py::build_index_section()`이 그 결과를
+      `<dl>` 목록으로 렌더링한다.
+    - **PDF와 HTML의 "위치" 표현이 의도적으로 다르다**: SPEC 원문이
+      "챕터 제목→(가능하면 페이지 번호) 매핑... HTML은 페이지 개념이
+      없으므로 챕터 링크로 대체"라고 했는데, 실제로는 PDF도 챕터별
+      개별 파일 구조(표지·`.venv` 관련 이전 항목들과 동일 제약)라 파일을
+      가로지르는 진짜 페이지 번호 자체가 존재할 수 없다. 그래서
+      `build_index_section(entries, with_links=True|False)`로 한
+      함수를 공유하되: HTML(단일 파일)은 실제 `href="#chNN"` 앵커 링크,
+      PDF(챕터별 별도 파일)는 다른 파일을 가리키는 죽은 링크를 만들지
+      않도록 챕터 번호/제목 텍스트만 표기한다 — SPEC의 "가능하면"이라는
+      단서를 아키텍처 제약 안에서 정직하게 절충한 것.
+    - `book-forge build html --with-index`/`build pdf --with-index`
+      옵트인 플래그(기본 off, SPEC이 "옵트인 단계"라고 명시) — PDF는
+      AI의 표지(`00_표지.pdf`)와 같은 패턴으로 `99_찾아보기.pdf`를
+      챕터별 PDF 뒤에 별도 파일로 추가한다(`chapter_no` 지정한 단일
+      챕터 재생성 모드에서는 표지와 마찬가지로 안 만든다). 옵트인으로
+      둔 이유: 매 빌드마다 전체 챕터를 다시 읽어 용어를 재추출하는
+      추가 비용이 있고, 초안이 자주 바뀌는 동안은 색인도 자주 바뀌어
+      의미가 적다.
+    - 실측(실제 `AI_에이전트_평가_입문`, 6챕터, HTML은 원본 백업 후
+      복원해 부작용 없음, PDF는 기존에 없던 `outputs/pdf/` 디렉토리를
+      새로 만드는 순수 추가 산출물이라 원복 불필요): HTML은
+      `__repr__`/`_chunk_text`/`_generate_report` 등 실제 코드
+      식별자로 색인이 채워졌고 `href="#ch03"` 앵커가 실제 Chapter 3
+      섹션을 정확히 가리켰다. PDF는 78KB `99_찾아보기.pdf`가 6개 챕터
+      PDF 뒤 7번째 파일로 정상 생성됐다.
+
+41. **EPUB 3 출력을 추가했다(일반 능력 AJ, SPEC.md 4부, 명시적으로
+    우선순위 낮음으로 분류돼 있던 마지막 항목).** Book-forge는 HTML/PDF/
+    Slides만 만들었는데, 실제 전자책 유통(Amazon KDP, 교보문고 e-book 등)
+    채널은 대부분 EPUB을 요구한다.
+    - 새 `publish/epub_builder.py`: SPEC이 명시한 대로 `zipfile` 표준
+      라이브러리만으로 EPUB 3 컨테이너(mimetype 비압축 첫 항목 +
+      `META-INF/container.xml` + `OEBPS/content.opf` + `OEBPS/nav.xhtml` +
+      챕터별 XHTML)를 조립한다 — Playwright 같은 브라우저 의존성이 전혀
+      없다(PDF와 다른 지점, SPEC이 이미 이 차이를 명시했었음).
+      `md_to_html()`(HTML/PDF와 동일 변환 엔진)을 그대로 재사용한다.
+    - **이미지 처리가 HTML과 다른 이유**: HTML은 `embed_images_as_data_uri()`로
+      base64 인라인해 "파일 하나로 이메일 첨부/이동"이 되게 하지만, EPUB은
+      컨테이너 자체가 이미 "여러 파일을 담는 zip"이라 실제 파일로 넣는
+      쪽이 표준이다(SPEC 원문이 명시). `markdown_engine.py`에
+      `rewrite_images_for_epub()`을 새로 추가해(`embed_images_as_data_uri()`의
+      짝) img src를 `images/<챕터id>_<원본파일명>`으로 재작성하고 실제
+      파일 목록을 반환한다 — 챕터id 접두어를 붙인 이유는 서로 다른 챕터
+      디렉토리의 동일 파일명(`images/diagram.png` 등)이 EPUB의 단일
+      `images/` 폴더에서 충돌하지 않게 하기 위함.
+    - `guess_image_media_type()`을 `markdown_engine.py`에 새로 뽑아
+      `embed_images_as_data_uri()`(기존)와 EPUB manifest의 media-type
+      계산이 같은 MIME 판정 로직(`_IMG_MIME_OVERRIDES` + `mimetypes`)을
+      공유하게 리팩터링했다 — 로직 중복 없음.
+    - **계획에 없던 안전장치를 하나 추가했다**: mermaid/`@@HTML_START@@`
+      커스텀 HTML 블록은 HTML/PDF와 마찬가지로 escape 없이 원문 그대로
+      삽입되는데, EPUB 리더가 요구하는 XML 파서는 브라우저의 관대한 HTML
+      파서보다 훨씬 엄격해 짝이 안 맞는 태그 하나가 EPUB 파일 전체를 못
+      열게 만들 수 있다. `_well_formed_chapter_xhtml()`이
+      `xml.etree.ElementTree.fromstring()`으로 조립된 챕터 XHTML을
+      검증해, 실패하면 그 챕터만 escape된 원문 텍스트(`<pre>`)로 안전하게
+      대체한다 — 다른 챕터/EPUB 전체는 영향받지 않는다. 새 테스트
+      (`test_build_epub_recovers_from_malformed_raw_html_block`)로 실제
+      짝 안 맞는 태그를 넣어 이 폴백 경로를 직접 확인했다.
+    - **알려진 한계로 명시**: EPUB 리더 대부분은 리플로우 가능한 콘텐츠에서
+      JavaScript를 실행하지 않으므로(보안/UX 정책) mermaid.js CDN
+      스크립트를 애초에 EPUB XHTML head에 넣지 않았고, mermaid 다이어그램은
+      렌더링되지 않은 원본 그래프 정의 텍스트로 보인다 — PDF의 Mermaid
+      청크 잘림 한계와 같은 급의 후속 개선 과제.
+    - `book-forge build epub <slug>` 명령 추가(`BookConfig.epub_output_path`
+      프로퍼티 신설, 다른 산출물과 동일한 `outputs/<slug>.epub` 패턴).
+    - 실측(실제 `AI_에이전트_평가_입문`, 6챕터): 48KB EPUB 생성 확인,
+      `zipfile.testzip()` 무결성 통과, mimetype이 비압축 첫 항목임을 확인,
+      `content.opf`/`nav.xhtml`/챕터 6개 XHTML 전부 `ET.fromstring()`으로
+      well-formed XML 파싱 성공을 확인했다. `epubcheck`(공식 검증 도구)는
+      이 환경에 설치돼 있지 않아 돌리지 못했다 — zip 무결성 + 전체 XML
+      well-formedness는 "EPUB이 열리기라도 하는지"의 핵심 조건이라 이
+      단계에서는 충분한 신호로 판단했고, 실제 전자책 채널 제출 전에는
+      `epubcheck`로 별도 검증을 권장한다(README에 명시).
+
 ---
 
 ## 테스트 작성 규칙 (이 프로젝트에서 확립된 패턴)
@@ -933,3 +1377,16 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
 - **패키징 변경 후에는 반드시 `python -m build --wheel` + 새 venv에 설치해 회귀
   테스트한다** — editable install만으로는 `package-data` 누락을 못 잡는다
   (`editor/templates/index.html` 실제 누락 사고 확인·수정 완료).
+- **`get_data_dir` 같은 함수를 `monkeypatch.setattr`로 패치할 땐, 그 함수가
+  "정의된" 모듈이 아니라 그 함수를 import해서 "실제로 호출하는" 모듈의
+  네임스페이스를 패치해야 한다** — `from X import Y`는 실시간 참조가 아니라
+  import 시점의 값 복사라, `X.Y`를 나중에 패치해도 이미 `from X import Y`로
+  가져다 쓴 다른 모듈의 바인딩에는 반영되지 않는다. 예: `project_utils.py`가
+  `from book_forge.config import get_data_dir`로 가져와 쓰면
+  `monkeypatch.setattr(project_utils, "get_data_dir", ...)`로 패치해야지,
+  `monkeypatch.setattr(config_module, "get_data_dir", ...)`는 안 먹힌다.
+  단, 함수가 **자기 자신을 정의한 모듈 안에서** 다른 함수를 호출하는
+  경우(예: `config.py::ensure_project_dir()`이 같은 파일의
+  `get_data_dir()`을 호출)는 그 정의 모듈을 패치하면 항상 먹힌다(전역
+  네임스페이스 조회가 매번 최신 상태를 보므로) — 이 프로젝트에서 이미
+  두 번(항목 35, 37) 같은 함정에 걸렸다가 고쳤다.

@@ -17,7 +17,12 @@ _TOC_BLOCK_RE = re.compile(r"```toc\s*\n(.*?)```", re.DOTALL)
 # 일반 능력 B(콘텐츠 유형 분기) — narrative가 기본값, 나머지는 전용 생성기로 분기된다.
 # capstone: exercise("목표→코드→해설" 한 덩어리)와 달리 빈 템플릿(TODO)과 별도
 # 정답 파일 2개를 생성한다 — 독자가 실제로 풀어보는 실습/캡스톤 과제 전용.
-KNOWN_CONTENT_TYPES = ("narrative", "reference_table", "diagram", "exercise", "capstone")
+# module_reference(일반 능력 T): reference_table과 달리 RAG 검색이 아니라
+# H(구조적 코드 인덱싱)의 결정론적 모듈 목록을 그대로 다뤄 "전체 커버리지"를
+# 보장한다 — --source에 코드 저장소 디렉토리가 있을 때만 의미가 있다.
+KNOWN_CONTENT_TYPES = (
+    "narrative", "reference_table", "diagram", "exercise", "capstone", "module_reference",
+)
 
 
 @dataclass(frozen=True)
