@@ -10,6 +10,7 @@ from book_forge.cli.commands.edit_cmd import edit
 from book_forge.cli.commands.gate_cmd import gate
 from book_forge.cli.commands.home_cmd import home
 from book_forge.cli.commands.init_cmd import init
+from book_forge.cli.commands.knowledge_cmd import knowledge
 from book_forge.cli.commands.new_cmd import new
 from book_forge.cli.commands.plan_cmd import plan
 from book_forge.cli.commands.review_cmd import review
@@ -35,6 +36,7 @@ cli.add_command(home)
 cli.add_command(plan)
 cli.add_command(chat)
 cli.add_command(review)
+cli.add_command(knowledge)
 
 
 def _make_stub(name: str, milestone: str, summary: str) -> click.Command:

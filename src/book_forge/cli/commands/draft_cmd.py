@@ -73,6 +73,35 @@ _STRICT_CONTENT_TYPES = {"exercise", "diagram", "capstone"}
 _STRICT_COVERAGE_BONUS = 0.15
 _SOLUTION_SUFFIX = "_정답"
 
+# 일반 능력 N(범위 축소판) — 리서치 에이전트 전체 대신, 저자가 이미 --source로
+# 지정한 URL 중 실제로 top-k에 뽑혀 챕터 생성에 쓰인 것만 인용 목록으로 조립한다.
+_URL_SOURCE_TAG_PREFIX = "# 출처: "
+
+
+def _cited_url_sources(scored: list[tuple[str, float]]) -> list[str]:
+    """실제로 검색된 청크 중 URL 소스(``# 출처:`` 태그)만 중복 없이, 순서대로 뽑는다.
+
+    LLM이 만드는 게 아니라 draft_cmd.py가 코드로 조립한다 — 환각(존재하지 않는
+    출처를 지어내는 것) 위험이 없다. sources.py가 매 청크에 태그를 다시 붙이도록
+    고친 것(Spec K)이 이 함수의 전제 조건이다 — 그 전이었다면 여러 청크로 쪼개진
+    긴 페이지의 두 번째 청크부터는 태그가 없어 인용이 누락됐을 것이다.
+    """
+    seen: list[str] = []
+    for chunk, _score in scored:
+        if not chunk.startswith(_URL_SOURCE_TAG_PREFIX):
+            continue
+        url = chunk[len(_URL_SOURCE_TAG_PREFIX) :].split("\n", 1)[0].strip()
+        if url and url not in seen:
+            seen.append(url)
+    return seen
+
+
+def _append_references_section(draft_md: str, urls: list[str]) -> str:
+    if not urls:
+        return draft_md
+    references = "\n".join(f"- {url}" for url in urls)
+    return draft_md.rstrip() + "\n\n## 참고 자료\n" + references + "\n"
+
 
 class _SourcePath(click.ParamType):
     """--source 값 검증 — http(s):// URL은 그대로 통과, 그 외엔 실제 존재하는 로컬 경로여야 한다."""
@@ -141,6 +170,7 @@ def run_batch_draft(
     min_coverage: float = 0.5,
     check_package: Optional[str] = None,
     execute_examples: bool = False,
+    max_per_source: Optional[int] = None,
 ) -> list["ChapterDraftResult"]:
     """미집필 챕터 목록을 순회하며 배치 정책(저커버리지 스킵+리포트)으로 RAG 초안을 생성한다.
 
@@ -154,7 +184,7 @@ def run_batch_draft(
                 rc, store, llm, project_dir,
                 top_k=top_k, min_coverage=min_coverage,
                 yes=False, batch_mode=True, check_package=check_package,
-                execute_examples=execute_examples,
+                execute_examples=execute_examples, max_per_source=max_per_source,
             )
         )
     return results
@@ -173,6 +203,11 @@ def run_batch_draft(
 @click.option(
     "--min-coverage", type=float, default=0.5, show_default=True,
     help="생성 전 평균 소스 유사도 임계값 (참고용 휴리스틱 — 임베딩 모델마다 절대값 신뢰도가 다를 수 있음)",
+)
+@click.option(
+    "--max-per-source", type=int, default=None,
+    help="한 소스(파일/URL)가 top_k 검색 결과에서 차지할 수 있는 최대 청크 수 "
+         "(옵트인, 미지정 시 제한 없음 — 크기가 큰 소스 하나가 검색 결과를 지배하는 걸 방지)",
 )
 @click.option("--yes", "-y", is_flag=True, help="[단일 모드] 커버리지가 낮아도 확인 없이 진행")
 @click.option("--force", is_flag=True, help="기존에 집필된 챕터도 덮어쓰기")
@@ -195,6 +230,7 @@ def draft(
     sources: tuple,
     top_k: int,
     min_coverage: float,
+    max_per_source: Optional[int],
     yes: bool,
     force: bool,
     check_package: Optional[str],
@@ -257,6 +293,7 @@ def draft(
         results = run_batch_draft(
             targets, store, llm, config.project_dir, top_k=top_k, min_coverage=min_coverage,
             check_package=check_package, execute_examples=execute_examples,
+            max_per_source=max_per_source,
         )
         _print_batch_summary(results)
     else:
@@ -264,6 +301,7 @@ def draft(
             targets[0], store, llm, config.project_dir,
             top_k=top_k, min_coverage=min_coverage, yes=yes, batch_mode=False,
             check_package=check_package, execute_examples=execute_examples,
+            max_per_source=max_per_source,
         )
 
 
@@ -279,13 +317,16 @@ def _draft_one_chapter(
     batch_mode: bool,
     check_package: Optional[str] = None,
     execute_examples: bool = False,
+    max_per_source: Optional[int] = None,
 ) -> ChapterDraftResult:
     result = ChapterDraftResult(
         chapter_no=rc.spec.chapter_no, chapter_title=rc.spec.chapter_title, status="cancelled"
     )
 
     click.echo(f"🔍 '{rc.spec.chapter_title}' 관련 청크 검색 중 (top_k={top_k})...")
-    scored = store.query_with_scores(rc.spec.chapter_title, top_k=top_k)
+    scored = store.query_with_scores(
+        rc.spec.chapter_title, top_k=top_k, max_per_source=max_per_source
+    )
     if not scored:
         click.echo("  검색된 소스 청크가 없습니다 — 건너뜁니다.")
         return result
@@ -398,6 +439,8 @@ def _draft_one_chapter(
             ground_truth=rc.spec.chapter_title,
             content_type=rc.spec.content_type,
         )
+
+    draft_md = _append_references_section(draft_md, _cited_url_sources(scored))
 
     rc.path.parent.mkdir(parents=True, exist_ok=True)
     rc.path.write_text(draft_md, encoding="utf-8")

@@ -27,6 +27,7 @@ from __future__ import annotations
 import builtins
 import dataclasses
 import importlib
+import pkgutil
 import re
 import typing
 from pathlib import Path
@@ -111,6 +112,43 @@ def _resolve_dotted(root_module, path: list[str]) -> bool:
         if obj is None and attr != path[-1]:
             return False
     return True
+
+
+# target_package별 서브모듈 심볼 테이블 캐시(Spec L) — walk_packages는 서브모듈을
+# 전부 import하므로 챕터마다 반복하면 느리다. 최상위 __name__을 키로 캐시한다.
+_package_symbol_cache: dict[str, set[str]] = {}
+
+
+def _walk_package_symbols(root_module) -> set[str]:
+    """target_package 산하 전체 서브모듈을 순회해 공개 멤버 이름을 평평하게 모은다(Spec L).
+
+    ``importlib.import_module(target_package)``만으로는 최상위 네임스페이스에
+    재노출된 이름만 보인다 — 실측 확인: `Settings`(agent_evaluator.config),
+    `KoreanRAGDatasetGenerator`(agent_evaluator.datasets), `LiveGuardrail`
+    (agent_evaluator.gates.live_guardrail)는 전부 실존하는 클래스인데 최상위
+    재노출이 없어 `_resolve_dotted`가 매번 오탐(없음)으로 판정했다. 이 함수는
+    로컬 모드(verify_code_consistency_local)가 이미 쓰는 "평평한 심볼 테이블"
+    아이디어를 설치된 패키지 서브모듈 전체로 확장한 것 — 새 파싱 로직이 아니라
+    같은 발상의 재사용이다.
+    """
+    name = getattr(root_module, "__name__", None)
+    if name is not None and name in _package_symbol_cache:
+        return _package_symbol_cache[name]
+
+    symbols: set[str] = set(n for n in dir(root_module) if not n.startswith("_"))
+    package_path = getattr(root_module, "__path__", None)
+    if package_path is not None:
+        prefix = root_module.__name__ + "."
+        for _finder, module_name, _is_pkg in pkgutil.walk_packages(package_path, prefix):
+            try:
+                module = importlib.import_module(module_name)
+            except Exception:
+                continue  # 선택적 의존성 등으로 로드 실패한 서브모듈은 건너뛴다
+            symbols.update(n for n in dir(module) if not n.startswith("_"))
+
+    if name is not None:
+        _package_symbol_cache[name] = symbols
+    return symbols
 
 
 def verify_code_consistency_local(draft_md: str, *, target_dir: Path) -> VerificationResult:
@@ -231,8 +269,19 @@ def verify_code_consistency(draft_md: str, *, target_package: str) -> Verificati
 
     for symbol in _extract_backtick_symbols(draft_md):
         checked += 1
-        if not _resolve_dotted(root_module, symbol.split(".")):
-            issues.append(f"본문이 언급한 `{symbol}` — {target_package}에서 확인되지 않습니다.")
+        path = symbol.split(".")
+        if _resolve_dotted(root_module, path):
+            continue
+        # 서브모듈 전체 재확인(Spec L)은 "최상위 클래스/함수 이름 자체"가
+        # target_package 어딘가에 실존하는지만 본다 — `ScopeConfig.path`처럼
+        # base(ScopeConfig)는 최상위에 있는데 딸린 필드가 없는 경우까지 이
+        # 폴백으로 구제하면 진짜 오탐(존재하지 않는 필드)을 놓친다. base가
+        # 애초에 최상위에서 안 보일 때만(재노출 누락 케이스) 폴백을 적용한다.
+        if not _has_attr_or_field(root_module, path[0]) and path[0] in _walk_package_symbols(
+            root_module
+        ):
+            continue
+        issues.append(f"본문이 언급한 `{symbol}` — {target_package}에서 확인되지 않습니다.")
 
     if checked == 0:
         return VerificationResult(

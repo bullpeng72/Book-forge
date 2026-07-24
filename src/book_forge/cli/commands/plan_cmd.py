@@ -16,7 +16,7 @@ from book_forge.config import load_config
 from book_forge.eval.monitor import build_book_monitor
 from book_forge.exceptions import BookForgeError
 from book_forge.llm.provider import create_llm
-from book_forge.models import parse_toc_manifest
+from book_forge.models import append_toc_revision_entries, parse_toc_manifest
 from book_forge.publish.toc_loader import load_toc
 
 
@@ -91,9 +91,11 @@ def plan(slug: str, revise_flag: bool) -> None:
     click.echo(f"\n✅ 기획안 갱신: {proposal_path}")
 
     click.echo("\n📋 기존 목차 검토")
+    toc_feedback_log: list[str] = []
     toc_md = run_review_loop(
         kind="toc", initial_md=toc_md, revise_fn=revise,
         render=render, ask_feedback=lambda: ask_feedback("목차 검토"),
+        on_feedback=toc_feedback_log.append,
     )
 
     try:
@@ -102,6 +104,11 @@ def plan(slug: str, revise_flag: bool) -> None:
         click.echo(f"\n❌ 목차 파싱 실패: {exc}")
         click.echo("   목차를 저장하지 않았습니다 — 기존 01_목차.md는 그대로입니다.")
         raise SystemExit(1) from exc
+
+    # 일반 능력 O: 피드백 없이 바로 승인된 경우(toc_feedback_log 비어있음)는
+    # 개정이 아니므로 기록하지 않는다.
+    if toc_feedback_log:
+        toc_md = append_toc_revision_entries(toc_md, toc_feedback_log)
 
     toc_path.write_text(toc_md, encoding="utf-8")
     click.echo(f"\n✅ 목차 갱신: {toc_path} ({len(new_specs)}개 챕터)")

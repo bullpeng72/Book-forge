@@ -634,6 +634,175 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       사용자 `.env`/실제 프로젝트로도 최소 1회는 돌려봐야 이런 모델별 실패
       모드를 잡는다.
 
+26. **`book-forge plan --revise`는 목차 개정 이력을 이제 `01_목차.md`에
+    자동으로 남긴다(일반 능력 O, SPEC.md 항목 O)** — Media/AOO의 목차
+    파일이 "2026-07-14 개정 ①/②/③"처럼 날짜별 변경 사유를 누적 기록하는
+    관행을 참고해, 기존엔 조용히 덮어쓰던 `01_목차.md`에 같은 관행을
+    자동화했다.
+    - `agents/review_loop.py::run_review_loop()`에 옵트인 `on_feedback`
+      콜백을 추가했다 — 승인으로 끝난 라운드(피드백 없음)는 호출되지 않고,
+      실제로 개정을 유발한 라운드의 피드백 원문만 전달된다.
+    - `models.py::append_toc_revision_entries()` — `on_feedback`이 모은
+      피드백 목록을 받아 `## 개정 이력` 섹션을 문자열 조작만으로 갱신한다
+      (마크다운 재파싱 없음, 새 LLM 호출 없음). 기존 섹션이 있으면
+      기존 항목 뒤에 이어붙이고, 없으면 파일 맨 위에 새로 만든다.
+    - `plan_cmd.py`는 `toc_feedback_log: list[str]`을 `on_feedback`으로
+      연결하고, 목차를 파일에 쓰기 직전 `toc_feedback_log`가 비어있지 않을
+      때만(=피드백 없이 바로 승인된 경우 제외) `append_toc_revision_entries()`를
+      호출한다.
+    - **빌드 파이프라인에 영향 없음**: 사이드바/챕터 목록은
+      `parse_toc_manifest()`가 ` ```toc ` 코드 블록만 정규식으로 뽑아내므로,
+      그 위에 붙는 `## 개정 이력` H2 헤딩은 무시된다 — 실측으로
+      `book-forge build html`이 개정 이력이 붙은 목차에서도 정상 동작함을
+      확인했다.
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경): 6챕터
+      목차를 승인한 뒤 `plan --revise`에서 "목차를 4개 챕터로 줄여줘"라고
+      피드백을 주니, 목차가 실제로 4챕터로 줄어들며 `01_목차.md` 맨 위에
+      `## 개정 이력\n- **2026-07-24**: 목차를 4개 챕터로 줄여줘`가 정확히
+      기록됐다.
+
+27. **`agents/prompts.py`의 `DRAFT_PROMPT`/`DRAFT_PROMPT_EXERCISE`에 고정 섹션
+    두 개를 추가했다(일반 능력 M, SPEC.md 항목 M)** — Media/AOO의 모든
+    챕터가 공유하는 "학습 목표 → 본문 → 핵심 요약" 틀과 달리, 기존
+    `DRAFT_PROMPT`는 "`# Chapter N: 제목`으로 시작, `## `로 소제목만
+    나누라"는 최소 지시뿐이라 챕터마다 절 구성이 제각각이었다.
+    - 본문 시작에 `## 이 챕터에서 배우는 것`(2~3개 불릿), 본문 끝에
+      `## 이 챕터의 핵심`(3개 내외 불릿)을 요구하도록 두 프롬프트를 모두
+      수정했다. exercise의 기존 `## 목표`/`## 실습`/`## 해설` 지시는
+      그대로 유지하고 앞뒤에만 새 섹션을 끼워 넣었다.
+    - **의도적으로 뺀 것**: "대상 독자"(기획안 단계와 중복), 페르소나별
+      TIP 박스, "다음 챕터" 링크(다권 전체의 순서/페르소나 정보가 챕터
+      단위 프롬프트엔 없어 프롬프트만으로 신뢰성 있게 못 만든다 — 억지로
+      만들면 부정확한 링크가 나올 위험, 정직한 스코프 축소).
+    - **검증 없음, 프롬프트 지시일 뿐**: `demonstration_verifier.py`는 이
+      두 섹션의 존재를 검사하지 않는다 — Gate C(HallucinationDetector)
+      범위 밖이고, 강제하면 소스가 빈약한 챕터에서 거짓 요약을 억지로
+      만들어낼 위험이 검증 부재보다 더 나쁘다고 판단했다.
+    - `tests/test_chapter_drafter.py`의 기존 회귀
+      (``"`## `로 소제목을 나누어" in result``)가 계속 통과하도록 그
+      정확한 문구를 새 구조 안에도 그대로 유지했다 — 프롬프트 문구
+      자체를 검증하는 테스트라 문구를 지우면 깨진다.
+    - 실측(실제 Ollama, `qwen3-coder:latest`, `/tmp` 격리 환경): 변수/자료형
+      챕터를 `--source`로 생성하니 정확히 `## 이 챕터에서 배우는 것`(3개
+      불릿)으로 시작해 본문을 거쳐 `## 이 챕터의 핵심`(3개 불릿)으로
+      끝나는 걸 확인했다.
+
+28. **`KnowledgeStore.query_with_scores(max_per_source=...)`(일반 능력 K,
+    SPEC.md 항목 K)를 구현하다가, 그 전제 조건인 `sources.py`의 청크 태깅이
+    애초에 깨져 있었다는 걸 발견해 같이 고쳤다.** 실전 Chapter 3 집필에서
+    `quick_eval.py`(ANSI 색상 헬퍼) 청크가 61%를 차지해 검색 결과를
+    지배하며 엉뚱한 주제로 챕터가 생성된 걸 실측으로 확인했었다(이전
+    세션 기록) — `max_per_source`로 소스별 상한을 두는 것까지는 계획대로였다.
+    - **구현 중 발견한 선행 버그**: `load_code_repo_source()`가 파일 전체
+      앞에 `# 파일: xxx` 태그를 붙인 **뒤** `chunk_text()`로 잘랐다 — 그러면
+      여러 청크로 쪼개지는 큰 파일은 첫 청크만 태그를 갖고 나머지는 태그가
+      없다. `max_per_source`는 이 태그로 소스를 식별하므로, 정작 잡아야 할
+      대형 파일(quick_eval.py 같은)의 청크 대부분을 식별하지 못해 조용히
+      무력화된다 — 재현 스크립트로 실측: `quick_eval.py`를 195개 청크로
+      쪼갰을 때 태그가 남은 건 1개뿐이었다. `load_url_source()`도 같은
+      패턴(`# 출처: url` 태그)으로 같은 문제를 갖고 있었다.
+    - **수정**: `_tag_each_chunk(chunks, tag)`를 추가해, 먼저 `chunk_text()`로
+      자른 뒤 매 청크 앞에 태그를 다시 붙이도록 두 함수를 고쳤다(청크가
+      약간 길어지는 것 외 부작용 없음). `knowledge/lifecycle.py`의
+      `summarize_store()`(항목 25, J)도 같은 태그를 쓰므로 이 수정으로
+      같이 정확해졌다.
+    - `store.py::query_with_scores()`는 `max_per_source=None`(기본,
+      기존 동작 그대로)이면 원래 top_k만 반환하고, 정수가 주어지면
+      순위대로 훑으며 소스별 카운트가 상한을 넘는 청크는 건너뛴다. 태그
+      없는 청크(PDF 등)는 식별이 안 되므로 무조건 통과(안전한 폴백).
+    - `draft_cmd.py`에 `--max-per-source N` 옵트인 CLI 옵션을 추가해
+      `_draft_one_chapter()`/`run_batch_draft()`를 거쳐
+      `query_with_scores()`까지 그대로 전달했다.
+    - 실측(실제 Ollama 임베딩, agent_evaluator 자신의 `quick_eval.py`
+      (195개 청크)/`metric_adapters.py`/`framework_integrations.py` 3개
+      파일로 원래 실측 사례 재현): 수정 전엔 태그 무력화 때문에
+      `max_per_source=2`를 줘도 top_k=8 결과가 여전히 8개 전부
+      `quick_eval.py`였다 — 태깅 수정 후 재현하니 `quick_eval.py` 2개,
+      `framework_integrations.py` 2개, `metric_adapters.py` 2개로 정확히
+      분산됐다. 이 확인 없이는(재현 스크립트를 실제 Ollama로 두 번 돌려
+      전후를 비교하지 않았다면) 태깅 버그를 놓치고 "구현 완료"로 잘못
+      보고했을 뻔했다.
+
+29. **`book-forge draft`가 URL 소스로 챕터를 생성하면 `## 참고 자료` 섹션을
+    자동으로 붙인다(일반 능력 N, SPEC.md 항목 N — 범위를 의도적으로 좁힌
+    버전).** Media/AOO 대비 품질 분석에서 나온 가장 큰 격차(진짜 웹 검색
+    자동화)를 그대로 구현하지 않고, "저자가 이미 --source로 지정한 URL
+    중 실제로 쓰인 것만 인용 목록으로 조립"까지로 스코프를 축소했다 —
+    검색 자동화는 API 키/외부 서비스 의존성이 얽혀 이 라운드의 다른
+    항목들과 성격이 달라 별도 후속 항목으로 미뤘다.
+    - `draft_cmd.py::_cited_url_sources(scored)` — `query_with_scores()`가
+      실제로 top-k에 뽑은 청크 중 `# 출처:` 태그로 시작하는 것만 중복 없이
+      순서대로 뽑는다. `_append_references_section(draft_md, urls)` — 빈
+      목록이면 no-op, 아니면 챕터 본문 끝에 `## 참고 자료` 섹션을 붙인다.
+      둘 다 LLM을 호출하지 않는다 — "출처를 나열해달라"고 LLM에게
+      요청하면 존재하지 않는 출처를 지어낼 환각 위험이 있어, draft_cmd.py가
+      이미 알고 있는 태그 정보만으로 코드로 직접 조립했다.
+    - **항목 28(K)의 태깅 수정이 이 기능의 실질적 전제 조건이었다**:
+      `sources.py`가 매 청크에 태그를 다시 붙이도록 고치기 전이었다면,
+      여러 청크로 쪼개지는 긴 웹페이지는 첫 청크만 인용되고 나머지는
+      누락됐을 것이다 — K를 먼저 고친 순서가 우연히 N에도 도움이 됐다.
+    - 콘텐츠 유형(narrative/reference_table/diagram/exercise/capstone)과
+      무관하게 전부 적용된다 — `_draft_one_chapter()`의 content_type 분기
+      **이후**, 파일 쓰기 **직전**에 `scored`(분기 이전에 이미 계산된
+      검색 결과)를 그대로 재사용해 붙이므로 새 검색 호출이 없다.
+    - 오프라인 `CliRunner` 테스트(`test_draft_appends_references_section_for_url_sources`)로
+      `--source https://...`가 실제로 챕터 파일 말미에 `## 참고 자료`를
+      붙이는 것까지 확인했다 — 이 기능은 결정론적 후처리(LLM 출력에
+      의존하지 않음)라 실제 Ollama E2E보다 오프라인 테스트가 더 적합하다고
+      판단해 별도 실측은 생략했다(K 항목에서 이미 태깅 메커니즘 자체는
+      실제 Ollama 임베딩으로 검증됨).
+
+24. **`agents/code_consistency_checker.py`의 설치된-패키지 모드는 최상위
+    네임스페이스만 보는 한계가 있었다(SPEC.md 항목 L) — `_walk_package_symbols()`로
+    서브모듈 전체를 스캔하는 폴백을 추가해 고쳤다.** 실전 6챕터 집필
+    (`AI_에이전트_평가_입문` 프로젝트)에서 `Settings`(agent_evaluator.config),
+    `KoreanRAGDatasetGenerator`(agent_evaluator.datasets),
+    `LiveGuardrail`(agent_evaluator.gates.live_guardrail) 세 번 모두 실존하는
+    클래스인데 `agent_evaluator` 최상위에 재노출이 안 됐다는 이유만으로
+    오탐(없음)이 났다 — `importlib.import_module(target_package)` +
+    `hasattr()`은 딱 그 모듈 객체가 들고 있는 속성만 보기 때문이다.
+    - **수정**: `pkgutil.walk_packages()`로 target_package 산하 서브모듈을
+      전부 import해 공개 멤버 이름을 평평한 집합으로 모으는
+      `_walk_package_symbols()`(모듈별 1회만 계산 후 캐시)를 추가했다. 백틱
+      심볼 체크에서 `_resolve_dotted(root_module, path)`가 실패해도, **path의
+      첫 세그먼트가 애초에 최상위에 없는 경우에만**(재노출 누락 케이스) 이
+      평평한 테이블로 재확인한다.
+    - **의도적으로 좁힌 범위**: `ScopeConfig`가 최상위에 있지만
+      `ScopeConfig.path`처럼 실제로 없는 필드를 언급한 경우는 이 폴백을
+      타지 않는다 — base(`ScopeConfig`)가 최상위에서 이미 보이므로 원래
+      경로(`_resolve_dotted`)로 판정이 끝나고, 폴백은 "base 자체가 안 보일
+      때"만 개입한다. 폴백을 무조건 적용했다면 `ScopeConfig.path` 같은 진짜
+      오류(`tests/test_code_consistency_checker.py::test_verify_code_consistency_catches_nonexistent_field_reference`)를
+      놓쳤을 것 — 실제로 처음 구현했을 때 이 회귀가 나서 조건을 좁혔다.
+      import 문(`from X import Y`) 체크는 원래부터 `importlib.import_module(module_path)`로
+      정확한 서브모듈을 직접 import하므로 이 문제와 무관하다(백틱 심볼
+      체크만 해당).
+    - 로컬 모드(`verify_code_consistency_local`, 일반 능력 I)는 원래부터
+      "평평한 심볼 테이블" 방식이었다 — 이번 수정은 그 발상을 설치된
+      패키지 모드로 확장한 것뿐, 새 판정 로직이 아니다.
+
+25. **`book-forge knowledge status`/`reset`(일반 능력 J, SPEC.md 항목 J)는
+    `KnowledgeStore.add()`가 중복 제거를 안 하고 `collect_sources_into_store()`가
+    항상 append만 하는 구조적 한계를 CLI 레벨에서 우회한다.** 실전 6챕터
+    집필(`AI_에이전트_평가_입문`) 중 OpenCode 플러그인 TS 파일이 한 번 섞여
+    들어간 뒤 그 심볼(`EventSessionIdle` 등)이 이후 여러 챕터의 검색 결과를
+    계속 오염시키는 걸 실측으로 겪었다 — 당시 유일한 해결책은
+    `knowledge/store.json`을 직접 `rm`하는 것뿐이었다.
+    - `knowledge/lifecycle.py::summarize_store()` — 청크의 `# 파일:`/`# 출처:`
+      태그(`sources.py`가 이미 청크 앞에 붙이던 것)를 정규식으로 역파싱해
+      소스별 청크 수를 센다. 새 태깅 로직이 아니라 기존 태그의 재활용이다.
+    - `cli/commands/knowledge_cmd.py` — `status`는 `summarize_store()` 결과를
+      출력만 하고, `reset`은 `store_path.unlink()`뿐이다(확인 프롬프트 기본,
+      `--yes`로 스킵). 둘 다 판정 로직이 없어 새 회귀 위험이 거의 없다.
+    - **집계는 정확한 감사가 아니라 참고용**: `chunk_text()`의 overlap
+      크기에 따라 파일 하나의 두 번째 이후 청크엔 태그 줄이 안 남을 수
+      있고, PDF 소스는 애초에 태깅하지 않는다 — 태그를 못 찾은 청크는
+      "(태그 없음)"으로 묶는다. 실측(`AI_에이전트_평가_입문` 실제 스토어,
+      83개 청크)으로 확인: 태그가 남은 건 5개뿐(78개가 "(태그 없음)")이라
+      이 한계가 실제로 두드러진다 — 향후 정확도를 높이려면 태그를 매
+      청크 앞에 반복해서 붙이는 쪽으로 `sources.py`를 바꿔야 하지만, 이번
+      범위(J)는 "있는 태그를 최대한 활용한 참고용 요약"까지만 다룬다.
+
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
 `@agent_eval`로 감싼 함수가 `(response, EvalMetadata(...))` 튜플을 반환해도, **호출자는

@@ -2,7 +2,12 @@
 import pytest
 
 from book_forge.exceptions import TocParseError
-from book_forge.models import ChapterSpec, parse_toc_manifest, slugify
+from book_forge.models import (
+    ChapterSpec,
+    append_toc_revision_entries,
+    parse_toc_manifest,
+    slugify,
+)
 
 VALID_TOC = """## Part 1. 기초
 - Chapter 1. 서론
@@ -84,3 +89,47 @@ def test_parse_toc_manifest_unknown_content_type_falls_back_to_narrative() -> No
 def test_parse_toc_manifest_six_fields_raises() -> None:
     with pytest.raises(TocParseError, match="형식 오류"):
         parse_toc_manifest("```toc\n1|기초|1|제목|narrative|여분필드\n```")
+
+
+def test_append_toc_revision_entries_creates_section_when_missing() -> None:
+    result = append_toc_revision_entries(VALID_TOC, ["더 짧게"], today="2026-07-24")
+    assert result.startswith("## 개정 이력\n- **2026-07-24**: 더 짧게\n\n## Part 1. 기초")
+
+
+def test_append_toc_revision_entries_appends_to_existing_section() -> None:
+    once = append_toc_revision_entries(VALID_TOC, ["더 짧게"], today="2026-07-14")
+    twice = append_toc_revision_entries(once, ["표현만 다듬어줘"], today="2026-07-24")
+
+    lines = twice.splitlines()
+    header_idx = lines.index("## 개정 이력")
+    assert lines[header_idx + 1] == "- **2026-07-14**: 더 짧게"
+    assert lines[header_idx + 2] == "- **2026-07-24**: 표현만 다듬어줘"
+    assert lines[header_idx + 3] == ""  # 개정 이력과 목차 본문 사이 구분용 빈 줄
+    assert lines[header_idx + 4] == "## Part 1. 기초"
+    # 기존 목차 매니페스트는 그대로 보존돼야 한다.
+    assert "```toc" in twice
+    assert twice.count("## Part 1. 기초") == 1
+
+
+def test_append_toc_revision_entries_records_multiple_feedback_in_one_call() -> None:
+    result = append_toc_revision_entries(
+        VALID_TOC, ["첫 번째 요청", "두 번째 요청"], today="2026-07-24"
+    )
+    assert "- **2026-07-24**: 첫 번째 요청" in result
+    assert "- **2026-07-24**: 두 번째 요청" in result
+
+
+def test_append_toc_revision_entries_truncates_long_feedback() -> None:
+    long_feedback = "가" * 300
+    result = append_toc_revision_entries(VALID_TOC, [long_feedback], today="2026-07-24")
+    entry_line = next(line for line in result.splitlines() if line.startswith("- **"))
+    assert len(entry_line) < len(long_feedback)
+    assert entry_line.endswith("…")
+
+
+def test_append_toc_revision_entries_empty_list_is_effectively_noop_content() -> None:
+    # 호출 자체는 허용하지만(호출자 책임은 plan_cmd.py가 짐), 항목이 없으면
+    # 빈 헤더만 추가된다 — 실제 사용처(plan_cmd.py)는 feedback_entries가 비어
+    # 있으면 아예 호출하지 않는다.
+    result = append_toc_revision_entries(VALID_TOC, [], today="2026-07-24")
+    assert result.startswith("## 개정 이력\n\n## Part 1. 기초")

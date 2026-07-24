@@ -83,3 +83,25 @@ def test_verify_code_consistency_reports_import_error_for_unknown_package() -> N
     result = verify_code_consistency("아무 내용", target_package="이런_패키지는_없다_xyz")
     assert result.passed is False
     assert "import할 수 없습니다" in result.detail
+
+
+def test_verify_code_consistency_resolves_symbols_not_reexported_at_top_level() -> None:
+    # Spec L 재현 케이스: 실전에서 Settings/KoreanRAGDatasetGenerator/LiveGuardrail이
+    # 전부 agent_evaluator 최상위에 재노출 안 됐다는 이유만으로 "없음"으로 오탐났다
+    # (실제로는 각각 agent_evaluator.config / .datasets / .gates.live_guardrail에 존재).
+    draft = (
+        "`Settings` 클래스는 환경변수를 읽는다. "
+        "`KoreanRAGDatasetGenerator`는 한국어 QA 쌍을 생성한다. "
+        "`LiveGuardrail`은 도구 호출 전 위험을 차단한다."
+    )
+    result = verify_code_consistency(draft, target_package="agent_evaluator")
+    assert result.passed is True
+    assert not result.issues
+
+
+def test_verify_code_consistency_still_catches_symbol_missing_from_whole_package() -> None:
+    # 서브모듈 전체 스캔으로도 진짜 없는 심볼은 여전히 잡아야 한다(회귀 방지).
+    draft = "`ThisClassDoesNotExistAnywhere`는 존재하지 않습니다."
+    result = verify_code_consistency(draft, target_package="agent_evaluator")
+    assert result.passed is False
+    assert any("ThisClassDoesNotExistAnywhere" in issue for issue in result.issues)

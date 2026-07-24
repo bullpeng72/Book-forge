@@ -52,6 +52,7 @@ def run_review_loop(
     revise_fn: ReviseFn,
     render: Callable[[str], None],
     ask_feedback: Callable[[], str],
+    on_feedback: Callable[[str], None] | None = None,
 ) -> str:
     """초안을 보여주고, 승인될 때까지 피드백을 반영해 재생성한다.
 
@@ -60,6 +61,10 @@ def run_review_loop(
     위해 최신 초안으로 강제 진행한다 (LoopDetectionConfig는 "같은 피드백의
     반복"만 잡지, 라운드 수 자체를 제한하지 않으므로 이 상한은 애플리케이션
     레벨의 별도 안전장치다).
+
+    on_feedback(옵트인, Spec O): 실제로 개정을 유발한 각 피드백 원문을
+    호출자에게 그대로 전달한다 — plan_cmd.py가 목차 개정 이력을 기록할 때
+    쓴다. 승인으로 끝난 라운드(피드백 없음)는 호출되지 않는다.
     """
     current = initial_md
     round_no = 0
@@ -70,6 +75,8 @@ def run_review_loop(
         feedback = ask_feedback()
         if not feedback or feedback.strip().lower() in {"y", "yes", "승인", "ok"}:
             return current
+        if on_feedback is not None:
+            on_feedback(feedback)
         round_no += 1
         current = revise_fn(
             current_md=current,

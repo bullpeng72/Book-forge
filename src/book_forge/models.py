@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 
 from book_forge.exceptions import TocParseError
 
@@ -95,3 +96,49 @@ def parse_toc_manifest(toc_markdown: str) -> list[ChapterSpec]:
     if not chapters:
         raise TocParseError("```toc 블록이 비어 있습니다.")
     return chapters
+
+
+_REVISION_LOG_HEADER = "## 개정 이력"
+_REVISION_ENTRY_MAX_CHARS = 200
+_NEXT_H2_RE = re.compile(r"\n##\s")
+
+
+def append_toc_revision_entries(
+    toc_markdown: str, feedback_entries: list[str], *, today: str | None = None
+) -> str:
+    """저자 피드백 원문을 목차 파일 맨 위 "## 개정 이력" 섹션에 날짜와 함께 누적한다
+    (일반 능력 O, SPEC.md 항목 O — Media/AOO의 목차 개정 이력 관행을 자동화).
+
+    요약은 만들지 않는다(LLM 재호출 없음) — 피드백 원문을 그대로(길면 앞부분만
+    잘라) 한 줄로 기록한다. plan_cmd.py가 `run_review_loop(on_feedback=...)`로
+    모은, 실제로 개정을 유발한 피드백만 여기 들어온다 — 피드백 없이 바로
+    승인된 경우 feedback_entries가 비어 호출 자체가 없다(호출자 책임).
+    """
+    entry_date = today or date.today().isoformat()
+    new_lines = [f"- **{entry_date}**: {_truncate_revision_entry(fb)}" for fb in feedback_entries]
+
+    if _REVISION_LOG_HEADER in toc_markdown:
+        header_idx = toc_markdown.index(_REVISION_LOG_HEADER)
+        before = toc_markdown[:header_idx]
+        after_header = toc_markdown[header_idx + len(_REVISION_LOG_HEADER) :]
+        match = _NEXT_H2_RE.search(after_header)
+        if match:
+            existing_body, rest = after_header[: match.start()], after_header[match.start() :]
+        else:
+            existing_body, rest = after_header, ""
+        rest = rest.lstrip("\n")
+        existing_lines = [ln for ln in existing_body.strip("\n").splitlines() if ln]
+        merged_lines = existing_lines + new_lines
+    else:
+        before, rest, merged_lines = "", toc_markdown, new_lines
+
+    lines_block = "\n".join(merged_lines)
+    section = _REVISION_LOG_HEADER + (f"\n{lines_block}\n\n" if lines_block else "\n\n")
+    return before + section + rest
+
+
+def _truncate_revision_entry(feedback: str) -> str:
+    flat = " ".join(feedback.strip().split())
+    if len(flat) <= _REVISION_ENTRY_MAX_CHARS:
+        return flat
+    return flat[: _REVISION_ENTRY_MAX_CHARS - 1] + "…"

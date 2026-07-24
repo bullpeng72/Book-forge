@@ -35,6 +35,21 @@ def test_load_code_repo_source_tags_file_path_and_recurses(tmp_path: Path) -> No
     assert "무시되는 확장자" not in joined  # .txt는 기본 확장자 목록에 없음
 
 
+def test_load_code_repo_source_tags_every_chunk_not_just_the_first(tmp_path: Path) -> None:
+    # Spec K 전제 조건 재현: 큰 파일이 여러 청크로 쪼개질 때 첫 청크만 태그가
+    # 있으면 max_per_source(store.py)가 나머지 청크의 소스를 식별하지 못해
+    # 무력화된다(실측: agent_evaluator/quick_eval.py 195개 청크 중 태그가
+    # 남은 건 1개뿐이었다). 매 청크가 태그를 가져야 한다.
+    big_file = tmp_path / "big.py"
+    big_file.write_text("x = 1\n" * 500, encoding="utf-8")  # 500자 넘게 쪼개지도록
+
+    chunks = load_code_repo_source(
+        tmp_path, chunk_size=200, overlap=0, include_structure_index=False
+    )
+    assert len(chunks) > 1
+    assert all(c.startswith("# 파일: big.py\n") for c in chunks)
+
+
 def test_load_code_repo_source_skips_pycache_and_git(tmp_path: Path) -> None:
     (tmp_path / "__pycache__").mkdir()
     (tmp_path / "__pycache__" / "cached.py").write_text("skip me", encoding="utf-8")
@@ -141,6 +156,20 @@ def test_load_url_source_fetches_and_chunks(monkeypatch) -> None:
     assert len(chunks) == 1
     assert "웹 페이지 본문입니다" in chunks[0]
     assert "https://example.com/article" in chunks[0]  # 출처 태그 포함
+
+
+def test_load_url_source_tags_every_chunk_not_just_the_first(monkeypatch) -> None:
+    html = "<html><body><p>" + "긴 본문 문장입니다. " * 100 + "</p></body></html>"
+
+    import requests
+
+    monkeypatch.setattr(
+        requests, "get", lambda url, timeout=None, headers=None: _FakeResponse(html)
+    )
+
+    chunks = load_url_source("https://example.com/long", chunk_size=200, overlap=0)
+    assert len(chunks) > 1
+    assert all(c.startswith("# 출처: https://example.com/long\n") for c in chunks)
 
 
 def test_load_url_source_empty_page_returns_no_chunks(monkeypatch) -> None:

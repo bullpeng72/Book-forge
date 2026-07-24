@@ -26,6 +26,21 @@ DEFAULT_SOURCE_EXTS = _CODE_EXTS | _TEXT_EXTS
 _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
+def _tag_each_chunk(chunks: list[str], tag: str) -> list[str]:
+    """모든 청크 앞에 태그를 반복해서 붙인다(Spec K 전제 조건).
+
+    기존엔 태그가 붙은 원문 전체를 자르기 전에 한 번만 붙였다 — 그러면 파일
+    하나가 여러 청크로 쪼개질 때 **첫 청크만** 태그를 갖고 나머지는 태그 없이
+    잘려나간다(overlap이 태그 전체 길이보다 짧으면). `knowledge/store.py`의
+    `max_per_source`(Spec K)는 이 태그로 소스를 식별하므로, 태그 없는 청크가
+    많으면 정작 균형을 잡아야 할 대형 파일의 청크 대부분이 식별 불가능해
+    무력화된다(실측 확인: agent_evaluator의 quick_eval.py를 195개 청크로
+    쪼갰을 때 태그가 남은 건 첫 청크 1개뿐이었다). 매 청크 앞에 태그를 다시
+    붙이면 이 문제가 사라진다 — 각 청크가 약간 길어지는 것 외엔 부작용이 없다.
+    """
+    return [tag + c for c in chunks]
+
+
 def load_pdf_source(path: Path, *, chunk_size: int = 800, overlap: int = 100) -> list[str]:
     return chunk_text(extract_pdf_text(path), chunk_size=chunk_size, overlap=overlap)
 
@@ -53,9 +68,11 @@ def load_code_repo_source(
     넘칠 수 있는 극단적 케이스는 embeddings.py의 자동 축소 재시도가 처리한다).
 
     파일 하나를 그대로 하나의 청크로 쓰지 않는 이유: 큰 파일은 top_k 검색에서
-    통째로 밀려나거나 임베딩 품질이 떨어질 수 있어, 파일 내용 앞에 상대경로를
-    붙인 뒤 chunk_text()로 분할한다 — 청크에 "# 파일: xxx.py"가 남아 있어야
-    검색 결과가 어느 파일에서 왔는지 저자가 알 수 있다.
+    통째로 밀려나거나 임베딩 품질이 떨어질 수 있어, 먼저 chunk_text()로
+    분할한 뒤 매 청크 앞에 상대경로 태그를 다시 붙인다(`_tag_each_chunk`) —
+    자르기 전에 한 번만 태그를 붙이면 여러 청크로 쪼개진 파일의 두 번째
+    청크부터는 태그가 없어, "# 파일: xxx.py"로 소스를 식별하는 다른 기능
+    (지식창고 상태 요약 J, 소스 가중치 균형 조정 K)이 대형 파일에서 무력화된다.
 
     include_structure_index=True(기본값)면 일반 능력 H(구조적 코드 인덱싱) —
     .py 파일을 ast로 정적 분석해 모듈/클래스/함수 인벤토리 + 내부/외부 의존
@@ -81,10 +98,10 @@ def load_code_repo_source(
         except OSError:
             continue
         rel = fpath.relative_to(directory)
-        tagged = f"# 파일: {rel}\n{content}"
-        chunks.extend(
-            chunk_text(tagged, chunk_size=chunk_size, overlap=overlap, collapse_whitespace=False)
+        file_chunks = chunk_text(
+            content, chunk_size=chunk_size, overlap=overlap, collapse_whitespace=False
         )
+        chunks.extend(_tag_each_chunk(file_chunks, f"# 파일: {rel}\n"))
 
     if include_structure_index:
         summaries = build_structure_index(directory, max_files=max_files)
@@ -159,8 +176,8 @@ def load_url_source(
     text = extract_text_from_html(response.text)
     if not text.strip():
         return []
-    tagged = f"# 출처: {url}\n{text}"
-    return chunk_text(tagged, chunk_size=chunk_size, overlap=overlap, collapse_whitespace=True)
+    url_chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap, collapse_whitespace=True)
+    return _tag_each_chunk(url_chunks, f"# 출처: {url}\n")
 
 
 def load_source(source, **kwargs) -> list[str]:

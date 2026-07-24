@@ -10,7 +10,13 @@ import pytest
 
 import book_forge.cli.project_utils as project_utils
 import book_forge.knowledge.store as store_module
-from book_forge.cli.commands.draft_cmd import ChapterDraftResult, _is_draftable, _SourcePath
+from book_forge.cli.commands.draft_cmd import (
+    ChapterDraftResult,
+    _append_references_section,
+    _cited_url_sources,
+    _is_draftable,
+    _SourcePath,
+)
 from book_forge.cli.main import cli
 from book_forge.models import ChapterSpec
 from book_forge.publish.toc_loader import ResolvedChapter
@@ -778,3 +784,144 @@ def test_draft_capstone_solution_file_not_exposed_via_load_toc(
     toc_paths = {rc.path for rc in chapters}
     solution_path = part_dir / "Chapter_01_사과_개론_정답.md"
     assert solution_path not in toc_paths
+
+
+def test_draft_passes_max_per_source_through_to_query_with_scores(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Spec K — CLI 옵션이 실제로 KnowledgeStore.query_with_scores(max_per_source=...)까지
+    # 전달되는지만 확인한다(균형 조정 로직 자체는 test_knowledge_store.py가 검증).
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    project_dir = tmp_path / "projects" / "maxsrc-slug"
+    part_dir = project_dir / "Part_1_과일학"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text(
+        "```toc\n1|과일학|1|사과 개론\n```\n", encoding="utf-8"
+    )
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    captured_kwargs = {}
+    original_query = store_module.KnowledgeStore.query_with_scores
+
+    def _spy_query(self, text, top_k=5, *, max_per_source=None):
+        captured_kwargs["max_per_source"] = max_per_source
+        return original_query(self, text, top_k=top_k, max_per_source=max_per_source)
+
+    monkeypatch.setattr(store_module.KnowledgeStore, "query_with_scores", _spy_query)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "draft", "maxsrc-slug", "1",
+            "--source", str(source_file), "-y", "--max-per-source", "2",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs["max_per_source"] == 2
+
+
+def test_draft_max_per_source_defaults_to_none(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    project_dir = tmp_path / "projects" / "maxsrc-default-slug"
+    part_dir = project_dir / "Part_1_과일학"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text(
+        "```toc\n1|과일학|1|사과 개론\n```\n", encoding="utf-8"
+    )
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+    source_file = tmp_path / "source.txt"
+    source_file.write_text("사과에 대한 소스입니다", encoding="utf-8")
+
+    captured_kwargs = {}
+    original_query = store_module.KnowledgeStore.query_with_scores
+
+    def _spy_query(self, text, top_k=5, *, max_per_source=None):
+        captured_kwargs["max_per_source"] = max_per_source
+        return original_query(self, text, top_k=top_k, max_per_source=max_per_source)
+
+    monkeypatch.setattr(store_module.KnowledgeStore, "query_with_scores", _spy_query)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "maxsrc-default-slug", "1", "--source", str(source_file), "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs["max_per_source"] is None
+
+
+def test_cited_url_sources_extracts_unique_urls_in_order() -> None:
+    scored = [
+        ("# 출처: https://a.example/x\n본문 A", 0.9),
+        ("# 출처: https://b.example/y\n본문 B", 0.8),
+        ("# 출처: https://a.example/x\n본문 A 이어지는 청크", 0.7),  # 중복 URL
+        ("# 파일: local.py\n코드 청크", 0.6),  # 파일 소스는 대상 아님
+        ("태그 없는 청크", 0.5),
+    ]
+    assert _cited_url_sources(scored) == ["https://a.example/x", "https://b.example/y"]
+
+
+def test_cited_url_sources_empty_when_no_url_sources() -> None:
+    scored = [("# 파일: local.py\n코드 청크", 0.9), ("태그 없는 청크", 0.5)]
+    assert _cited_url_sources(scored) == []
+
+
+def test_append_references_section_adds_section_when_urls_present() -> None:
+    result = _append_references_section(
+        "# Chapter 1: 제목\n\n본문", ["https://a.example", "https://b.example"]
+    )
+    assert result == (
+        "# Chapter 1: 제목\n\n본문\n\n## 참고 자료\n"
+        "- https://a.example\n- https://b.example\n"
+    )
+
+
+def test_append_references_section_noop_when_no_urls() -> None:
+    original = "# Chapter 1: 제목\n\n본문"
+    assert _append_references_section(original, []) == original
+
+
+def test_draft_appends_references_section_for_url_sources(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    def _fake_load_source(source, **kwargs):
+        return [f"# 출처: {source}\n사과에 대한 웹 페이지 내용입니다"]
+
+    monkeypatch.setattr("book_forge.knowledge.sources.load_source", _fake_load_source)
+
+    project_dir = tmp_path / "projects" / "url-slug"
+    part_dir = project_dir / "Part_1_과일학"
+    part_dir.mkdir(parents=True)
+    (project_dir / "01_목차.md").write_text("```toc\n1|과일학|1|사과 개론\n```\n", encoding="utf-8")
+    (part_dir / "Chapter_01_사과_개론.md").write_text(
+        "# Chapter 01: 사과 개론\n\n> TODO: 이 챕터를 집필하세요.\n", encoding="utf-8"
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["draft", "url-slug", "1", "--source", "https://example.com/apples", "-y"]
+    )
+
+    assert result.exit_code == 0, result.output
+    chapter_md = (part_dir / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
+    assert "## 참고 자료" in chapter_md
+    assert "https://example.com/apples" in chapter_md
