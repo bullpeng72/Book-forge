@@ -925,3 +925,38 @@ def test_draft_appends_references_section_for_url_sources(tmp_path: Path, monkey
     chapter_md = (part_dir / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
     assert "## 참고 자료" in chapter_md
     assert "https://example.com/apples" in chapter_md
+
+
+def test_draft_without_source_fails_when_no_existing_store(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    project_dir = _make_batch_project(tmp_path)
+    assert not (project_dir / "knowledge" / "store.json").exists()
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["draft", "batch-slug", "1"])
+
+    assert result.exit_code != 0
+    assert "--source를 최소 1개 지정해야 합니다" in result.output
+    assert "book-forge research" in result.output
+
+
+def test_draft_without_source_uses_existing_store(tmp_path: Path, monkeypatch) -> None:
+    # 일반 능력 N — book-forge research가 미리 지식창고를 채워둔 시나리오를
+    # 재현: --source 없이도 기존 지식창고만으로 초안이 생성돼야 한다.
+    monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(store_module, "embed_text", _fake_embed_text)
+    monkeypatch.setattr(store_module, "embed_texts", _fake_embed_texts)
+    monkeypatch.setattr("book_forge.cli.commands.draft_cmd.create_llm", lambda: FakeLLM())
+
+    project_dir = _make_batch_project(tmp_path)
+    store = store_module.KnowledgeStore()
+    store.add(["사과에 대한 사전 수집 자료"])
+    store.save(store_module.default_store_path(project_dir))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["draft", "batch-slug", "1", "-y"])
+
+    assert result.exit_code == 0, result.output
+    assert "기존 지식창고를 그대로 사용합니다" in result.output
+    ch1 = (project_dir / "Part_1_과일학" / "Chapter_01_사과_개론.md").read_text(encoding="utf-8")
+    assert "고정된 초안 본문" in ch1

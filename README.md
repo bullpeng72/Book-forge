@@ -5,8 +5,8 @@ HTML/PDF/발표자료. 전 과정을 [agent-evaluator](https://pypi.org/project/
 Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(로컬)** — API 키 없이
 바로 시작할 수 있습니다.
 
-**핵심 통계**: 12개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
-11개(10개 동작) | 291개 테스트 | Python 3.11+
+**핵심 통계**: 13개 에이전트(`@agent_eval`/`@tool_guard` 데코레이터 직접 적용) | CLI 명령
+13개(12개 동작) | 314개 테스트 | Python 3.11+
 
 ## 목차
 
@@ -21,7 +21,7 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 - [일반 능력 O — 목차 개정 이력 자동 기록](#일반-능력-o--목차-개정-이력-자동-기록)
 - [일반 능력 M — 챕터 구조 템플릿](#일반-능력-m--챕터-구조-템플릿)
 - [일반 능력 K — 소스 가중치 균형 조정](#일반-능력-k--소스-가중치-균형-조정)
-- [일반 능력 N — 참고 자료 자동 인용(범위 축소판)](#일반-능력-n--참고-자료-자동-인용범위-축소판)
+- [일반 능력 N — 리서치 에이전트 + 참고 자료 자동 인용](#일반-능력-n--리서치-에이전트--참고-자료-자동-인용)
 - [CLI 명령](#cli-명령)
 - [아키텍처](#아키텍처)
 - [Gate A–G 계측](#gate-ag-계측)
@@ -483,17 +483,57 @@ Media/AOO 대비 품질 분석에서 나온 격차입니다: AOO의 모든 챕�
 2개, `metric_adapters.py` 2개(총 6개, 남은 슬롯은 각 파일이 2개 상한에
 걸려 채워지지 않음)로 정확히 분산됐습니다.
 
-## 일반 능력 N — 참고 자료 자동 인용(범위 축소판)
+## 일반 능력 N — 리서치 에이전트 + 참고 자료 자동 인용
 
 Media/AOO 대비 품질 분석에서 나온 가장 큰 격차입니다: AOO 콘텐츠는 실제 외부
 리서치(설문조사·업계 리포트·논문)에 근거하고 참고 자료를 명시하는데,
-Book-forge는 저자가 직접 지정한 URL 1개를 가져올 뿐(A) "이 주제에 맞는
-자료를 찾아온다"는 검색 단계가 없습니다. 진짜 웹 검색 자동화(쿼리 생성 →
-다건 검색 → 신뢰도 평가)는 범위가 훨씬 크고 외부 서비스/API 키 의존성
-문제가 얽혀 이번 라운드에서는 다루지 않았습니다 — 대신 **저자가 이미
-`--source`로 지정한 URL 중 실제로 챕터 생성에 쓰인 것만 인용 목록으로
-자동 조립**하는 것까지만 구현했습니다("검색"은 여전히 저자 몫, "인용 관리"만
-자동화).
+Book-forge는 처음엔 저자가 직접 지정한 URL 1개를 가져올 뿐(A) "이 주제에
+맞는 자료를 찾아온다"는 검색 단계가 없었습니다. 처음엔 범위를 좁혀 "저자가
+이미 지정한 URL 중 실제로 쓰인 것만 인용 목록으로 조립"하는 것까지만
+구현했다가, 이어서 검색 자동화(쿼리 생성 → 웹 검색 → 후보 URL 수집)까지
+전체 범위로 확장했습니다.
+
+### `book-forge research` — 검색 쿼리 생성 + 웹 검색
+
+`book-forge research <slug> <chapter_no>`는 챕터 제목에서 검색 쿼리 2~3개를
+LLM으로 생성하고(`agents/research_agent.py`), 각 쿼리로 실제 웹을 검색해
+(`knowledge/web_search.py::search_web()`) 후보 URL(제목+요약)을 모읍니다.
+후보 목록을 보여준 뒤 저자가 번호로 포함 여부를 직접 고르면(`--yes`로 전체
+채택도 가능), 채택된 URL만 프로젝트 지식창고에 추가합니다.
+
+- **검색 백엔드는 API 키 없는 DuckDuckGo HTML 엔드포인트**
+  (`html.duckduckgo.com/html/`)를 `requests`로 직접 호출합니다 — Tavily
+  같은 전용 검색 API 대신 이 방식을 고른 이유는 Book-forge의 "API 키 없이
+  바로 시작할 수 있다" 원칙을 유지하기 위해서입니다. 대신 공식 API가 아니라
+  결과 페이지를 파싱하는 방식이라 DuckDuckGo가 페이지 구조를 바꾸면 깨질 수
+  있고, 과도한 호출은 일시 차단될 수 있습니다(알려진 한계).
+- **신뢰도 자동 평가는 하지 않습니다**: 1차/2차 출처 분류 같은 판단은
+  LLM에게 맡기지 않고, 저자가 제목/요약을 직접 훑어보고 포함 여부를
+  고르는 것으로 대신합니다 — `book-forge plan`의 승인 루프와 같은 "최종
+  판단은 저자" 원칙입니다.
+- **`book-forge draft`가 `--source` 없이도 동작하도록 확장**했습니다 —
+  `book-forge research`로 이미 채운 지식창고가 있으면 `--source`를 다시
+  지정하지 않아도 그 지식창고로 바로 초안을 생성합니다(지식창고가 아예
+  없는 프로젝트에서 `--source` 없이 부르는 건 기존처럼 에러).
+
+실측(실제 DuckDuckGo + 실제 Ollama, `/tmp` 격리 환경): "비동기 프로그래밍이란?"
+챕터로 `book-forge research`를 돌리니 실제 한국어 블로그·GitHub 소스 6개를
+찾아 지식창고에 추가했고, 이어서 `book-forge draft ... `(`--source` 없이)로
+생성한 챕터가 정상적으로 초안을 생성하며 실제로 인용된 3개 URL이 챕터 말미
+`## 참고 자료`에 자동으로 나타나는 것까지 확인했습니다.
+
+- **파서 버그를 실측으로 발견해 수정**: DuckDuckGo는 쿼리에 따라 결과 링크
+  형식이 다릅니다 — 영어 쿼리에서는 리다이렉트 링크(`//duckduckgo.com/l/?uddg=...`)를,
+  한국어 쿼리에서는 절대 URL을 그대로 줍니다. 리다이렉트 형식만 처리하도록
+  짰다가, 실제 한국어 챕터 제목으로 돌려보고서야 결과가 통째로 0개로 나오는
+  걸 발견해 두 형식 모두 처리하도록 고쳤습니다.
+
+### 참고 자료 자동 인용(범위 축소판, 먼저 구현됨)
+
+`--source`로 URL을 여러 개 지정하면(직접 지정하든 `book-forge research`가
+채택했든), 챕터 생성 후 `query_with_scores()`가 실제로 top-k에 뽑은 청크 중
+URL 소스(`# 출처:` 태그)만 중복 없이 순서대로 모아 챕터 말미에
+`## 참고 자료` 섹션을 자동으로 붙입니다.
 
 `--source`로 URL을 여러 개 지정하면, 챕터 생성 후 `query_with_scores()`가
 실제로 top-k에 뽑은 청크 중 URL 소스(`# 출처:` 태그)만 중복 없이 순서대로
@@ -522,7 +562,8 @@ Book-forge는 저자가 직접 지정한 URL 1개를 가져올 뿐(A) "이 주�
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과) |
-| `book-forge draft <slug> <ch_no>\|--all --source ... [--top-k] [--min-coverage] [--yes] [--force] [--check-package] [--execute-examples]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+버전 고정, `--execute-examples`로 실제 실행 검증 — 둘 다 로컬 디렉토리 대상도 지원) |
+| `book-forge draft <slug> <ch_no>\|--all [--source ...] [--top-k] [--min-coverage] [--max-per-source] [--yes] [--force] [--check-package] [--execute-examples]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+버전 고정, `--execute-examples`로 실제 실행 검증 — 둘 다 로컬 디렉토리 대상도 지원. `--source`는 지식창고가 이미 있으면 생략 가능 — `book-forge research`로 미리 채워두면 됨) |
+| `book-forge research <slug> <chapter_no> [--max-queries] [--max-results-per-query] [--yes]` | ✅ (선택, `[rag]`) | 챕터 제목에서 검색 쿼리 생성(LLM) → 실제 웹 검색(DuckDuckGo) → 저자가 후보 URL 선택 → 지식창고에 추가 |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
 | `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
@@ -638,6 +679,11 @@ python scripts/migrate_legacy_book.py \
   chapter_no에서 제목만 바뀌면 기존 본문을 새 경로로 이동해 보존하고, 목차에서
   완전히 빠진 chapter_no는 파일을 **삭제하지 않고** 남겨둔 채 콘솔에 목록만
   보고합니다(정리는 저자가 수동으로).
+- **`book-forge research`는 비공식 검색 경로에 의존**: DuckDuckGo의 공식 검색 API가
+  아니라 API 키 없는 HTML 결과 페이지(`html.duckduckgo.com/html/`)를 파싱합니다 —
+  DuckDuckGo가 페이지 구조를 바꾸면 파싱이 깨질 수 있고, 짧은 시간에 반복 호출하면
+  일시적으로 결과가 차단될 수 있습니다. 신뢰도 평가(1차/2차 출처 구분 등)도 자동화하지
+  않습니다 — 후보 목록을 저자가 직접 보고 채택 여부를 고릅니다.
 - **PDF의 Mermaid 렌더링**: Book/AOO 원본의 정교한 SVG 청크 캡처를 이식하지 않고
   `startOnLoad` 대기 후 인쇄하는 단순화된 경로를 씁니다 — 매우 큰 다이어그램은
   페이지 경계에서 잘릴 수 있습니다.
@@ -704,7 +750,7 @@ python scripts/migrate_legacy_book.py \
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 playwright install chromium
-pytest                 # 291개 테스트
+pytest                 # 314개 테스트
 ruff check src tests scripts
 python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
 ```

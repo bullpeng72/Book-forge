@@ -256,12 +256,23 @@ def draft(
             'RAG 기능에 필요한 패키지가 없습니다. pip install -e ".[rag]" 로 설치하세요.'
         ) from exc
 
-    if not sources:
-        raise click.ClickException("--source를 최소 1개 지정해야 합니다 (PDF/디렉토리/텍스트 파일/URL).")
-
     load_config()
     config = load_book_config(slug)
     chapters = load_toc(config.project_dir)
+
+    if not sources:
+        # 일반 능력 N — book-forge research가 이미 지식창고를 채워뒀다면
+        # --source 없이도 그 기존 지식창고로 바로 초안을 생성할 수 있어야
+        # research → draft 흐름이 매끄럽다. 지식창고가 아예 없는 프로젝트에서
+        # --source 없이 부르는 건 기존 동작대로 막는다(빈 지식창고로 조용히
+        # 진행해 아무 근거 없는 초안이 나오는 걸 방지).
+        from book_forge.knowledge.store import default_store_path
+
+        if not default_store_path(config.project_dir).is_file():
+            raise click.ClickException(
+                "--source를 최소 1개 지정해야 합니다 (PDF/디렉토리/텍스트 파일/URL). "
+                "또는 book-forge research로 지식창고를 먼저 채우세요."
+            )
 
     if draft_all:
         targets = [rc for rc in chapters if _is_draftable(rc, force)]
@@ -282,7 +293,16 @@ def draft(
         targets = [rc]
 
     # E + A: 프로젝트 영속 지식창고에 소스를 청크·임베딩해 누적(PDF/코드 저장소/텍스트/URL 자동 판별).
-    store = collect_sources_into_store(config.project_dir, sources)
+    # sources가 비어있으면(N: research가 이미 채운 지식창고를 그대로 쓰는 경우) 재저장
+    # 없이 기존 스토어를 그대로 불러온다 — collect_sources_into_store()도 빈 튜플을
+    # 정상 처리하지만 "소스 0개 수집" 로그가 어색해 명시적으로 분기한다.
+    if sources:
+        store = collect_sources_into_store(config.project_dir, sources)
+    else:
+        from book_forge.knowledge.store import KnowledgeStore, default_store_path
+
+        store = KnowledgeStore.load(default_store_path(config.project_dir))
+        click.echo(f"📚 기존 지식창고를 그대로 사용합니다: {len(store)}개 청크")
 
     try:
         llm = create_llm()

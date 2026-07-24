@@ -13,6 +13,7 @@ from book_forge.cli.commands.init_cmd import init
 from book_forge.cli.commands.knowledge_cmd import knowledge
 from book_forge.cli.commands.new_cmd import new
 from book_forge.cli.commands.plan_cmd import plan
+from book_forge.cli.commands.research_cmd import research
 from book_forge.cli.commands.review_cmd import review
 
 _STUB_COMMANDS = [
@@ -37,6 +38,7 @@ cli.add_command(plan)
 cli.add_command(chat)
 cli.add_command(review)
 cli.add_command(knowledge)
+cli.add_command(research)
 
 
 def _make_stub(name: str, milestone: str, summary: str) -> click.Command:

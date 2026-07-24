@@ -634,6 +634,57 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       사용자 `.env`/실제 프로젝트로도 최소 1회는 돌려봐야 이런 모델별 실패
       모드를 잡는다.
 
+24. **`agents/code_consistency_checker.py`의 설치된-패키지 모드는 최상위
+    네임스페이스만 보는 한계가 있었다(SPEC.md 항목 L) — `_walk_package_symbols()`로
+    서브모듈 전체를 스캔하는 폴백을 추가해 고쳤다.** 실전 6챕터 집필
+    (`AI_에이전트_평가_입문` 프로젝트)에서 `Settings`(agent_evaluator.config),
+    `KoreanRAGDatasetGenerator`(agent_evaluator.datasets),
+    `LiveGuardrail`(agent_evaluator.gates.live_guardrail) 세 번 모두 실존하는
+    클래스인데 `agent_evaluator` 최상위에 재노출이 안 됐다는 이유만으로
+    오탐(없음)이 났다 — `importlib.import_module(target_package)` +
+    `hasattr()`은 딱 그 모듈 객체가 들고 있는 속성만 보기 때문이다.
+    - **수정**: `pkgutil.walk_packages()`로 target_package 산하 서브모듈을
+      전부 import해 공개 멤버 이름을 평평한 집합으로 모으는
+      `_walk_package_symbols()`(모듈별 1회만 계산 후 캐시)를 추가했다. 백틱
+      심볼 체크에서 `_resolve_dotted(root_module, path)`가 실패해도, **path의
+      첫 세그먼트가 애초에 최상위에 없는 경우에만**(재노출 누락 케이스) 이
+      평평한 테이블로 재확인한다.
+    - **의도적으로 좁힌 범위**: `ScopeConfig`가 최상위에 있지만
+      `ScopeConfig.path`처럼 실제로 없는 필드를 언급한 경우는 이 폴백을
+      타지 않는다 — base(`ScopeConfig`)가 최상위에서 이미 보이므로 원래
+      경로(`_resolve_dotted`)로 판정이 끝나고, 폴백은 "base 자체가 안 보일
+      때"만 개입한다. 폴백을 무조건 적용했다면 `ScopeConfig.path` 같은 진짜
+      오류(`tests/test_code_consistency_checker.py::test_verify_code_consistency_catches_nonexistent_field_reference`)를
+      놓쳤을 것 — 실제로 처음 구현했을 때 이 회귀가 나서 조건을 좁혔다.
+      import 문(`from X import Y`) 체크는 원래부터 `importlib.import_module(module_path)`로
+      정확한 서브모듈을 직접 import하므로 이 문제와 무관하다(백틱 심볼
+      체크만 해당).
+    - 로컬 모드(`verify_code_consistency_local`, 일반 능력 I)는 원래부터
+      "평평한 심볼 테이블" 방식이었다 — 이번 수정은 그 발상을 설치된
+      패키지 모드로 확장한 것뿐, 새 판정 로직이 아니다.
+
+25. **`book-forge knowledge status`/`reset`(일반 능력 J, SPEC.md 항목 J)는
+    `KnowledgeStore.add()`가 중복 제거를 안 하고 `collect_sources_into_store()`가
+    항상 append만 하는 구조적 한계를 CLI 레벨에서 우회한다.** 실전 6챕터
+    집필(`AI_에이전트_평가_입문`) 중 OpenCode 플러그인 TS 파일이 한 번 섞여
+    들어간 뒤 그 심볼(`EventSessionIdle` 등)이 이후 여러 챕터의 검색 결과를
+    계속 오염시키는 걸 실측으로 겪었다 — 당시 유일한 해결책은
+    `knowledge/store.json`을 직접 `rm`하는 것뿐이었다.
+    - `knowledge/lifecycle.py::summarize_store()` — 청크의 `# 파일:`/`# 출처:`
+      태그(`sources.py`가 이미 청크 앞에 붙이던 것)를 정규식으로 역파싱해
+      소스별 청크 수를 센다. 새 태깅 로직이 아니라 기존 태그의 재활용이다.
+    - `cli/commands/knowledge_cmd.py` — `status`는 `summarize_store()` 결과를
+      출력만 하고, `reset`은 `store_path.unlink()`뿐이다(확인 프롬프트 기본,
+      `--yes`로 스킵). 둘 다 판정 로직이 없어 새 회귀 위험이 거의 없다.
+    - **집계는 정확한 감사가 아니라 참고용**: `chunk_text()`의 overlap
+      크기에 따라 파일 하나의 두 번째 이후 청크엔 태그 줄이 안 남을 수
+      있고, PDF 소스는 애초에 태깅하지 않는다 — 태그를 못 찾은 청크는
+      "(태그 없음)"으로 묶는다. 실측(`AI_에이전트_평가_입문` 실제 스토어,
+      83개 청크)으로 확인: 태그가 남은 건 5개뿐(78개가 "(태그 없음)")이라
+      이 한계가 실제로 두드러진다 — 향후 정확도를 높이려면 태그를 매
+      청크 앞에 반복해서 붙이는 쪽으로 `sources.py`를 바꿔야 하지만, 이번
+      범위(J)는 "있는 태그를 최대한 활용한 참고용 요약"까지만 다룬다.
+
 26. **`book-forge plan --revise`는 목차 개정 이력을 이제 `01_목차.md`에
     자동으로 남긴다(일반 능력 O, SPEC.md 항목 O)** — Media/AOO의 목차
     파일이 "2026-07-14 개정 ①/②/③"처럼 날짜별 변경 사유를 누적 기록하는
@@ -752,56 +803,64 @@ cli/        Click 진입점 — 각 서브커맨드가 위 레이어를 조합
       판단해 별도 실측은 생략했다(K 항목에서 이미 태깅 메커니즘 자체는
       실제 Ollama 임베딩으로 검증됨).
 
-24. **`agents/code_consistency_checker.py`의 설치된-패키지 모드는 최상위
-    네임스페이스만 보는 한계가 있었다(SPEC.md 항목 L) — `_walk_package_symbols()`로
-    서브모듈 전체를 스캔하는 폴백을 추가해 고쳤다.** 실전 6챕터 집필
-    (`AI_에이전트_평가_입문` 프로젝트)에서 `Settings`(agent_evaluator.config),
-    `KoreanRAGDatasetGenerator`(agent_evaluator.datasets),
-    `LiveGuardrail`(agent_evaluator.gates.live_guardrail) 세 번 모두 실존하는
-    클래스인데 `agent_evaluator` 최상위에 재노출이 안 됐다는 이유만으로
-    오탐(없음)이 났다 — `importlib.import_module(target_package)` +
-    `hasattr()`은 딱 그 모듈 객체가 들고 있는 속성만 보기 때문이다.
-    - **수정**: `pkgutil.walk_packages()`로 target_package 산하 서브모듈을
-      전부 import해 공개 멤버 이름을 평평한 집합으로 모으는
-      `_walk_package_symbols()`(모듈별 1회만 계산 후 캐시)를 추가했다. 백틱
-      심볼 체크에서 `_resolve_dotted(root_module, path)`가 실패해도, **path의
-      첫 세그먼트가 애초에 최상위에 없는 경우에만**(재노출 누락 케이스) 이
-      평평한 테이블로 재확인한다.
-    - **의도적으로 좁힌 범위**: `ScopeConfig`가 최상위에 있지만
-      `ScopeConfig.path`처럼 실제로 없는 필드를 언급한 경우는 이 폴백을
-      타지 않는다 — base(`ScopeConfig`)가 최상위에서 이미 보이므로 원래
-      경로(`_resolve_dotted`)로 판정이 끝나고, 폴백은 "base 자체가 안 보일
-      때"만 개입한다. 폴백을 무조건 적용했다면 `ScopeConfig.path` 같은 진짜
-      오류(`tests/test_code_consistency_checker.py::test_verify_code_consistency_catches_nonexistent_field_reference`)를
-      놓쳤을 것 — 실제로 처음 구현했을 때 이 회귀가 나서 조건을 좁혔다.
-      import 문(`from X import Y`) 체크는 원래부터 `importlib.import_module(module_path)`로
-      정확한 서브모듈을 직접 import하므로 이 문제와 무관하다(백틱 심볼
-      체크만 해당).
-    - 로컬 모드(`verify_code_consistency_local`, 일반 능력 I)는 원래부터
-      "평평한 심볼 테이블" 방식이었다 — 이번 수정은 그 발상을 설치된
-      패키지 모드로 확장한 것뿐, 새 판정 로직이 아니다.
-
-25. **`book-forge knowledge status`/`reset`(일반 능력 J, SPEC.md 항목 J)는
-    `KnowledgeStore.add()`가 중복 제거를 안 하고 `collect_sources_into_store()`가
-    항상 append만 하는 구조적 한계를 CLI 레벨에서 우회한다.** 실전 6챕터
-    집필(`AI_에이전트_평가_입문`) 중 OpenCode 플러그인 TS 파일이 한 번 섞여
-    들어간 뒤 그 심볼(`EventSessionIdle` 등)이 이후 여러 챕터의 검색 결과를
-    계속 오염시키는 걸 실측으로 겪었다 — 당시 유일한 해결책은
-    `knowledge/store.json`을 직접 `rm`하는 것뿐이었다.
-    - `knowledge/lifecycle.py::summarize_store()` — 청크의 `# 파일:`/`# 출처:`
-      태그(`sources.py`가 이미 청크 앞에 붙이던 것)를 정규식으로 역파싱해
-      소스별 청크 수를 센다. 새 태깅 로직이 아니라 기존 태그의 재활용이다.
-    - `cli/commands/knowledge_cmd.py` — `status`는 `summarize_store()` 결과를
-      출력만 하고, `reset`은 `store_path.unlink()`뿐이다(확인 프롬프트 기본,
-      `--yes`로 스킵). 둘 다 판정 로직이 없어 새 회귀 위험이 거의 없다.
-    - **집계는 정확한 감사가 아니라 참고용**: `chunk_text()`의 overlap
-      크기에 따라 파일 하나의 두 번째 이후 청크엔 태그 줄이 안 남을 수
-      있고, PDF 소스는 애초에 태깅하지 않는다 — 태그를 못 찾은 청크는
-      "(태그 없음)"으로 묶는다. 실측(`AI_에이전트_평가_입문` 실제 스토어,
-      83개 청크)으로 확인: 태그가 남은 건 5개뿐(78개가 "(태그 없음)")이라
-      이 한계가 실제로 두드러진다 — 향후 정확도를 높이려면 태그를 매
-      청크 앞에 반복해서 붙이는 쪽으로 `sources.py`를 바꿔야 하지만, 이번
-      범위(J)는 "있는 태그를 최대한 활용한 참고용 요약"까지만 다룬다.
+30. **`book-forge research`(일반 능력 N 전체 범위, SPEC.md 항목 "N(추가)")로
+    항목 29에서 의도적으로 미룬 "진짜 검색 자동화"를 이어서 구현했다** —
+    챕터 제목 → 검색 쿼리 생성(LLM) → 실제 웹 검색 → 후보 URL 수집 →
+    저자 선택 → 지식창고 추가.
+    - **검색 백엔드 선택은 사용자에게 직접 확인**: API 키 필요 없는
+      DuckDuckGo HTML(`html.duckduckgo.com/html/`), Tavily API(유료/키
+      필요, 더 안정적), 범용 검색 API 엔드포인트 설정 세 가지를 제시했고
+      사용자가 DuckDuckGo HTML을 선택했다 — Book-forge의 "API 키 없이
+      바로 시작" 원칙과 일치, 새 pip 의존성도 없음(`requests`+표준
+      라이브러리 `html.parser`만 사용, `knowledge/sources.py`가 이미 쓰는
+      "무거운 파서 라이브러리를 추가하지 않는다" 원칙과 동일).
+    - `knowledge/web_search.py::search_web(query, max_results)` —
+      `_DuckDuckGoResultParser`(HTMLParser 서브클래스)가 결과 페이지의
+      `<a class="result__a">`(제목)/`<a class="result__snippet">`(요약)만
+      뽑는다. 파서를 짜기 전에 실제 DuckDuckGo 응답을 `curl`로 직접
+      받아 마크업을 확인한 뒤 구현했다(추측으로 안 짬).
+    - **실측으로 발견한 진짜 버그**: 링크 추출 로직을 리다이렉트 형식
+      (`//duckduckgo.com/l/?uddg=<인코딩된 URL>&rut=...`)만 처리하도록
+      짰다가, 영어 쿼리("python asyncio tutorial")로는 통과했지만 실제
+      `book-forge research`를 **한국어** 챕터 제목으로 돌려보니 후보가
+      통째로 0개가 나왔다. 원인을 다시 `curl`로 확인해보니 DuckDuckGo가
+      한국어 쿼리에는 리다이렉트 링크 대신 **절대 URL을 href에 그대로**
+      준다는 걸 발견했다(같은 세션 안에서 쿼리 언어에 따라 형식이 다름).
+      `_extract_target_url()`이 `uddg` 파라미터가 있으면 리다이렉트로,
+      없고 http(s) 절대 URL이면 그대로 대상으로 인정하도록 고쳐 두 형식
+      모두 처리한다. `tests/test_web_search.py`에 두 형식 각각의 실제
+      캡처 응답을 축약한 fixture로 회귀 테스트를 고정했다 — 하나만
+      테스트했다면 이 버그를 코드 리뷰만으로는 못 잡았을 것이다.
+    - `agents/research_agent.py::build_generate_search_queries()` +
+      `parse_search_queries()` — 챕터 제목에서 검색 쿼리 2~3개를 생성한다
+      (`agents/alternative_suggester.py`의 "관대한 파싱, 실패해도 빈
+      리스트만 반환" 원칙과 동일). `cli/commands/research_cmd.py`가
+      쿼리 생성 실패(형식 위반) 시 챕터 제목 자체를 쿼리로 쓰는 폴백을
+      한다.
+    - **신뢰도 자동 평가는 하지 않는다**: 1차/2차 출처 분류 같은 판단을
+      LLM에게 맡기지 않고, 후보 목록(제목+요약+URL)을 저자에게 보여주고
+      번호로 채택 여부를 직접 고르게 한다(`_select_candidates()`) —
+      `book-forge plan`의 승인 루프와 같은 "최종 판단은 저자" 원칙을
+      의도적으로 재사용했다. LLM이 안정적으로 못 하는 판단을 억지로
+      자동화하는 것보다 사람이 제목/요약을 훑어보는 편이 더 신뢰할 수
+      있다는 판단.
+    - 채택된 URL은 `draft_cmd.py::collect_sources_into_store()`를 그대로
+      재사용해 지식창고에 추가한다 — 새 저장 로직 없음.
+    - **`book-forge draft`가 `--source` 없이도 동작하도록 확장**했다 —
+      지식창고가 이미 있으면(`book-forge research`로 채웠거나 이전
+      `draft` 호출로 이미 존재하면) `--source` 생략을 허용하고 기존
+      지식창고를 그대로 쓴다. 지식창고가 아예 없는 프로젝트에서
+      `--source` 없이 부르는 건 기존처럼 에러(빈 지식창고로 조용히
+      진행해 근거 없는 초안이 나오는 걸 방지) — 이 완화가 없으면 저자가
+      research로 지식창고를 채워도 draft에 다시 아무 `--source`나
+      억지로 지정해야 하는 어색한 흐름이 됐을 것이다.
+    - 실측(실제 DuckDuckGo + 실제 Ollama, `qwen3-coder:latest`, `/tmp`
+      격리 환경): "비동기 프로그래밍이란?" 챕터로 `book-forge research`를
+      돌려 실제 한국어 블로그·GitHub 소스 6개를 지식창고에 추가했고,
+      이어서 `book-forge draft ...`(`--source` 없이)로 생성한 챕터가
+      정상적으로 초안을 만들며, 실제로 인용된 URL 3개가 챕터 말미
+      `## 참고 자료`(항목 29)에 자동으로 나타나는 것까지 파이프라인
+      전체를 확인했다.
 
 ### `agent_eval` 실제 반환값 계약 (실측 확인됨)
 
