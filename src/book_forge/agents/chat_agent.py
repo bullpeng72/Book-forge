@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from agent_evaluator import PerformanceMonitor, SLAConfig, agent_eval
+from agent_evaluator import PerformanceMonitor, SLAConfig, ThreatSeverityConfig, agent_eval
 from agent_evaluator.decorators import EvalMetadata
 
 from book_forge.llm.provider import LLM
@@ -48,6 +48,11 @@ def build_answer_question(llm: LLM, monitor: PerformanceMonitor) -> AnswerFn:
         rag_mode=True,
         context_arg="sources",
         sla=SLAConfig(p95_ms=30_000, p99_ms=60_000),
+        # Gate E: ChapterDrafterAgent/ReferenceTableAgent와 동일하게, 지식창고를 거쳐
+        # 들어오는 소스(sources)는 외부 PDF/문서일 수 있어 프롬프트 인젝션 위협이
+        # 동일하게 존재한다 — 산출물이 파일이 아니라 REPL 출력이라는 점은 이
+        # 위협 자체와는 무관하다(실측 확인: 이 Config가 누락돼 있었음).
+        threat_severity=ThreatSeverityConfig(),
     )
     def answer_question(
         question: str, sources: str, conversation_history: str = "", ground_truth: str = ""

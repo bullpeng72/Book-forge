@@ -1,5 +1,8 @@
 # Chapter 12. LiveGuardrail과 tool_guard — 실행 전 차단
 
+> ## Part IV. 실행 전에 막고, 조정한다
+> Part III까지가 전부 **사후 채점**(결과가 나온 뒤 점수를 매기는)이었다면, 이 Part의 4개 챕터는 완전히 다른 축이다 — 파일 쓰기 같은 되돌리기 어려운 동작을 실행 **전에** 막고(12장), 그 같은 메커니즘이 여러 저자의 동시 편집 충돌도 막는 데 재사용되며(13장), 품질 기준 자체를 프로젝트마다 다르게 조정하는 설정을 다룬 뒤(14장), 마지막으로 이 모든 것에도 불구하고 Book-forge가 아직 못 하는 것을 정직하게 정리한다(15장).
+
 > **이 챕터에서 배우는 것**
 > - `@agent_eval`과 `@tool_guard`가 왜 같은 함수에 함께 붙을 수 없는지
 > - `live_guardrail_session`이 세션 단위로 무엇을 묶는지
@@ -19,10 +22,30 @@ def write_chapter_stub(
     project_dir: str, part_dir_name: str, chapter_file_name: str,
     chapter_no: int, chapter_title: str,
 ) -> str:
-    ...
+    """단일 챕터 스텁 파일 + images/ 디렉토리를 생성한다."""
+    project_path = Path(project_dir)
+    part_path = project_path / part_dir_name
+    chapter_path = part_path / chapter_file_name
+
+    resolved_project = project_path.resolve()
+    resolved_target = chapter_path.resolve()
+    if resolved_project not in resolved_target.parents:
+        raise BookForgeError(f"프로젝트 디렉토리 밖 경로 쓰기 시도 차단: {resolved_target}")
+
+    part_path.mkdir(parents=True, exist_ok=True)
+    (part_path / "images").mkdir(exist_ok=True)
+
+    if chapter_path.exists():
+        return f"skipped (exists): {chapter_path}"
+
+    chapter_path.write_text(
+        CHAPTER_TEMPLATE.format(chapter_no=chapter_no, chapter_title=chapter_title),
+        encoding="utf-8",
+    )
+    return f"created: {chapter_path}"
 ```
 
-`@tool_guard`가 감싸는 함수는 **원시 타입(str/int)만 인자로 받는다** — 코드 주석이 이유를 밝힌다. "LiveGuardrail 내부 로직이 도구 호출 인자를 로깅/직렬화할 수 있어, 임의의 dataclass보다 JSON-safe한 값만 넘기는 편이 안전하다." 계측이 인자를 그대로 기록·감사할 수 있어야 하므로, 함수 시그니처 자체가 그 요구에 맞춰 설계됐다.
+`@tool_guard`가 감싸는 함수는 **원시 타입(str/int)만 인자로 받는다** — 코드 주석이 이유를 밝힌다. "LiveGuardrail 내부 로직이 도구 호출 인자를 로깅/직렬화할 수 있어, 임의의 dataclass보다 JSON-safe한 값만 넘기는 편이 안전하다." 계측이 인자를 그대로 기록·감사할 수 있어야 하므로, 함수 시그니처 자체가 그 요구에 맞춰 설계됐다. 경로 검사(3장 §3.5에서 이미 확인한 코드)는 함수 맨 앞에 있다 — **가드가 아직 실행되지 않은 상태에서도, 함수 자신이 제일 먼저 하는 일이 위험 검사**라는 뜻이다. 그 뒤로는 평범한 파일 시스템 작업뿐이다 — 디렉토리 생성, 이미 있으면 건너뛰기(`skipped`), 없으면 템플릿을 채워 쓰기(`created`). 반환값이 예외가 아니라 문자열(`"skipped: ..."`/`"created: ..."`)인 이유도 실무적이다 — `scaffold_project()`의 호출자는 이 문자열을 그대로 CLI에 출력해, 챕터 15개 중 몇 개가 새로 만들어지고 몇 개가 기존 파일이라 건너뛰었는지 한눈에 보여준다(목차를 재조정해도 기존 챕터 본문이 지워지지 않는 이유이기도 하다).
 
 ## 12.2 세션이 반복을 판정하는 단위다
 
@@ -72,6 +95,10 @@ flowchart TD
 `@tool_guard`가 붙은 함수를 `live_guardrail_session` 없이 호출하면 어떻게 될까 — 예외가 나지 않는다. `RuntimeWarning`만 내고 가드 없이 원본 함수를 그대로 실행한다(`fail_closed=False`가 기본값). 이 선택은 다른 `fail_on_*` 계열 플래그들과 반대 방향이다 — 대부분의 검증 플래그는 "지정 안 하면 안전하게 막는다"인데, `tool_guard`는 "지정 안 하면 조용히 통과시키되 경고만 낸다"를 기본으로 삼는다. 이는 기존 코드(가드를 아직 안 붙인 호출부)를 깨뜨리지 않기 위한 하위 호환 우선 설계다 — 정말로 강제하고 싶다면 `tool_guard(fail_closed=True)`로 명시적으로 켜야 한다.
 
 ---
+
+## 직접 해보기
+
+`tests/test_scaffold.py`를 실행해 나오는 `RuntimeWarning: tool_guard(...): 활성 live_guardrail_session()이 없습니다`를 직접 눈으로 읽어보라 — §12.4에서 설명한 "fail-open이 기본값"이라는 문장이 실제 경고 메시지로 나타난 것이다. **여러분이 부작용 있는 함수(파일 쓰기·외부 API 호출 등)에 반복 탐지를 걸고 싶다면**: `@tool_guard`만 붙이는 것으로는 부족하고, 그 함수를 부르는 코드 전체를 `live_guardrail_session()` 블록으로 감싸야 한다는 것 — 이 둘이 한 세트라는 것이 이 챕터의 핵심이다.
 
 ## 이 챕터의 핵심
 

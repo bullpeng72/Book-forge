@@ -86,11 +86,47 @@ sequenceDiagram
 
 > 📋 **QA 관리자 TIP**: `question_arg="topic"`처럼 데코레이터에 지정한 인자 이름이 실제 함수 시그니처의 인자 이름과 정확히 일치해야 한다 — 오타가 나면 계측이 조용히 빈 값을 기록할 뿐, 에러가 나지 않는다. 새 에이전트를 추가할 때 이 짝이 맞는지 코드 리뷰에서 확인하는 습관이 필요하다.
 
-## 2.4 이 패턴이 Book-forge 전체에 반복된다
+## 2.4 `EvalMetadata`는 20여 개 필드 중 딱 하나만 쓴다
+
+`EvalMetadata`(Agent-Evaluator SDK, `decorators.py`)는 함수가 데코레이터에게 "자동으로 계산할 수 없는 값"을 되돌려주는 통로다. 실제 정의를 열어보면 LangChain의 `chain_steps`, LangGraph의 `graph_traversal`, AutoGen의 `conversation_turns`처럼 다른 에이전트 프레임워크 통합을 위한 필드가 20개 넘게 있다.
+
+```python
+@dataclass
+class EvalMetadata:
+    attempts: int | None = None
+    framework: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    chain_steps: list[dict[str, Any]] | None = None       # LangChain 전용
+    graph_traversal: dict[str, Any] | None = None          # LangGraph 전용
+    conversation_turns: list[dict[str, Any]] | None = None # AutoGen 전용
+    # ... (그 외 15개 필드 생략, 전부 기본값 None)
+    extra: dict[str, Any] | None = None  # 사용자 정의 자유 형식 메타데이터
+```
+
+Book-forge는 이 중 **`extra` 하나만** 채운다 — `propose_plan()`의 `EvalMetadata(extra={"phase": "planning", "topic": topic})`이 그 예다. 나머지 필드는 전부 `None`으로 남아 "자동 계산값을 유지하라"는 뜻으로 해석된다. 8장(§8.5)에서 다시 강조할 원칙이 여기서도 그대로 드러난다 — **SDK가 제공하는 표면적을 전부 쓰는 것이 아니라, 이 프로젝트에 실제로 필요한 조각만 정확히 골라 쓴다.** `extra`에 담긴 `phase`/`topic` 같은 값은 Gate 점수 계산에 직접 관여하지 않고, 나중에 `eval_results/*.json`을 사람이 훑어볼 때 "이 태스크가 어느 단계에서 나왔는가"를 알아보기 쉽게 하는 부가 정보다.
+
+## 2.5 실제 호출 지점 — `new_cmd.py`
+
+`propose_plan()`을 실제로 부르는 코드는 `cli/commands/new_cmd.py`의 `new()` 함수 안에 있다(4장에서 `new()` 전체 흐름을 다룬다).
+
+```python
+click.echo("📝 기획안 생성 중 (LLM 호출)...")
+proposal_md = propose_plan(
+    topic=title, constraints=constraints, ground_truth=f"{title} {constraints}"
+)
+```
+
+호출부는 반드시 **키워드 인자**로 부른다 — `question_arg="topic"`(§2.3)이 함수 시그니처의 `topic` 파라미터 이름과 매칭되려면, 데코레이터가 실제 호출 시점의 인자 값을 이름으로 찾아낼 수 있어야 하기 때문이다. `ground_truth=f"{title} {constraints}"`도 눈여겨볼 값이다 — 저자가 입력한 제목과 제약을 그대로 이어붙여 "이 기획안이 실제로 얼마나 이 입력을 반영했는가"를 채점할 정답 기준으로 쓴다. 이 값을 어떻게 채점에 쓰는지는 9장(§9.4, Gate A의 TCR·Accuracy 블렌딩)에서 다시 다룬다.
+
+## 2.6 이 패턴이 Book-forge 전체에 반복된다
 
 `toc_designer.py`의 `build_design_toc()`, `chapter_drafter.py`의 `build_draft_chapter()`, `chat_agent.py`의 `build_answer_question()` 전부 정확히 같은 구조다 — 팩토리 함수가 `monitor`를 받아 `@agent_eval`이 적용된 내부 함수를 반환한다. 차이는 오직 **어떤 Harness Config를 데코레이터에 넣는가**뿐이다(8장에서 4개 에이전트를 나란히 비교한다).
 
 ---
+
+## 직접 해보기
+
+0장(§0.6)에서 만든 프로젝트가 있다면 `eval_results/planning.json`을 열어보라 — `propose_plan()` 호출 한 번이 어떤 `TaskResult` 구조로 기록됐는지 직접 확인할 수 있다. 그다음 여러분만의 함수 하나에 `@agent_eval(monitor, task_type="qa", question_arg="question")`을 그대로 붙여보라(Agent-Evaluator만 설치돼 있으면 Book-forge 없이도 동작한다) — 함수 시그니처의 인자 이름과 `question_arg`가 정확히 일치해야 한다는 것(§2.3의 QA 팁)을 몸으로 확인하는 가장 빠른 방법은, 일부러 오타를 내서 계측이 조용히 빈 값을 기록하는 것을 직접 보는 것이다.
 
 ## 이 챕터의 핵심
 

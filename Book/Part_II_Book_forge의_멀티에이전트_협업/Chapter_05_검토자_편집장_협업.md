@@ -60,6 +60,19 @@ monitor.agent_coordination_tracker.track_interaction(
 
 각 리뷰어는 `_parse_reviewer_output()`으로 `VERDICT:`(approve/revise)와 `REASON:`을 자유 텍스트에서 관대하게 파싱한다 — 형식을 어겨도 예외를 던지지 않고 "revise"로 안전하게 폴백한다(3장 §3.2의 교훈과 같은 원칙 — 파싱 실패가 파이프라인 전체를 죽이면 안 된다).
 
+```python
+def _parse_reviewer_output(text: str) -> tuple[str, str]:
+    """``VERDICT:``/``REASON:`` 을 관대하게 파싱한다. 형식을 어겨도 예외를 던지지
+    않고 안전한 폴백(REVISE, 원문 앞부분)으로 처리한다."""
+    v_match = _VERDICT_RE.search(text)
+    verdict = v_match.group(1).lower() if v_match else "revise"
+    r_match = _REASON_RE.search(text)
+    reason = r_match.group(1).strip().splitlines()[0].strip() if r_match else text.strip()[:200]
+    return verdict, reason
+```
+
+`_VERDICT_RE`/`_REASON_RE`는 각각 `VERDICT:`/`REASON:` 뒤의 텍스트를 뽑는 정규식이다. LLM이 `VERDICT:` 줄 자체를 빼먹거나 오타를 내도, 이 함수는 예외를 던지는 대신 조용히 `"revise"`(더 보수적인 쪽)로 fallback한다 — 리뷰 결과를 "잘 모르겠으니 통과"가 아니라 "잘 모르겠으니 다시 검토"로 기울이는 선택이다.
+
 이 판정들은 `eval_consensus()`로 합의도 점수가 된다. 코드 주석이 이 설계의 이유를 명확히 밝힌다.
 
 > "VERDICT를 그대로 intent로 넘겨 자유 텍스트 어휘 유사도가 아니라 **판정 자체의 일치 여부**로 합의를 계산한다."
@@ -69,6 +82,26 @@ monitor.agent_coordination_tracker.track_interaction(
 ## 5.5 편집장 — 리뷰를 넘겨받아 최종 판정을 내린다
 
 편집장(`build_chief_editor()`)은 리뷰어들의 텍스트를 요약한 `reviews_text`와 합의도 결과(`consensus`)를 함께 받아 최종 판정을 낸다. `ConflictResolutionConfig()`가 붙는 이유는 명확하다 — 리뷰어들의 판정이 서로 엇갈릴 때(한 명은 approve, 한 명은 revise) 편집장이 그 갈등을 어떻게 조정하는지가 Gate F의 conflict_resolution 지표가 채점하는 대상이기 때문이다.
+
+```python
+def build_chief_editor(llm: LLM, monitor: PerformanceMonitor) -> DecideFn:
+    @agent_eval(
+        monitor,
+        task_type="document_review",
+        question_arg="chapter_title",
+        conflict_resolution=ConflictResolutionConfig(),
+    )
+    def decide(
+        chapter_title: str, reviews_text: str, consensus: dict, ground_truth: str = ""
+    ) -> tuple[str, EvalMetadata]:
+        prompt = CHIEF_EDITOR_PROMPT.format(chapter_title=chapter_title, reviews_text=reviews_text)
+        text = llm.generate(prompt, system=CHIEF_EDITOR_SYSTEM_PROMPT, max_tokens=500)
+        return text, EvalMetadata(extra={"phase": "chief_editor", "consensus": consensus})
+
+    return decide
+```
+
+이 코드는 2장에서 확인한 `build_propose_plan()`과 뼈대가 완전히 같다 — 팩토리 함수, `@agent_eval` 데코레이터, 세 줄짜리 본문(프롬프트 조립 → `llm.generate()` → 반환). 다른 것은 딱 하나, 데코레이터에 들어가는 Harness Config뿐이다(`goal_alignment` 대신 `conflict_resolution`). `consensus`(합의도 계산 결과)가 `decide()`의 인자로 그대로 들어간다는 점도 눈여겨볼 지점이다 — 편집장은 리뷰어들의 원문뿐 아니라 "그 판정들이 서로 얼마나 일치했는가"라는 이미 계산된 신호까지 프롬프트 조립 이전에 받아본다.
 
 ```mermaid
 sequenceDiagram
@@ -87,6 +120,12 @@ sequenceDiagram
 > 👨‍💻 **개발자 TIP**: `run_review_panel()`의 반환값 `ReviewPanelResult`에는 `reviewer_verdicts`(개별 판정 전부), `consensus_score`, `final_verdict`, `final_summary`가 모두 담긴다 — 최종 판정만 쓰고 개별 리뷰어 의견을 버리지 않는다는 것은, 나중에 "왜 이 챕터가 반려됐는가"를 리뷰어 단위로 거슬러 올라가 확인할 수 있다는 뜻이다(Gate G의 설명 가능성과 맞닿는 지점 — 9장에서 다시 다룬다).
 
 ---
+
+## 직접 해보기
+
+`book-forge review <slug> <챕터번호>`를 실제로 실행해 리뷰어 2명(정확성/가독성)과 편집장의 판정을 직접 받아보라.
+
+**스스로 점검해볼 질문**: 리뷰 패널을 직접 설계한다면, 리뷰어 역할을 몇 개로 나누고 각 역할의 `allowed_action_keywords`/`forbidden_action_keywords`를 무엇으로 정할지 먼저 종이에 적을 수 있는가? "정확성 담당이 문체를 지적하면 역할 이탈"이라는 §5.2의 예시처럼, 역할을 명확히 가르는 키워드를 미리 정해두지 않으면 `AgentRoleConfig`를 붙여도 역할 이탈을 잡아낼 기준 자체가 없다.
 
 ## 이 챕터의 핵심
 

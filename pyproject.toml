@@ -26,7 +26,13 @@ pdf = ["playwright>=1.40"]
 # 프로젝트 하나 분량 소스에 별도 벡터 DB 프로세스/스키마는 과한 인프라라는 판단.
 rag = ["pypdf>=4.0", "numpy>=1.24"]
 serve = ["flask>=3.0"]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5", "mypy>=1.10", "playwright>=1.40", "flask>=3.0", "pypdf>=4.0", "numpy>=1.24"]
+# eval/monitor.py가 use_korean_tokenizer=True로 항상 요청한다 — Book-forge 산출물이
+# 전부 한국어이므로 Gate A(AccuracyEvaluator)/Gate C(HallucinationDetector)가 형태소
+# 단위로 비교해야 정확하다. 미설치 시 agent-evaluator가 공백 분리로 자동 폴백하므로
+# (경고 로그만 출력) 이 extra 없이도 전체 파이프라인은 그대로 동작한다 — 순수 품질
+# 향상용 옵트인.
+korean = ["agent-evaluator[korean]"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5", "mypy>=1.10", "playwright>=1.40", "flask>=3.0", "pypdf>=4.0", "numpy>=1.24", "agent-evaluator[korean]"]
 
 [project.scripts]
 book-forge = "book_forge.cli.main:cli"

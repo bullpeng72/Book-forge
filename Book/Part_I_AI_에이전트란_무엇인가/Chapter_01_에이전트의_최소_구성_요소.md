@@ -1,5 +1,8 @@
 # Chapter 1. 에이전트의 최소 구성 요소
 
+> ## Part I. AI 에이전트란 무엇인가
+> 이제부터 3개 챕터 동안, "AI 에이전트"라는 말이 실제 코드에서 정확히 무엇을 가리키는지부터 시작해(1장), 그 최소 단위 하나가 어떻게 동작하는지 한 줄씩 따라가고(2장), 마지막으로 그게 실제로 어떻게, 왜 실패하는지(3장)까지 확인한다. Part II부터는 "여러 에이전트가 어떻게 협업하는가"로 넘어가므로, Part I은 그 전에 필요한 **에이전트 하나**에 대한 그림을 완성하는 구간이다.
+
 > **이 챕터에서 배우는 것**
 > - "AI 에이전트"라는 말이 실제 코드에서는 무엇을 가리키는지
 > - Book-forge의 `LLM` Protocol이 왜 OpenAI/Anthropic/Ollama를 똑같은 인터페이스로 감싸는지
@@ -53,6 +56,48 @@ response = requests.post(f"{self._base_url}/api/generate", json=payload, timeout
 
 `think: False` 옵션 하나가 이 책 전체에서 반복해 등장할 "에이전트는 왜 실패하는가"(3장)의 첫 사례다 — `qwen3.6:35b-mlx` 같은 추론(thinking) 모델은 사고 과정을 별도 필드에 담고 최종 응답(`response`)은 비워둘 수 있다. `num_predict`(토큰 예산)를 추론에 다 써버리면 챕터 파일이 통째로 빈 채 저장되는 사고가 실제로 있었다(`provider.py`의 주석에 이 실측 경위가 그대로 남아 있다). `think: False`는 그 사고 과정을 건너뛰고 바로 답을 채우게 강제하는, 코드 한 줄로 막은 실패 사례다.
 
+나머지 두 구현체(`OpenAILLM`·`AnthropicLLM`)도 `provider.py`에서 그대로 확인할 수 있다 — 각자 다른 SDK(`openai`/`anthropic` 패키지)를 감싸지만, 바깥에서 보이는 모양은 정확히 같은 `generate(prompt, *, system=None, max_tokens=4000) -> str`이다.
+
+```python
+class OpenAILLM:
+    def __init__(self, api_key: str, model: str = DEFAULT_OPENAI_MODEL) -> None:
+        from openai import OpenAI  # lazy import
+
+        self._client = OpenAI(api_key=api_key)
+        self.model = model
+
+    def generate(
+        self, prompt: str, *, system: Optional[str] = None, max_tokens: int = 4000
+    ) -> str:
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        response = self._client.chat.completions.create(
+            model=self.model, messages=messages, max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content or ""
+
+
+class AnthropicLLM:
+    def __init__(self, api_key: str, model: str = DEFAULT_ANTHROPIC_MODEL) -> None:
+        from anthropic import Anthropic  # lazy import
+
+        self._client = Anthropic(api_key=api_key)
+        self.model = model
+
+    def generate(
+        self, prompt: str, *, system: Optional[str] = None, max_tokens: int = 4000
+    ) -> str:
+        response = self._client.messages.create(
+            model=self.model, max_tokens=max_tokens,
+            system=system or "", messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(block.text for block in response.content if hasattr(block, "text"))
+```
+
+세 구현체를 나란히 놓고 보면 "Protocol을 만족한다"는 말이 코드로 무엇을 뜻하는지 뚜렷해진다 — `OpenAILLM`은 `messages` 리스트(역할별 딕셔너리)를 조립하고, `AnthropicLLM`은 `system`을 별도 인자로 넘기고, `OllamaLLM`은 순수 JSON 페이로드를 만든다. 세 API의 요청 형식은 서로 판이하게 다르지만, 세 클래스 모두 `prompt`와 `system`을 받아 문자열 하나를 돌려준다는 점만은 동일하다 — 이 책의 나머지 부분(2장부터)이 "LLM을 어떤 provider가 서비스하는지"를 단 한 번도 신경 쓰지 않는 이유가 바로 여기, `provider.py` 안에서 이미 흡수됐기 때문이다.
+
 ## 1.3 provider 선택 — 환경변수 하나가 전체 파이프라인을 바꾼다
 
 `create_llm()` 팩토리 함수가 어떤 구현체를 만들지 결정한다.
@@ -73,6 +118,12 @@ def create_llm(provider: Optional[str] = None, model: Optional[str] = None) -> L
 
 ---
 
+## 직접 해보기
+
+`provider.py`를 보지 않고, `LLM` Protocol(§1.1)만 기억한 채로 4번째 구현체를 직접 스케치해보라 — 예를 들어 `class FakeLLM: model = "fake"` 하나에 `generate(self, prompt, *, system=None, max_tokens=4000) -> str` 메서드만 채워 넣으면(실제로 `tests/test_chat_agent.py`가 정확히 이 패턴을 쓴다), 그 클래스는 아무 상속 선언 없이도 Book-forge의 모든 에이전트에 그대로 꽂힌다.
+
+이 질문 하나로 이 장의 핵심을 스스로 테스트할 수 있다 — 지금 만들고 있는(또는 만들 예정인) 에이전트가 실제로 호출하는 LLM API를, 이런 최소 Protocol 하나로 추상화할 수 있는가? "예"라고 답할 수 있다면, provider를 나중에 바꿀 때(OpenAI→로컬 모델 등) 에이전트 코드를 한 줄도 안 고쳐도 된다.
+
 ## 이 챕터의 핵심
 
 - **에이전트의 최소 계약은 `prompt: str → str`이다.** Book-forge의 `LLM` Protocol이 이를 코드로 명시한다.
@@ -83,6 +134,7 @@ def create_llm(provider: Optional[str] = None, model: Optional[str] = None) -> L
 
 - `src/book_forge/llm/provider.py` — `LLM` Protocol과 3개 구현체 전체
 - `src/book_forge/config.py` — `load_config()`가 `.env`를 읽어 `LLM_PROVIDER` 등을 `os.environ`에 채우는 경로
+- 부록 B(용어집) — 이후 장에서 낯선 용어가 나오면 언제든 돌아와 확인할 수 있다
 
 ---
 

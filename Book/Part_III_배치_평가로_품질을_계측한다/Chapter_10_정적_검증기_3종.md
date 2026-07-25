@@ -29,8 +29,14 @@ flowchart LR
 이 검증기 자신도 한 번 버그가 있었다는 사실이 중요하다 — 최상위 패키지 네임스페이스에 재노출되지 않은 클래스(`Settings`·`KoreanRAGDatasetGenerator`·`LiveGuardrail`)를 "존재하지 않는다"고 오탐했다. 고친 방법은 `_walk_package_symbols()`라는 새 함수다.
 
 ```python
+_package_symbol_cache: dict[str, set[str]] = {}
+
 def _walk_package_symbols(root_module) -> set[str]:
     """target_package 산하 전체 서브모듈을 순회해 공개 멤버 이름을 평평하게 모은다."""
+    name = getattr(root_module, "__name__", None)
+    if name is not None and name in _package_symbol_cache:
+        return _package_symbol_cache[name]
+
     symbols: set[str] = set(n for n in dir(root_module) if not n.startswith("_"))
     package_path = getattr(root_module, "__path__", None)
     if package_path is not None:
@@ -39,8 +45,11 @@ def _walk_package_symbols(root_module) -> set[str]:
             try:
                 module = importlib.import_module(module_name)
             except Exception:
-                continue
+                continue  # 선택적 의존성 등으로 로드 실패한 서브모듈은 건너뛴다
             symbols.update(n for n in dir(module) if not n.startswith("_"))
+
+    if name is not None:
+        _package_symbol_cache[name] = symbols
     return symbols
 ```
 
@@ -65,6 +74,48 @@ def verify_exercise_code(draft_md: str) -> VerificationResult:
 
 같은 모듈은 다이어그램(mermaid 펜스가 알려진 타입으로 시작하고 실제 노드/엣지가 있는가), 참조표(표 셀 값이 실제 소스 발췌문에 등장하는가), 캡스톤(템플릿에 TODO 마커가 있고 정답 코드는 TODO 없이 유효한가)도 각각 정적으로 검증한다 — 넷 다 LLM 호출 없이 콘텐츠 유형별로 다른 정적 규칙을 적용한다.
 
+이 책 자체가 mermaid 다이어그램을 챕터마다 여러 개 쓰고 있으니, `verify_diagram()`을 직접 확인해보면 그 검증이 정확히 무엇을 대조하는지 감이 잡힌다.
+
+```python
+def verify_diagram(
+    draft_md: str, sources_text: str = "", *, min_grounding_ratio: float = 0.3
+) -> VerificationResult:
+    blocks = _MERMAID_FENCE_RE.findall(draft_md)
+    if not blocks:
+        return VerificationResult(content_type="diagram", passed=False,
+            detail="mermaid 코드 블록이 없습니다 — diagram 유형인데 다이어그램이 생성되지 않았습니다.")
+    issues = []
+    node_labels: list[str] = []
+    for i, block in enumerate(blocks, 1):
+        lines = [line for line in block.strip().splitlines() if line.strip()]
+        first_line = lines[0] if lines else ""
+        if not any(first_line.strip().startswith(kw) for kw in _MERMAID_DIAGRAM_KEYWORDS):
+            issues.append(f"다이어그램 블록 {i}: 알려진 mermaid 타입으로 시작하지 않음")
+        elif len(lines) < 2:
+            issues.append(f"다이어그램 블록 {i}: 내용이 비어 있음(타입 선언만 있음)")
+        else:
+            node_labels.extend(_MERMAID_NODE_LABEL_RE.findall(block))
+
+    if sources_text and node_labels and not issues:
+        identifiers = {tok for label in node_labels for tok in _IDENTIFIER_TOKEN_RE.findall(label)}
+        if identifiers:
+            grounded = sum(1 for tok in identifiers if tok in sources_text)
+            ratio = grounded / len(identifiers)
+            if ratio < min_grounding_ratio:
+                issues.append(
+                    f"노드 라벨의 식별자 {len(identifiers)}개 중 {grounded}개만 소스에서 확인됨"
+                    f"({ratio:.0%} < 기준 {min_grounding_ratio:.0%})"
+                )
+    passed = not issues
+    detail = (
+        f"다이어그램 블록 {len(blocks)}개 구조 검증 통과" if passed
+        else f"다이어그램 블록 {len(blocks)}개 중 {len(issues)}개 구조 문제"
+    )
+    return VerificationResult(content_type="diagram", passed=passed, detail=detail, issues=issues)
+```
+
+앞부분(`flowchart`/`sequenceDiagram` 같은 알려진 타입으로 시작하는가, 타입 선언만 있고 내용이 비어 있진 않은가)은 문법 검증이다. 뒷부분이 이 함수의 진짜 목적이다 — `sources_text`가 주어지면, 노드 라벨(`node_labels`)에서 뽑은 식별자(클래스명·함수명처럼 보이는 토큰)가 실제 RAG 소스에 등장하는 비율을 계산한다. 함수 docstring이 이 검사를 추가한 이유를 실측 사례로 남겨뒀다 — "패키지 구조"를 요청했는데 파일 하나의 내부 관계만 그려진 스코프 불일치가 실제로 있었다. 다이어그램은 코드 심볼(§10.2)이나 표 셀(참조표)과 달리 **100% LLM이 그래프 구조 자체를 새로 구성**하므로, 실제 코드와 무관한 노드·엣지를 만들어낼 위험이 더 크다 — `min_grounding_ratio=0.3`은 "적어도 30%의 식별자는 소스에서 확인돼야 한다"는 최소 방어선이다.
+
 ## 10.4 용어 일관성 — 같은 것을 다르게 부르지 않는가
 
 3장(§3.3)의 "드리프트" 문제와는 별개로, `term_consistency_checker.py`는 **한 챕터 안 또는 여러 챕터 사이**에서 같은 개념이 다른 표기로 등장하는지 확인한다(`book-forge lint`, SPEC.md의 AK 항목).
@@ -77,9 +128,15 @@ def _fold_key(term: str) -> str:
 
 `ToolCallAnalyzer`와 `tool_call_analyzer`는 겉보기엔 다른 문자열이지만, `_fold_key()`를 거치면 같은 키(`toolcallanalyzer`)로 묶인다 — 같은 키에 서로 다른 실제 표기가 2개 이상 나타나면 "표기 불일치 후보"로 보고한다. 이 검사도 자동으로 통일하지 않는다 — 후보만 보여주고 최종 판단은 저자가 한다는 원칙이 §10.2·§10.3과 동일하게 반복된다.
 
-> 👨‍💻 **개발자 TIP**: 이 세 검증기는 모두 "발견해서 보고만 한다, 자동 수정하지 않는다"는 원칙을 공유한다 — `draft_cmd.py`는 이 결과를 `ChapterDraftResult`에 실어 CLI 요약에 노출할 뿐, `book-forge gate`처럼 빌드를 막지 않는다. Gate 점수 노출과 같은 철학이다(9장 §9.4의 "참고용" 문구를 떠올려보라).
+> 👨‍💻 **개발자 TIP**: 이 세 검증기는 모두 "발견해서 보고만 한다, 자동 수정하지 않는다"는 원칙을 공유한다 — `draft_cmd.py`는 이 결과를 `ChapterDraftResult`에 실어 CLI 요약에 노출할 뿐, `book-forge gate`처럼 빌드를 막지 않는다. Gate 점수 노출과 같은 철학이다(9장 §9.5의 "참고용" 문구를 떠올려보라).
 
 ---
+
+## 직접 해보기
+
+이미 집필된 챕터 파일 하나를 열어, 백틱으로 감싼 실제 코드 심볼(`` `SomeClass` ``) 하나를 일부러 존재하지 않는 이름으로 바꿔보고 `book-forge draft <slug> <ch> --check-package book_forge`를 실행해보라 — `code_consistency_checker.py`가 이 오류를 실제로 잡아내는지 확인할 수 있다.
+
+**적용 체크리스트**: 여러분의 프로젝트에는 문서·주석이 실제 코드를 정확히 인용하는지 자동으로 확인하는 장치가 있는가? 없다면 `_walk_package_symbols()`(§10.2)처럼 "정확한 위치"가 아니라 "존재 여부"만 평평하게 확인하는 가벼운 검증기 하나가, LLM 호출 없이도 상당한 신뢰도를 벌어준다는 것을 기억해두라.
 
 ## 이 챕터의 핵심
 
@@ -90,6 +147,8 @@ def _fold_key(term: str) -> str:
 
 ## 참고 자료
 
+- 부록 A.6(Harness Config 사용 현황) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 **생성 코드** 자체
+- 부록 C.1(업계 동향) — RAG·자기일관성·불확실성 추정을 조합하는 업계의 환각 대응과, Book-forge가 그중 가장 단순한 축만 쓰는 이유
 - `src/book_forge/agents/code_consistency_checker.py`
 - `src/book_forge/agents/demonstration_verifier.py`
 - `src/book_forge/agents/term_consistency_checker.py`

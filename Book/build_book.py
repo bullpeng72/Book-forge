@@ -96,6 +96,7 @@ def robust_path(fpath: Path) -> Path:
 # ── 변환 순서 — 02_목차_초안.md 기준 ────────────────────────────────────────────
 ORDERED_FILES = [
     robust_path(BOOK_DIR / "00_서문.md"),
+    robust_path(BOOK_DIR / "00_Book_forge_둘러보기.md"),
     robust_path(BOOK_DIR / "Part_I_AI_에이전트란_무엇인가/Chapter_01_에이전트의_최소_구성_요소.md"),
     robust_path(BOOK_DIR / "Part_I_AI_에이전트란_무엇인가/Chapter_02_단일_에이전트의_동작_흐름.md"),
     robust_path(BOOK_DIR / "Part_I_AI_에이전트란_무엇인가/Chapter_03_에이전트는_왜_어떻게_실패하는가.md"),
@@ -111,7 +112,11 @@ ORDERED_FILES = [
     robust_path(BOOK_DIR / "Part_IV_실행_전에_막고_조정한다/Chapter_13_팀_동시성과_편집_충돌_방지.md"),
     robust_path(BOOK_DIR / "Part_IV_실행_전에_막고_조정한다/Chapter_14_품질_기준을_프로젝트마다_다르게.md"),
     robust_path(BOOK_DIR / "Part_IV_실행_전에_막고_조정한다/Chapter_15_한계와_열린_문제.md"),
+    robust_path(BOOK_DIR / "99_맺음말.md"),
     robust_path(BOOK_DIR / "Appendix/A_Harness_Config_사용현황.md"),
+    robust_path(BOOK_DIR / "Appendix/B_용어집.md"),
+    robust_path(BOOK_DIR / "Appendix/C_업계_동향과_더_읽을거리.md"),
+    robust_path(BOOK_DIR / "Appendix/D_구조적_코드_인덱싱_상세.md"),
 ]
 
 # ── Mermaid / raw-HTML 주입 — 이 책의 다이어그램은 챕터 본문에 ```mermaid로
@@ -481,6 +486,7 @@ document.addEventListener('DOMContentLoaded', function() {
 # ── TOC 구조 정의 — 02_목차_초안.md 기준 ────────────────────────────────────────
 TOC_STRUCTURE = [
     ("chapter", "00_서문", "preface", "서문"),
+    ("chapter", "00_Book_forge_둘러보기", "overview", "Book-forge 둘러보기"),
     ("part", "Part I — AI 에이전트란 무엇인가"),
     ("chapter", "Chapter_01", "ch01", "01. 에이전트의 최소 구성 요소"),
     ("chapter", "Chapter_02", "ch02", "02. 단일 에이전트의 동작 흐름 — PlannerAgent 해부"),
@@ -500,8 +506,12 @@ TOC_STRUCTURE = [
     ("chapter", "Chapter_13", "ch13", "13. 팀 동시성과 편집 충돌 방지"),
     ("chapter", "Chapter_14", "ch14", "14. 품질 기준을 프로젝트마다 다르게"),
     ("chapter", "Chapter_15", "ch15", "15. 한계와 열린 문제"),
+    ("chapter", "99_맺음말", "afterword", "맺음말"),
     ("part", "부록"),
     ("appendix", "A_Harness_Config", "appA", "부록 A. Harness Config 사용 현황"),
+    ("appendix", "B_용어집", "appB", "부록 B. 용어집"),
+    ("appendix", "C_업계_동향", "appC", "부록 C. 업계 동향과 더 읽을거리"),
+    ("appendix", "D_구조적_코드_인덱싱", "appD", "부록 D. 구조적 코드 인덱싱 상세"),
 ]
 
 STEM_TO_ID: dict[str, str] = {}

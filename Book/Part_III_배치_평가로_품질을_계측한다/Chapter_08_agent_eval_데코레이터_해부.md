@@ -1,7 +1,10 @@
 # Chapter 8. `@agent_eval` 데코레이터 해부
 
+> ## Part III. 배치 평가로 품질을 계측한다
+> Part II가 "에이전트들이 어떻게 협업하는가"를 다뤘다면, Part III의 4개 챕터는 그 협업이 만든 **결과물의 품질을 어떻게 판정하는가**로 초점을 옮긴다 — 이미 2·5·6장에서 스쳐 지나간 `@agent_eval`·Gate·Config를 이제 정면으로 해부한다(8장), Gate A–G가 실제로 무엇을 재는지 정리하고(9장), Gate가 손대지 않는 영역(정적 검증)을 보고(10장), 마지막으로 챕터 하나가 아니라 책 전체를 판정하는 집계로 마무리한다(11장).
+
 > **이 챕터에서 배우는 것**
-> - Book-forge의 6개 에이전트가 각각 어떤 Harness Config를 골랐는지
+> - Book-forge의 7개 에이전트가 각각 어떤 Harness Config를 골랐는지
 > - 같은 데코레이터인데 왜 매번 다른 Config 조합을 쓰는지
 > - "이 에이전트가 무엇을 하는가"를 보면 "어떤 Config가 필요한가"를 예측할 수 있는 이유
 
@@ -9,19 +12,19 @@
 
 ---
 
-## 8.1 여섯 에이전트, 여섯 가지 다른 설정
+## 8.1 일곱 에이전트, 일곱 가지 다른 설정
 
-Book-forge에는 `@agent_eval`이 붙은 함수가 여러 개 있다 — 지금까지 이 책이 다룬 것만 추려도 여섯이다. 이들을 나란히 놓으면, Config 선택이 무작위가 아니라 **그 에이전트가 정확히 무엇을 하는가**에서 곧바로 도출된다는 것이 보인다.
+Book-forge에는 `@agent_eval`이 붙은 함수가 여러 개 있다 — 지금까지 이 책이 다룬 것만 추려도 일곱이다(`review_panel.py` 한 파일이 `ReviewerAgent`·`ChiefEditorAgent` 두 개를 낸다는 점에 유의). 이들을 나란히 놓으면, Config 선택이 무작위가 아니라 **그 에이전트가 정확히 무엇을 하는가**에서 곧바로 도출된다는 것이 보인다.
 
 | 에이전트 | 파일 | 핵심 Config | Config가 지키려는 것 |
 |---|---|---|---|
 | PlannerAgent | `planner.py` | `GoalAlignmentConfig(ignore_no_tool_tasks=False)`, `InstructionConfig`, `ExplainabilityConfig` | 기획안이 실제로 주제/제약을 반영했는가, 근거를 설명하는가 |
 | TOCDesignerAgent | `toc_designer.py` | `PlanConfig`, `SubtaskConfig`, `ContextRetentionConfig` | 목차(subtask들)가 기획안의 결정사항을 이어받았는가 |
 | ChapterDrafterAgent | `chapter_drafter.py` | `SLAConfig(p95_ms=60_000)`, `ThreatSeverityConfig`, `rag_mode=True` | 응답 지연이 허용 범위인가, 외부 RAG 소스에 프롬프트 인젝션은 없는가 |
-| ChatAgent | `chat_agent.py` | `SLAConfig(p95_ms=30_000)`, `rag_mode=True` | 대화형 응답이라 더 짧은 지연 허용치, 근거 없는 답을 안 하는가 |
+| ChatAgent | `chat_agent.py` | `SLAConfig(p95_ms=30_000)`, `ThreatSeverityConfig`, `rag_mode=True` | 대화형 응답이라 더 짧은 지연 허용치, 근거 없는 답을 안 하는가, 외부 RAG 소스에 프롬프트 인젝션은 없는가 |
 | ReviewerAgent | `review_panel.py`(`build_reviewer`) | `AgentRoleConfig(role_violation_penalty=0.3)` | 자기 역할(정확성/가독성)을 벗어나지 않는가 |
 | ChiefEditorAgent | `review_panel.py`(`build_chief_editor`) | `ConflictResolutionConfig` | 리뷰어 간 이견을 실제로 조정하는가 |
-| ReviseAgent | `review_loop.py` | `LoopDetectionConfig(consecutive_repeat_threshold=3)` | 같은 피드백이 반복되지 않는가 |
+| `revise()` | `review_loop.py` | `LoopDetectionConfig(consecutive_repeat_threshold=3)` | 같은 피드백이 반복되지 않는가 |
 
 ## 8.2 패턴 ① — "이 함수가 무엇을 판단하는가"가 Config를 결정한다
 
@@ -29,7 +32,38 @@ Book-forge에는 `@agent_eval`이 붙은 함수가 여러 개 있다 — 지금�
 
 ## 8.3 패턴 ② — 부작용의 종류가 Config를 결정한다
 
-`ChapterDrafterAgent`의 `ThreatSeverityConfig`는 우연이 아니다. 이 에이전트만 유일하게 **외부에서 온, 신뢰할 수 없는 콘텐츠**(RAG 소스로 넘어온 PDF/웹 발췌문)를 프롬프트에 직접 섞는다 — 코드 주석이 명시한다: "외부 PDF/문서(RAG 소스)에 프롬프트 인젝션이 섞여 있을 가능성." `PlannerAgent`는 저자가 CLI로 직접 입력한 `topic`/`constraints`만 받으므로 이 위협이 상대적으로 작다. **에이전트가 어떤 종류의 입력을 받는가가 보안 관련 Config의 필요 여부를 정확히 예측한다.**
+`ChapterDrafterAgent`의 `ThreatSeverityConfig`는 우연이 아니다. `rag_mode=True`인 에이전트(`ChapterDrafterAgent`·`ChatAgent`) **전부**가 이 Config도 함께 쓴다 — 둘 다 **외부에서 온, 신뢰할 수 없는 콘텐츠**(RAG 소스로 넘어온 PDF/웹 발췌문)를 프롬프트에 직접 섞기 때문이다. 코드 주석이 명시한다: "외부 PDF/문서(RAG 소스)에 프롬프트 인젝션이 섞여 있을 가능성." `PlannerAgent`는 저자가 CLI로 직접 입력한 `topic`/`constraints`만 받으므로 이 위협이 상대적으로 작다. **에이전트가 어떤 종류의 입력을 받는가가 보안 관련 Config의 필요 여부를 정확히 예측한다** — 실제로 `rag_mode=True`인가로 `threat_severity` 필요 여부를 100% 예측할 수 있다(반례: 이전 버전 `chat_agent.py`는 `rag_mode=True`이면서도 이 Config가 빠져 있었다 — 실측으로 발견돼 고쳐진 사례다).
+
+실제 `build_draft_chapter()` 코드를 보면 이 판단이 어디서 나왔는지가 데코레이터 인자 옆 주석에 그대로 남아 있다.
+
+```python
+def build_draft_chapter(llm: LLM, monitor: PerformanceMonitor) -> DraftFn:
+    @agent_eval(
+        monitor,
+        task_type="document_creation",
+        question_arg="chapter_title",
+        rag_mode=True,
+        context_arg="sources",
+        # Gate D: 소스가 길면 응답이 오래 걸릴 수 있어 여유 있게 설정.
+        sla=SLAConfig(p95_ms=60_000, p99_ms=90_000),
+        # Gate E: 외부 PDF/문서(RAG 소스)에 프롬프트 인젝션이 섞여 있을 가능성.
+        threat_severity=ThreatSeverityConfig(),
+    )
+    def draft_chapter(
+        chapter_title: str, chapter_no: int, sources: str,
+        ground_truth: str = "", content_type: str = "narrative",
+    ) -> tuple[str, EvalMetadata]:
+        template = _CONTENT_TYPE_PROMPTS.get(content_type, DRAFT_PROMPT)
+        prompt = template.format(
+            chapter_title=chapter_title, chapter_no=chapter_no, sources=sources[:6000]
+        )
+        draft_md = llm.generate(prompt, system=DRAFT_SYSTEM_PROMPT, max_tokens=3000)
+        return draft_md, EvalMetadata(extra={"phase": "drafting", "chapter_no": chapter_no})
+
+    return draft_chapter
+```
+
+`content_type` 인자가 `_CONTENT_TYPE_PROMPTS`에서 어떤 프롬프트 템플릿을 쓸지 고른다 — `narrative`/`reference_table`/`diagram`/`exercise`/`capstone`/`module_reference` 6가지 콘텐츠 유형(00_Book_forge_둘러보기.md §0.2에서 이미 본 `book-forge draft`의 콘텐츠 유형)이 결국 이 한 줄의 딕셔너리 조회로 갈라진다는 것도 눈여겨볼 지점이다 — 유형마다 별도 함수를 만드는 대신, 프롬프트 템플릿만 바꿔치기한다. `sources[:6000]`처럼 소스를 6000자로 자르는 것도 실무적인 선택이다 — 프롬프트 길이 제한과 응답 지연(`SLAConfig`가 60초로 여유를 두는 이유) 사이의 균형이다.
 
 `SLAConfig`의 값 차이도 같은 원리다 — `ChapterDrafterAgent`(60초)는 소스 청크를 프롬프트에 실어 긴 응답을 생성하는 무거운 작업이고, `ChatAgent`(30초)는 대화형이라 사용자가 즉시 응답을 기다린다. "얼마나 걸려도 되는가"는 UX 성격에서 직접 도출된다.
 
@@ -58,9 +92,13 @@ flowchart TD
     Q4 -->|"아니오"| SLA["최소한 sla=SLAConfig()는 고려"]
 ```
 
-> 📋 **QA 관리자 TIP**: 이 책의 6개 에이전트 중 어느 하나도 33개 Harness Config를 전부 쓰지 않는다 — 각자 2~3개만 정확히 골라 쓴다. "Config를 많이 켤수록 안전하다"는 것은 이 코드베이스가 보여주는 실제 관례가 아니다 — 오히려 "이 에이전트가 정말로 무엇을 할 수 있는가"를 좁게 규정한 뒤, 그 범위에 정확히 맞는 Config만 켜는 것이 Book-forge의 일관된 패턴이다.
+> 📋 **QA 관리자 TIP**: 이 책의 7개 에이전트 중 어느 하나도 33개 Harness Config를 전부 쓰지 않는다 — `ReviewerAgent`·`ChiefEditorAgent`·`revise()` 셋은 각 1개만, `ChapterDrafterAgent`·`ChatAgent`는 2개(`SLAConfig`+`ThreatSeverityConfig`), `PlannerAgent`·`TOCDesignerAgent`는 3개를 쓴다. "Config를 많이 켤수록 안전하다"는 것은 이 코드베이스가 보여주는 실제 관례가 아니다 — 오히려 "이 에이전트가 정말로 무엇을 할 수 있는가"를 좁게 규정한 뒤, 그 범위에 정확히 맞는 Config만 켜는 것이 Book-forge의 일관된 패턴이다.
 
 ---
+
+## 직접 해보기
+
+§8.5의 결정 트리를 여러분의 에이전트(또는 3장 "직접 해보기"에서 점검한 에이전트)에 실제로 적용해보라 — "부작용이 있는가?" → "신뢰 못 할 외부 콘텐츠를 다루는가?" → "이전 단계의 의도를 지켜야 하는가?" → "여러 에이전트가 같은 대상을 다루는가?" 네 질문에 순서대로 답하면, 어떤 Harness Config가 필요한지가 거의 자동으로 나온다. 답이 전부 "아니오"라면 `SLAConfig` 하나만으로 충분할 수도 있다 — 이 챕터가 반복해서 강조했듯, **Config를 적게 쓰는 것 자체가 실패가 아니다.**
 
 ## 이 챕터의 핵심
 
@@ -70,6 +108,7 @@ flowchart TD
 
 ## 참고 자료
 
+- 부록 C.3(업계 동향) — `ThreatSeverityConfig`가 대응하는 OWASP LLM01(프롬프트 인젝션) 순위와 최근 RAG 오염 연구
 - `src/book_forge/agents/planner.py`·`toc_designer.py`·`chapter_drafter.py`·`chat_agent.py`·`review_panel.py`·`review_loop.py`
 - `src/book_forge/agents/scaffold.py` — `@tool_guard`로 갈라지는 경계
 

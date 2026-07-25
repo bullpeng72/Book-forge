@@ -74,6 +74,12 @@ def build_book_monitor(
         enable_llm_judge=enable_llm_judge,
         judge_model=judge_model,
         judge_sample_rate=0.2,
+        # Book-forge 산출물은 전부 한국어다 — AccuracyEvaluator(Gate A)와
+        # HallucinationDetector(Gate C)가 공백 분리 대신 형태소 단위로 비교하도록
+        # 항상 요청한다. kiwipiepy(agent-evaluator[korean] extra) 미설치 시
+        # agent-evaluator가 자동으로 공백 분리 폴백 + 경고 로그로 처리하므로
+        # (관대한 폴백 원칙과 동일) 이 extra 없이도 파이프라인은 그대로 동작한다.
+        use_korean_tokenizer=True,
         auto_save=True,
         auto_save_interval=5,
         **_gate_weight_overrides(),

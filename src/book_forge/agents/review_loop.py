@@ -2,8 +2,9 @@
 
 ``conversation_eval``이 다회 대화에 자연스러워 보이지만 실제 소스
 (``decorators.py``의 ``_CONVERSATION_EVAL_UNUSED_HARNESS_PARAMS``)를 확인한
-결과, 30개 Harness Config 전부가 시그니처로만 받고 평가에는 반영되지 않는다
-(SPEC-039 REQ-5, Non-Goal). ``LoopDetectionConfig``가 실제로 작동하려면 라운드를
+결과, 31개 Harness Config 전부가 시그니처로만 받고 평가에는 반영되지 않는다
+(SPEC-039 REQ-5, Non-Goal — `_CONVERSATION_EVAL_UNUSED_HARNESS_PARAMS` 튜플
+실측 카운트). ``LoopDetectionConfig``가 실제로 작동하려면 라운드를
 독립된 TaskResult로 기록해야 하므로, ``conversation_eval`` 대신 라운드마다
 ``@agent_eval``을 개별 호출하는 방식을 쓴다.
 """

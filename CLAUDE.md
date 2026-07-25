@@ -118,7 +118,7 @@ def build_propose_plan(llm: LLM, monitor: PerformanceMonitor) -> ProposePlanFn:
 
 **왜 `conversation_eval`이 아니라 라운드별 `@agent_eval`인가** (`review_loop.py`): 실제
 agent-evaluator 소스(`decorators.py`의 `_CONVERSATION_EVAL_UNUSED_HARNESS_PARAMS`)를
-확인한 결과, `conversation_eval`은 30개 Harness Config 전부를 시그니처로만 받고 평가에
+확인한 결과, `conversation_eval`은 31개 Harness Config 전부를 시그니처로만 받고 평가에
 반영하지 않는다(설계상 Non-Goal). 저자 리뷰 루프에서 `LoopDetectionConfig`가 실제로
 작동하려면 각 라운드를 독립된 TaskResult로 기록해야 하므로, `task_id_fn=lambda args,
 kwargs: f"review_{kwargs['kind']}_r{kwargs['round_no']}"`로 라운드별 개별 `@agent_eval`
