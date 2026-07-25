@@ -109,44 +109,31 @@ URL은 `http(s)://` 접두어로 자동 판별합니다 — 별도로 소스 종
 
 ## 사용 프로세스
 
-```
-1. 주제 입력
-   book-forge new "<제목>" [--constraints "..."] [--source ...]
-           │
-           ▼
-2. 기획안 승인 루프 ── LLM이 초안 생성 → Enter(승인) / 텍스트 입력(수정 요청, 반복)
-           │
-           ▼
-3. 목차 승인 루프 ── Part/Chapter 구조, 같은 승인 방식
-   (--source로 코드 저장소를 줬다면 이 단계 이전에 구조 분석 결과가 반영됨)
-           │
-           ▼
-4. 스캐폴딩 ── Part_X_.../Chapter_XX_....md 빈 파일 자동 생성
-           │
-           ▼
-5. 집필 ── 아래 세 경로 중 선택(섞어 써도 됨, 챕터마다 달라도 무방)
-   ┌───────────────┬──────────────────────┬───────────────────────────┐
-   │ (a) 직접 작성  │ (b) RAG, 챕터 하나씩  │ (c) RAG, 배치/완전자동     │
-   │ book-forge edit│ book-forge draft      │ book-forge draft --all     │
-   │   <slug>       │   <slug> <ch> --source│   <slug> --source ...      │
-   │                │   ...                 │ (2단계에서 --source를 주면 │
-   │                │                       │  2~5를 한 번에 처리)       │
-   └───────────────┴──────────────────────┴───────────────────────────┘
-           │
-           ▼
-6. 산출물 생성
-   book-forge build html|pdf|epub|slides <slug>
-           │
-           ▼
-7. 품질 확인
-   book-forge gate <slug>            # 책 전체 Gate A-G 종합 판정 (CI 연동 가능)
-   book-forge lint <slug>            # 챕터 간 용어 표기 불일치 확인
-           │
-           ▼
-8. 필요하면 반복
-   book-forge plan <slug> --revise   # 기획/목차 재조정 (기존 챕터 파일은 보존)
-   book-forge draft ... --force      # 특정 챕터만 재생성
-   book-forge chat <slug>            # 쌓인 지식창고에 질문하며 보충 자료 확인
+```mermaid
+flowchart TD
+    A["1. 주제 입력<br/>book-forge new &quot;&lt;제목&gt;&quot; [--constraints ...] [--source ...]"]
+    B["2. 기획안 승인 루프<br/>LLM이 초안 생성 → Enter(승인) / 텍스트 입력(수정 요청, 반복)"]
+    C["3. 목차 승인 루프<br/>Part/Chapter 구조, 같은 승인 방식<br/>(--source가 코드 저장소면 구조 분석 결과가 이 단계 이전에 반영됨)"]
+    D["4. 스캐폴딩<br/>Part_X_.../Chapter_XX_....md 빈 파일 자동 생성"]
+    E{"5. 집필<br/>세 경로 중 선택 — 섞어 써도 됨, 챕터마다 달라도 무방"}
+    F1["(a) 직접 작성<br/>book-forge edit &lt;slug&gt;"]
+    F2["(b) RAG, 챕터 하나씩<br/>book-forge draft &lt;slug&gt; &lt;ch&gt; --source ..."]
+    F3["(c) RAG, 배치/완전자동<br/>book-forge draft &lt;slug&gt; --all --source ...<br/>(2단계에서 --source를 주면 2~5를 한 번에 처리)"]
+    G["6. 산출물 생성<br/>book-forge build html·pdf·epub·slides &lt;slug&gt;"]
+    H["7. 품질 확인<br/>book-forge gate &lt;slug&gt; — 책 전체 Gate A-G 판정(CI 연동 가능)<br/>book-forge lint &lt;slug&gt; — 챕터 간 용어 표기 불일치 확인"]
+    I["8. 필요하면 반복<br/>plan --revise · draft --force · chat"]
+
+    A --> B --> C --> D --> E
+    E -->|"(a)"| F1
+    E -->|"(b)"| F2
+    E -->|"(c)"| F3
+    F1 --> G
+    F2 --> G
+    F3 --> G
+    G --> H --> I
+    I -.->|"기획/목차 재조정<br/>(기존 챕터 파일은 보존)"| C
+    I -.->|"특정 챕터만 재생성"| E
+    I -.->|"지식창고에 질문하며<br/>보충 자료 확인"| F2
 ```
 
 **주제 입력만으로 끝까지 자동으로 밀고 싶다면**: `book-forge new "<제목>" --source ./papers`
