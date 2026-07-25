@@ -13,15 +13,16 @@ Gate A–G로 계측·게이팅합니다. LLM Provider는 기본값이 **Ollama(
 - [설치](#설치)
 - [사용자 작업 흐름](#사용자-작업-흐름)
 - [기능](#기능)
-- [일반 능력 A–F (RAG 집필 보조 확장)](#일반-능력-af-rag-집필-보조-확장)
-- [일반 능력 G — 자기실증 예제 (멀티에이전트 협업)](#일반-능력-g--자기실증-예제-멀티에이전트-협업)
-- [일반 능력 H — 구조적 코드 인덱싱](#일반-능력-h--구조적-코드-인덱싱)
-- [일반 능력 I — 로컬 코드베이스 대상 검증](#일반-능력-i--로컬-코드베이스-대상-검증)
-- [일반 능력 J — 지식창고 라이프사이클 관리](#일반-능력-j--지식창고-라이프사이클-관리)
-- [일반 능력 O — 목차 개정 이력 자동 기록](#일반-능력-o--목차-개정-이력-자동-기록)
-- [일반 능력 M — 챕터 구조 템플릿](#일반-능력-m--챕터-구조-템플릿)
-- [일반 능력 K — 소스 가중치 균형 조정](#일반-능력-k--소스-가중치-균형-조정)
-- [일반 능력 N — 리서치 에이전트 + 참고 자료 자동 인용](#일반-능력-n--리서치-에이전트--참고-자료-자동-인용)
+- [주요 기능 상세](#주요-기능-상세)
+  - [RAG 집필 보조 상세](#rag-집필-보조-상세)
+  - [다관점 리뷰 패널 — 멀티에이전트 협업](#다관점-리뷰-패널--멀티에이전트-협업)
+  - [구조적 코드 인덱싱](#구조적-코드-인덱싱)
+  - [로컬 코드베이스 대상 검증](#로컬-코드베이스-대상-검증)
+  - [지식창고 라이프사이클 관리](#지식창고-라이프사이클-관리)
+  - [목차 개정 이력 자동 기록](#목차-개정-이력-자동-기록)
+  - [챕터 구조 템플릿](#챕터-구조-템플릿)
+  - [소스 가중치 균형 조정](#소스-가중치-균형-조정)
+  - [리서치 에이전트와 참고 자료 자동 인용](#리서치-에이전트와-참고-자료-자동-인용)
 - [CLI 명령](#cli-명령)
 - [아키텍처](#아키텍처)
 - [Gate A–G 계측](#gate-ag-계측)
@@ -114,7 +115,7 @@ book-forge new "AI 에이전트 평가 입문" --constraints "초보자 대상, 
 
 RAG 경로((b)(c))는 생성 전 소스 커버리지를 점검해 낮으면 경고·대안을 보여줍니다
 (단일 모드는 진행/취소를 직접 묻고, 배치·완전자동 모드는 건너뛰고 요약에만
-남깁니다 — [일반 능력 A–F](#일반-능력-af-rag-집필-보조-확장) 참고). RAG로
+남깁니다 — [RAG 집필 보조 상세](#rag-집필-보조-상세) 참고). RAG로
 생성한 챕터도 (a)처럼 `book-forge edit`으로 나중에 손볼 수 있습니다 — 세 경로는
 배타적이지 않습니다.
 
@@ -139,16 +140,17 @@ book-forge plan <slug> --revise
 - **기획/목차 대화형 루프**: 주제 입력 → `PlannerAgent`가 기획안 초안 → 저자가 Enter(승인)
   또는 수정 요청 입력 → 승인될 때까지 반복 → `TOCDesignerAgent`가 목차 설계 → 같은 승인
   루프 → 승인된 목차로 `Part_X/Chapter_XX.md` 스캐폴드 자동 생성. `book-forge new --source
-  <코드 저장소>`를 주면 목차 설계 **이전에** H로 실제 모듈/클래스 목록을 미리 분석해
-  반영한다(일반 능력 S) — 존재하지 않는 서브시스템을 챕터로 지어내는 걸 방지
+  <코드 저장소>`를 주면 목차 설계 **이전에** [구조적 코드 인덱싱](#구조적-코드-인덱싱)으로
+  실제 모듈/클래스 목록을 미리 분석해 반영한다 — 존재하지 않는 서브시스템을 챕터로
+  지어내는 걸 방지
 - **HTML 빌드**: 단일 자기완결 HTML — 이미지 base64 인라인 임베드(파일 첨부 없이도 열림),
   Mermaid/코드하이라이팅(CDN), `01_목차.md`에서 사이드바 자동 생성. `--author` 등을
-  지정했으면 표지 페이지(제목/저자/판/저작권 고지) 자동 삽입(일반 능력 AI)
+  지정했으면 표지 페이지(제목/저자/판/저작권 고지) 자동 삽입
 - **PDF 빌드**: Playwright로 챕터별 A4 PDF, 이미지 자동 리사이즈. 표지 정보가 있으면
   `00_표지.pdf`를 별도 파일로 함께 생성
 - **발표자료**: 챕터를 섹션 단위로 LLM이 압축(제목 35자 이내) — Reveal.js, 발표자 노트
   기본 포함. 코드/mermaid 펜스는 LLM 요약 이전에 분리해 원문 그대로 별도
-  슬라이드로 보존(Mermaid.js/highlight.js CDN 로드 포함, 일반 능력 P/Q)
+  슬라이드로 보존(Mermaid.js/highlight.js CDN 로드 포함)
 - **웹 에디터**: Part/Chapter 트리 + EasyMDE 마크다운 편집 + 이미지 갤러리(클릭 삽입) +
   실시간 미리보기(HTML 빌드와 동일 렌더 엔진)
 - **품질 게이팅**: `book-forge gate` — agent-evaluator의 `agent-eval gate` CLI를 그대로
@@ -160,43 +162,46 @@ book-forge plan <slug> --revise
 - **RAG 집필 보조(옵션)**: `book-forge draft` — PDF/코드 저장소/텍스트/http(s):// URL
   소스를 Ollama 임베딩으로 청크·검색해 근거 발췌문만으로 챕터 초안 또는 레퍼런스 표
   생성. 생성 전 커버리지 점검·낮으면 대안 제안, 생성 직후 Gate 점수 즉시 노출까지
-  포함(아래 일반 능력 A–F 참고)
+  포함(아래 [RAG 집필 보조 상세](#rag-집필-보조-상세) 참고)
 - **지식창고 Q&A(옵션)**: `book-forge chat` — draft가 쌓은 프로젝트 지식창고에 대화형 질의.
   세션 전체를 `ConversationSession`으로 감싸 최근 대화를 프롬프트에 포함(이어지는 질문
   이해)하고, 종료 시 맥락 유지/주제 일관성 등 4개 지표를 표시
 - **다관점 리뷰 패널**: `book-forge review` — 정확성/가독성 검토자 2명이 챕터를 독립
   검토하고 편집장(ChiefEditorAgent)이 종합 판정. Book-forge 최초의 진짜 감독자-작업자
-  멀티에이전트 협업 예제(아래 일반 능력 G 참고)
+  멀티에이전트 협업 예제(아래 [다관점 리뷰 패널 — 멀티에이전트 협업](#다관점-리뷰-패널--멀티에이전트-협업) 참고)
 - **코드-본문 정합성 검사(옵션)**: `book-forge draft ... --check-package agent_evaluator` —
   본문이 언급한 `import`/백틱 심볼이 실제로 그 패키지에 존재하는지 정적으로 대조(LLM
-  미호출, C의 확장). 프로젝트가 처음 사용한 시점의 SDK 버전을 `sdk_versions.json`에
+  미호출). 프로젝트가 처음 사용한 시점의 SDK 버전을 `sdk_versions.json`에
   고정하고, 이후 설치 버전이 달라지면 경고
 - **코드 예제 실행 검증(옵션)**: `--check-package`와 함께 `--execute-examples`를 주면
   python 코드 블록을 별도 subprocess에서 실제로 실행해 성공하는지 확인(타임아웃 10초,
   LLM이 생성한 코드를 실행하는 위험을 인지하고 명시적으로 켜야 하는 옵트인)
 - **실습/캡스톤 스캐폴드**: `content_type: capstone`으로 태깅한 챕터는 빈 템플릿(TODO
   있는 스켈레톤)과 별도 정답 파일을 함께 생성 — 독자가 직접 풀어보는 실습 전용
-  (아래 일반 능력 B 표 참고)
+  (아래 [RAG 집필 보조 상세](#rag-집필-보조-상세)의 콘텐츠 유형 분기 표 참고)
 
-## 일반 능력 A–F (RAG 집필 보조 확장)
+## 주요 기능 상세
 
-"AI Agent/Harness Engineering 강의를 Book-forge로 만들려면 무엇이 더 필요한가"를
-분석하며 도출한 능력들 — 특정 주제 전용이 아니라 **실증 가능한 기술 콘텐츠를 요구하는
-모든 강의**에 적용되는 일반 아키텍처로 설계했습니다(쿠버네티스 운영 강의 등으로 교차
-검증).
+위 "기능" 목록 중 몇 가지를 더 자세히 설명합니다.
 
-| 능력 | 내용 | 구현 위치 |
+### RAG 집필 보조 상세
+
+RAG 집필 보조는 아래 6가지 하위 기능으로 구성됩니다 — 특정 주제 전용이 아니라
+**실증 가능한 기술 콘텐츠를 요구하는 모든 강의**에 적용되는 일반 아키텍처로
+설계했습니다(쿠버네티스 운영 강의 등으로 교차 검증).
+
+| 기능 | 내용 | 구현 위치 |
 |---|---|---|
-| **A. 소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별. 코드 저장소는 텍스트 청크에 더해 정적 분석 구조 요약도 자동 포함(H) | `knowledge/sources.py`, `knowledge/code_index.py` |
-| **B. 콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone/module_reference) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**, `module_reference`(T)는 RAG 대신 H의 구조 인덱스를 그대로 순회해 **전체 커버리지가 보장되는** 표로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py`, `agents/module_reference.py` |
-| **C. 근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지(설치된 패키지 또는 로컬 디렉토리, I)에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 버전을 프로젝트별로 `sdk_versions.json`에 고정(패키지는 pip 버전, 로컬은 git 커밋)하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(로컬 대상은 PYTHONPATH 자동 주입, 타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
-| **D. 실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone`/`module_reference` 유형은 C의 커버리지 임계값을 더 엄격하게 적용(C의 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조 + (옵트인) 노드 라벨이 소스에 등장하는지 그라운딩 대조(U), `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음), `module_reference`는 H가 나열한 항목이 전부 본문에 등장하는지(T)를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
-| **E. 독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
-| **F. 대안 제안** | C에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
+| **소스 어댑터 다변화** | `--source`가 PDF뿐 아니라 코드 저장소 디렉토리·마크다운/텍스트 파일·http(s):// URL을 형식/확장자/디렉토리 여부로 자동 판별. 코드 저장소는 텍스트 청크에 더해 정적 분석 구조 요약도 자동 포함([구조적 코드 인덱싱](#구조적-코드-인덱싱)) | `knowledge/sources.py`, `knowledge/code_index.py` |
+| **콘텐츠 유형 분기** | 목차 매니페스트에 5번째 필드로 `content_type`(narrative/reference_table/diagram/exercise/capstone/module_reference) 태깅 — `reference_table`은 표, `diagram`은 Mermaid 다이어그램, `capstone`은 **빈 템플릿+별도 정답 파일 2개**, `module_reference`는 RAG 대신 구조적 코드 인덱싱 결과를 그대로 순회해 **전체 커버리지가 보장되는** 표로 전용 생성기 분기(narrative/exercise는 ChapterDrafterAgent가 한 파일에 담당) | `models.py`(`ChapterSpec.content_type`), `agents/reference_table.py`, `agents/diagram_generator.py`, `agents/capstone_generator.py`, `agents/module_reference.py` |
+| **근거 검증 계층** | 생성 전: 소스 코사인 유사도 평균을 점검해 낮으면 경고. 생성 후: Gate 점수를 `eval_results/`를 따로 열지 않아도 CLI에 즉시 표시. `--check-package`를 주면 본문이 언급한 import/백틱 심볼이 실제 패키지(설치된 패키지 또는 로컬 디렉토리 — [로컬 코드베이스 대상 검증](#로컬-코드베이스-대상-검증) 참고)에 존재하는지도 정적으로 대조(옵트인) — 이 검사의 기준 버전을 프로젝트별로 `sdk_versions.json`에 고정(패키지는 pip 버전, 로컬은 git 커밋)하고 드리프트를 경고. `--execute-examples`를 함께 주면 python 코드 블록을 subprocess로 실제 실행해 검증(로컬 대상은 PYTHONPATH 자동 주입, 타임아웃, 별도 옵트인) | `knowledge/store.py`(`query_with_scores`), `eval/gate_summary.py`, `agents/code_consistency_checker.py`, `agents/sdk_version_pin.py`, `agents/code_example_verifier.py` |
+| **실증 가능성 게이트** | 생성 전: `exercise`/`diagram`/`capstone`/`module_reference` 유형은 근거 검증 계층의 커버리지 임계값을 더 엄격하게 적용(같은 로직 재사용). 생성 후: `exercise`는 코드 블록 문법(`ast.parse`), `diagram`은 mermaid 구조 + (옵트인) 노드 라벨이 소스에 등장하는지 그라운딩 대조, `reference_table`은 표 값-소스 대조, `capstone`은 템플릿의 TODO 존재+정답의 완성도(TODO 없음), `module_reference`는 구조적 코드 인덱싱이 나열한 항목이 전부 본문에 등장하는지를 정적으로 검증해 CLI/배치 요약에 즉시 노출(LLM 실행 없이 안전하게, 참고용) | `draft_cmd.py`의 `_STRICT_CONTENT_TYPES`, `agents/demonstration_verifier.py` |
+| **독자 상호작용** | 지식창고를 프로젝트에 영속화(`knowledge/store.json`)해 `book-forge draft` 세션이 끝난 뒤에도 `book-forge chat`으로 이어서 질의. 세션은 `ConversationSession`으로 감싸 최근 3턴을 프롬프트에 포함하고(이어지는 질문 이해), 종료 시 context_retention 등 4개 지표를 표시 | `knowledge/store.py`(`save`/`load`/`merge`), `agents/chat_agent.py`, `cli/commands/chat_cmd.py` |
+| **대안 제안** | 근거 검증 계층에서 커버리지가 낮으면 자동 차단이 아니라 `AlternativeSuggesterAgent`가 대안 2~3개를 제시하고 저자가 진행/취소를 선택(기존 승인 루프 UX 재사용) | `agents/alternative_suggester.py` |
 
 **배치 모드**: `book-forge draft <slug> --all --source ...`로 목차의 미집필 챕터 전부를
 소스 하나로 일괄 생성합니다. 단일 모드와 저커버리지 처리 정책이 다릅니다 — 단일 모드는
-F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이 결과를 나중에 확인한다고
+대안 제안(진행/취소 확인)을 쓰지만, 배치 모드는 사람이 결과를 나중에 확인한다고
 가정해 낮은 커버리지 챕터를 **LLM 호출 없이 건너뛰고** 종료 시 챕터별 Gate C 점수
 요약으로 보고합니다(각 챕터는 `eval_results/draft_ch{NN}.json`으로 개별 저장 — 배치
 안에서도 챕터별 점수가 뭉개지지 않습니다).
@@ -207,7 +212,7 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 `run_batch_draft()`)를 그대로 재사용합니다. 실측: 실제 Ollama로 "주제 입력 → 승인 →
 4챕터 완성"을 한 명령·76초로 완주했습니다.
 
-**코드-본문 정합성 검사(C의 확장)**: `--check-package <패키지명>`을 주면 본문이 언급한
+**코드-본문 정합성 검사(근거 검증 계층의 확장)**: `--check-package <패키지명>`을 주면 본문이 언급한
 `from X import Y`/`import X`와 백틱으로 감싼 `PascalCase` 심볼(`` `ScopeConfig` ``,
 `` `ScopeConfig.allowed_tools` `` 등)을 실제로 그 패키지에서 `importlib`로 대조합니다.
 `ast.parse()`가 코드 블록의 **문법**만 보는 것과 달리, 이건 "그 이름이 실제로
@@ -219,7 +224,7 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 검사에서 제외합니다. LLM을 호출하지 않는 순수 정적 분석이며, 실패해도 초안 저장을
 막지 않습니다(참고용).
 
-**SDK 버전 고정 메타데이터(C 확장의 기준)**: `--check-package`는 지금까지 "그 순간
+**SDK 버전 고정 메타데이터(근거 검증 계층 확장의 기준)**: `--check-package`는 지금까지 "그 순간
 설치된" 버전을 암묵적으로 기준 삼았습니다 — 오늘 0.9.9로 챕터를 쓰고 몇 달 뒤 환경이
 1.2.0으로 올라간 채로 같은 프로젝트에 다시 검사를 돌리면, "본문이 틀렸다"와 "SDK가
 바뀌었다"를 구분할 방법이 없었습니다. 프로젝트가 `--check-package`를 처음 쓴 시점의
@@ -231,7 +236,7 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 재해석한 것입니다 — Book-forge 자신이 아니라 저자가 근거로 삼는 **대상 SDK**의
 버전을 고정한다는 점이 다릅니다.
 
-**코드 예제 실행 검증(C의 세 번째 검증기 종류)**: `demonstration_verifier.verify_exercise_code()`는
+**코드 예제 실행 검증(근거 검증 계층의 세 번째 검증기 종류)**: `demonstration_verifier.verify_exercise_code()`는
 `ast.parse()`로 **문법**만 봅니다 — 실제로 실행하면 성공하는지는 지금까지 한 번도
 확인하지 않았습니다. 이 프로젝트는 그 결정을 CLAUDE.md에 명시적으로 기록해뒀습니다
 ("LLM이 생성한 임의 코드를 자동으로 실행하지는 않는다"). `--check-package`와 함께
@@ -264,7 +269,7 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
 어디에도 노출되지 않습니다 — 실측(실제 Ollama)으로 빌드된 HTML에 정답 코드가 전혀
 섞이지 않음을 확인했습니다.
 
-**지속형 상호작용 강화(E)**: 처음 구현한 `book-forge chat`은 매 질문이 완전히
+**지속형 상호작용 강화(독자 상호작용의 확장)**: 처음 구현한 `book-forge chat`은 매 질문이 완전히
 독립적이었습니다 — "방금 말한 그 메서드는 원본을 바꾸나요?" 같은 이어지는 질문을 이해할
 수 없었습니다. `chat_cmd.py`가 세션 전체를 agent-evaluator의 `ConversationSession`
 (`monitor.conversation(...)`)으로 감싸도록 확장했습니다:
@@ -280,9 +285,9 @@ F(대안 제안 + 진행/취소 확인)를 쓰지만, 배치 모드는 사람이
   원본을 바꾸는 거야 새로 만드는 거야?"를 연달아 질문했을 때, 두 번째 답변이 지시어
   "그 메서드"를 `reverse()`로 정확히 이해해 답했습니다(대화 이력 없이는 불가능).
 
-## 일반 능력 G — 자기실증 예제 (멀티에이전트 협업)
+### 다관점 리뷰 패널 — 멀티에이전트 협업
 
-A–F는 RAG 집필 보조 확장이지만, G는 다른 축입니다: **강의가 가르치는 개념(예:
+RAG 집필 보조가 원고 생산을 돕는 축이라면, 이 기능은 다른 축입니다: **강의가 가르치는 개념(예:
 멀티에이전트 협업·오케스트레이션)을 저작 도구 자신이 최소 1회는 실제로 실행해봐야
 한다**는 요구에서 나왔습니다. Book-forge의 기존 6개 에이전트(Planner→TOCDesigner→
 ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이프라인이라, 아무리
@@ -302,7 +307,7 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 | 지표 | 어떻게 채워지는가 |
 |---|---|
 | `coordination_score` | 편집장↔검토자 위임/응답을 `AgentCoordinationTracker.track_interaction()`으로 실제 기록 |
-| `avg_consensus` | 검토자 판정(VERDICT)을 구조화 신호(`agent_interactions=[{"agent","intent"}]`)로 `eval_consensus()`에 직접 전달 — 자유 텍스트 어휘 유사도가 아니라 판정 자체의 일치 여부로 계산(SPEC-009 REQ-1) |
+| `avg_consensus` | 검토자 판정(VERDICT)을 구조화 신호(`agent_interactions=[{"agent","intent"}]`)로 `eval_consensus()`에 직접 전달 — 자유 텍스트 어휘 유사도가 아니라 판정 자체의 일치 여부로 계산 |
 | `avg_role_compliance` | 각 검토자가 담당 관점(`AgentRoleConfig.allowed_action_keywords`)을 실제로 언급하고 다른 관점(`forbidden_action_keywords`)을 침범하지 않는지 |
 | `avg_conflict_resolution` | 편집장 응답 텍스트를 `ConflictResolutionConfig` 기본 한국어 마커("충돌"/"불일치" vs "해결"/"합의")로 판정 |
 
@@ -316,10 +321,10 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 `PropagationConfig`(정보 전파 충실도)는 이번 범위에 포함하지 않았습니다 — 자유 텍스트
 근거를 key_facts로 어휘 매칭하는 건 한국어 토큰 분할 특성상 오탐이 잦습니다.
 
-## 일반 능력 H — 구조적 코드 인덱싱
+### 구조적 코드 인덱싱
 
 "개념 설명 + 동작 설명 + **특정 프로젝트 소스코드 분석** + 활용"형 강의를 분석하며
-도출한 능력입니다. A(소스 어댑터)의 코드 저장소 어댑터는 파일을 텍스트로 청크·임베딩할
+도출한 기능입니다. 소스 어댑터 다변화의 코드 저장소 어댑터는 파일을 텍스트로 청크·임베딩할
 뿐입니다 — "이 프로젝트에 어떤 모듈이 있는가", "A가 B를 어떻게 의존하는가" 같은
 **파일 간 구조적 관계**는 청크 유사도 검색으로 잘 안 잡힙니다(import문이 청크
 경계에서 잘리거나, 애초에 그래프 구조가 텍스트 나열에는 없습니다).
@@ -345,10 +350,10 @@ ReviewLoop→Scaffold→ChapterDrafter→SlideCondenser)는 전부 순차 파이
 `diagram_generator.py` 같은 실제 모듈명까지 정확히 언급하는 걸 확인했습니다 — 순수
 청크 검색만으로는 이 정도의 구조적 일관성을 기대하기 어렵습니다.
 
-## 일반 능력 I — 로컬 코드베이스 대상 검증
+### 로컬 코드베이스 대상 검증
 
-H와 같은 강의 유형 분석에서 나온 또 다른 공백입니다: `--check-package`/`--execute-examples`
-(C의 확장)는 지금까지 `importlib.import_module()`로 **설치된 패키지**만 대상으로
+구조적 코드 인덱싱과 같은 강의 유형 분석에서 나온 또 다른 공백입니다: `--check-package`/`--execute-examples`
+(근거 검증 계층의 확장)는 지금까지 `importlib.import_module()`로 **설치된 패키지**만 대상으로
 삼을 수 있었습니다 — "특정 프로젝트 소스코드 분석" 강의는 분석 대상이 보통 `pip
 install` 안 한, 그냥 클론해온 로컬 저장소입니다. 기존 방식으로는 이런 경우 항상
 `ImportError`만 났습니다.
@@ -359,7 +364,7 @@ install` 안 한, 그냥 클론해온 로컬 저장소입니다. 기존 방식�
 
 | 검증 | 설치된 패키지 모드 | 로컬 디렉토리 모드 |
 |---|---|---|
-| 코드-본문 정합성 | `importlib.import_module()`로 심볼 존재 확인 | H(구조적 코드 인덱싱)의 정적 분석 결과로 대조 — 새 파싱 로직 없이 이미 검증된 인프라 재사용 |
+| 코드-본문 정합성 | `importlib.import_module()`로 심볼 존재 확인 | 구조적 코드 인덱싱의 정적 분석 결과로 대조 — 새 파싱 로직 없이 이미 검증된 인프라 재사용 |
 | SDK 버전 고정 | `importlib.metadata.version()` | git 커밋 해시(짧게)+dirty 여부(`agent-evaluator` 자신의 `agent_version="auto"`와 같은 원리). git 저장소가 아니면 버전 추적 없이 조용히 스킵 |
 | 코드 실행 검증 | 이미 설치된 환경이라 그대로 실행 | 대상 디렉토리(+부모 디렉토리)를 subprocess의 `PYTHONPATH`에 추가해 로컬 import가 풀리게 함 |
 
@@ -381,7 +386,7 @@ install` 안 한, 그냥 클론해온 로컬 저장소입니다. 기존 방식�
 패키지였습니다). git 저장소로 만든 뒤 재실행하니 `(toylib git 6eb099b 기준)`처럼
 커밋 해시 기준 버전 표시도 정상 동작했습니다.
 
-## 일반 능력 J — 지식창고 라이프사이클 관리
+### 지식창고 라이프사이클 관리
 
 Media/AOO 대비 품질 분석과 별개로, 실전 6챕터 집필(`AI_에이전트_평가_입문` 프로젝트) 중
 직접 겪은 문제에서 도출한 능력입니다: `KnowledgeStore.add()`는 중복 제거가 없고,
@@ -402,7 +407,7 @@ Media/AOO 대비 품질 분석과 별개로, 실전 6챕터 집필(`AI_에이전
   draft ... --source ...`(빈 지식창고에서 새로 시작)가 담당합니다 — 이 명령은 "다시
   시작할 수 있게 비우는 것"까지만 책임집니다.
 
-## 일반 능력 O — 목차 개정 이력 자동 기록
+### 목차 개정 이력 자동 기록
 
 Media/AOO의 목차 파일(`02_목차_초안.md`)에는 "2026-07-14 개정 ①/②/③"처럼 무엇을·왜
 바꿨는지 날짜와 함께 누적 기록하는 개정 이력이 있습니다 — Book-forge의
@@ -431,7 +436,7 @@ Media/AOO의 목차 파일(`02_목차_초안.md`)에는 "2026-07-14 개정 ①/�
 `01_목차.md` 맨 위에 `## 개정 이력\n- **2026-07-24**: 목차를 4개 챕터로
 줄여줘`가 정확히 기록되는 것을 확인했습니다.
 
-## 일반 능력 M — 챕터 구조 템플릿
+### 챕터 구조 템플릿
 
 Media/AOO 대비 품질 분석에서 나온 격차입니다: AOO의 모든 챕터는 "학습 목표 →
 본문 → 핵심 요약" 틀을 공유하는데, Book-forge의 `DRAFT_PROMPT`는 지금까지
@@ -457,7 +462,7 @@ Media/AOO 대비 품질 분석에서 나온 격차입니다: AOO의 모든 챕�
 `## 이 챕터에서 배우는 것`(3개 불릿)로 시작해 본문을 거쳐 `## 이 챕터의 핵심`
 (3개 불릿)로 끝나는 걸 확인했습니다.
 
-## 일반 능력 K — 소스 가중치 균형 조정
+### 소스 가중치 균형 조정
 
 실전 6챕터 집필(`AI_에이전트_평가_입문` 프로젝트) 중 겪은 문제입니다:
 `query_with_scores()`가 순수 코사인 유사도 top-k라, 파일 하나가 청크 수로
@@ -493,17 +498,17 @@ Media/AOO 대비 품질 분석에서 나온 격차입니다: AOO의 모든 챕�
 2개, `metric_adapters.py` 2개(총 6개, 남은 슬롯은 각 파일이 2개 상한에
 걸려 채워지지 않음)로 정확히 분산됐습니다.
 
-## 일반 능력 N — 리서치 에이전트 + 참고 자료 자동 인용
+### 리서치 에이전트와 참고 자료 자동 인용
 
 Media/AOO 대비 품질 분석에서 나온 가장 큰 격차입니다: AOO 콘텐츠는 실제 외부
 리서치(설문조사·업계 리포트·논문)에 근거하고 참고 자료를 명시하는데,
-Book-forge는 처음엔 저자가 직접 지정한 URL 1개를 가져올 뿐(A) "이 주제에
+Book-forge는 처음엔 저자가 직접 지정한 URL 1개를 가져올 뿐 "이 주제에
 맞는 자료를 찾아온다"는 검색 단계가 없었습니다. 처음엔 범위를 좁혀 "저자가
 이미 지정한 URL 중 실제로 쓰인 것만 인용 목록으로 조립"하는 것까지만
 구현했다가, 이어서 검색 자동화(쿼리 생성 → 웹 검색 → 후보 URL 수집)까지
 전체 범위로 확장했습니다.
 
-### `book-forge research` — 검색 쿼리 생성 + 웹 검색
+#### `book-forge research` — 검색 쿼리 생성 + 웹 검색
 
 `book-forge research <slug> <chapter_no>`는 챕터 제목에서 검색 쿼리 2~3개를
 LLM으로 생성하고(`agents/research_agent.py`), 각 쿼리로 실제 웹을 검색해
@@ -538,7 +543,7 @@ LLM으로 생성하고(`agents/research_agent.py`), 각 쿼리로 실제 웹을 
   짰다가, 실제 한국어 챕터 제목으로 돌려보고서야 결과가 통째로 0개로 나오는
   걸 발견해 두 형식 모두 처리하도록 고쳤습니다.
 
-### 참고 자료 자동 인용(범위 축소판, 먼저 구현됨)
+#### 참고 자료 자동 인용(범위 축소판, 먼저 구현됨)
 
 `--source`로 URL을 여러 개 지정하면(직접 지정하든 `book-forge research`가
 채택했든), 챕터 생성 후 `query_with_scores()`가 실제로 top-k에 뽑은 청크 중
@@ -554,7 +559,7 @@ URL 소스(`# 출처:` 태그)만 중복 없이 순서대로 모아 챕터 말�
   "출처를 나열해줘"라고 요청하지 않으므로, 존재하지 않는 출처를 지어내는
   환각 위험이 없습니다.
 - **K의 태깅 수정이 이 기능의 전제 조건**: 매 청크에 태그를 다시 붙이도록
-  고친 것(위 일반 능력 K) 덕분에, 여러 청크로 쪼개지는 긴 페이지도 인용
+  고친 것(위 [소스 가중치 균형 조정](#소스-가중치-균형-조정)) 덕분에, 여러 청크로 쪼개지는 긴 페이지도 인용
   누락 없이 전부 잡힙니다.
 - **로컬 파일 소스만 쓴 경우 섹션이 안 붙습니다**: `--source`가 전부
   PDF/코드 저장소/텍스트 파일이면 URL 태그가 없어 `_cited_url_sources()`가
@@ -567,17 +572,17 @@ URL 소스(`# 출처:` 태그)만 중복 없이 순서대로 모아 챕터 말�
 |---|---|---|
 | `book-forge init` | ✅ | LLM Provider(Ollama/OpenAI/Anthropic) 및 API 키 설정 |
 | `book-forge new <title> [--source ...] [--top-k] [--min-coverage] [--force] [--author] [--license-notice] [--edition] [--enable-llm-judge] [--judge-model]` | ✅ | 기획→목차 대화형 루프 + 스캐폴드 생성 (`--source` 주면 전체 챕터 자동 배치 초안까지). 같은 제목/슬러그의 기존 프로젝트가 있으면 덮어쓰기 전 확인(`--force`로 스킵). `--author`/`--license-notice`/`--edition`을 주면 HTML/PDF에 표지 페이지 자동 생성. `--enable-llm-judge`로 계측에 LLM 채점(faithfulness 등)을 옵트인 추가(OpenAI/Anthropic 키 필요, 기본 off) |
-| `book-forge build html <slug> [--with-index]` | ✅ | 단일 HTML. `--with-index`로 책 끝에 찾아보기(색인) 섹션 추가(일반 능력 AL) |
+| `book-forge build html <slug> [--with-index]` | ✅ | 단일 HTML. `--with-index`로 책 끝에 찾아보기(색인) 섹션 추가 |
 | `book-forge build pdf <slug> [--chapter N] [--with-index]` | ✅ | 챕터별 PDF. `--with-index`로 `99_찾아보기.pdf` 추가 생성(`--chapter` 지정 시 무시) |
-| `book-forge build epub <slug>` | ✅ | EPUB 3 전자책(zip, Playwright 불필요, 일반 능력 AJ). 실제 유통 채널 제출 전에는 `epubcheck`로 별도 검증 권장(이 프로젝트는 구조적 검증(zip 무결성 + well-formed XML)까지만 자동화) |
+| `book-forge build epub <slug>` | ✅ | EPUB 3 전자책(zip, Playwright 불필요). 실제 유통 채널 제출 전에는 `epubcheck`로 별도 검증 권장(이 프로젝트는 구조적 검증(zip 무결성 + well-formed XML)까지만 자동화) |
 | `book-forge build slides <slug> [--chapter N] [--without-notes]` | ✅ | Reveal.js 발표자료 |
 | `book-forge edit <slug> [--port] [--no-browser]` | ✅ | 웹 에디터 |
 | `book-forge gate <slug> [--file] [--min-gate-score] [--gate-thresholds] [--golden-set] [--save-baseline] ...` | ✅ | Gate A-G 판정 (agent-eval gate 전체 플래그 통과). `--file` 미지정 시 챕터별 결과를 책 전체로 자동 집계 후 판정 |
 | `book-forge draft <slug> <ch_no>\|--all [--source ...] [--top-k] [--min-coverage] [--max-per-source] [--yes] [--force] [--check-package] [--execute-examples] [--enable-llm-judge] [--judge-model]` | ✅ (선택, `[rag]`) | RAG 보조 챕터 초안/레퍼런스 표/다이어그램/실습·캡스톤 생성 (`--all`로 일괄, `--check-package`로 코드-본문 정합성 대조+버전 고정, `--execute-examples`로 실제 실행 검증 — 둘 다 로컬 디렉토리 대상도 지원. `--source`는 지식창고가 이미 있으면 생략 가능 — `book-forge research`로 미리 채워두면 됨. `--enable-llm-judge`는 `new`와 동일) |
 | `book-forge research <slug> <chapter_no> [--max-queries] [--max-results-per-query] [--yes]` | ✅ (선택, `[rag]`) | 챕터 제목에서 검색 쿼리 생성(LLM) → 실제 웹 검색(DuckDuckGo) → 저자가 후보 URL 선택 → 지식창고에 추가 |
 | `book-forge chat <slug> [--top-k N]` | ✅ (선택, `[rag]`) | 프로젝트 지식창고에 지속형 대화(ConversationSession) 질의 |
-| `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증, 일반 능력 G) |
-| `book-forge lint <slug> [--fail-on-inconsistency]` | ✅ | 챕터 간 기술 용어 표기 불일치 후보 발견·보고(자동 수정 없음, 일반 능력 AK) |
+| `book-forge review <slug> <chapter_no>` | ✅ | 정확성/가독성 검토자 패널 + 편집장 종합 판정 (Gate F 실증) |
+| `book-forge lint <slug> [--fail-on-inconsistency]` | ✅ | 챕터 간 기술 용어 표기 불일치 후보 발견·보고(자동 수정 없음) |
 | `book-forge home [slug]` | ✅ | 데이터/프로젝트 폴더 파일 탐색기로 열기 |
 | `book-forge plan <slug> [--revise]` | ✅ | 기획/목차 재검토 — `--revise` 없으면 미리보기만 |
 | `book-forge scaffold <slug>` | 🚧 | (현재 `new`/`plan --revise`에 통합됨 — 독립 실행 미구현) |
@@ -597,35 +602,35 @@ src/book_forge/
 │   ├── scaffold.py        # ScaffoldAgent — @tool_guard (파일 쓰기, 사후채점 아닌 실행전 차단)
 │   ├── slide_condenser.py # SlideCondenserAgent — 섹션 → TITLE/BULLET*/NOTES
 │   ├── chapter_drafter.py # ChapterDrafterAgent — RAG 소스 → 챕터 초안 (narrative/exercise, rag_mode=True, 옵션)
-│   ├── reference_table.py # ReferenceTableAgent — RAG 소스 → 레퍼런스 표 (B)
-│   ├── diagram_generator.py # DiagramGeneratorAgent — RAG 소스 → Mermaid 다이어그램 (B)
-│   ├── capstone_generator.py # CapstoneGeneratorAgent — 빈 템플릿+별도 정답 2파일 (B)
-│   ├── alternative_suggester.py # AlternativeSuggesterAgent — 낮은 커버리지 → 대안 제안 (F)
+│   ├── reference_table.py # ReferenceTableAgent — RAG 소스 → 레퍼런스 표 (콘텐츠 유형 분기)
+│   ├── diagram_generator.py # DiagramGeneratorAgent — RAG 소스 → Mermaid 다이어그램 (콘텐츠 유형 분기)
+│   ├── capstone_generator.py # CapstoneGeneratorAgent — 빈 템플릿+별도 정답 2파일 (콘텐츠 유형 분기)
+│   ├── alternative_suggester.py # AlternativeSuggesterAgent — 낮은 커버리지 → 대안 제안
 │   ├── demonstration_verifier.py # 생성 후 정적 검증 — exercise 문법/diagram 구조/
-│   │                       # reference_table 소스 대조/capstone TODO+완성도 (D, LLM 미호출 순수 함수)
+│   │                       # reference_table 소스 대조/capstone TODO+완성도 (실증 가능성 게이트, LLM 미호출 순수 함수)
 │   ├── code_consistency_checker.py # 본문의 import/백틱 심볼이 실제 패키지에
 │   │                       # 존재하는지 대조. 로컬 디렉토리 대상이면 code_index.py의
-│   │                       # 정적 분석으로 자동 전환 (C 확장, I, LLM 미호출)
+│   │                       # 정적 분석으로 자동 전환(근거 검증 계층 확장, LLM 미호출)
 │   ├── sdk_version_pin.py # 프로젝트별 대상 버전 고정 + 드리프트 감지 —
-│   │                       # 설치 패키지는 pip 버전, 로컬 디렉토리는 git 커밋 (C 확장, I, LLM 미호출)
+│   │                       # 설치 패키지는 pip 버전, 로컬 디렉토리는 git 커밋(근거 검증 계층 확장, LLM 미호출)
 │   ├── code_example_verifier.py # python 코드 블록을 subprocess로 실제 실행해
-│   │                       # 검증. 로컬 대상이면 PYTHONPATH 자동 주입 (C 확장, I, --execute-examples 옵트인)
-│   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (E)
+│   │                       # 검증. 로컬 대상이면 PYTHONPATH 자동 주입(근거 검증 계층 확장, --execute-examples 옵트인)
+│   ├── chat_agent.py      # ChatAgent — 지식창고 기반 Q&A (독자 상호작용)
 │   └── review_panel.py    # ReviewPanelAgent — 정확성/가독성 검토자 + 편집장
-│                           # (G, 감독자-작업자 패턴 — Gate F 실증 예제)
+│                           # (감독자-작업자 패턴 — Gate F 실증 예제)
 ├── knowledge/      # RAG — 소스 어댑터 + Ollama 임베딩 인메모리 코사인 유사도 검색 ([rag] extra)
 │   ├── embeddings.py      # Ollama /api/embeddings, 컨텍스트 길이 초과 시 자동 축소 재시도
-│   ├── store.py           # KnowledgeStore — numpy 코사인 유사도 + save/load/merge (E)
-│   ├── sources.py         # 소스 어댑터 — PDF/코드 저장소/텍스트/URL 자동 판별 (A)
+│   ├── store.py           # KnowledgeStore — numpy 코사인 유사도 + save/load/merge (독자 상호작용)
+│   ├── sources.py         # 소스 어댑터 — PDF/코드 저장소/텍스트/URL 자동 판별 (소스 어댑터 다변화)
 │   ├── code_index.py      # 구조적 코드 인덱싱 — ast 정적 분석으로 모듈/클래스/
-│   │                       # 함수 인벤토리 + 내부/외부 의존 관계 추출 (H, LLM 미호출)
+│   │                       # 함수 인벤토리 + 내부/외부 의존 관계 추출(LLM 미호출)
 │   └── pdf_source.py      # PDF → 텍스트 청크 (pypdf), chunk_text() 공용 청커
 ├── publish/        # 마크다운 → HTML/PDF/Slides (Book/AOO 엔진 이식)
 │   ├── markdown_engine.py # @@HTML_START@@, Mermaid, base64 이미지 임베딩
 │   ├── html_builder.py / pdf_builder.py / slide_builder.py
 │   └── toc_loader.py      # 01_목차.md → 실제 파일 경로
 ├── editor/         # Flask 웹 에디터 (Part/Chapter 트리 + 이미지 갤러리)
-├── eval/           # PerformanceMonitor 팩토리 + gate_summary.py(Gate 점수 즉시 조회, C)
+├── eval/           # PerformanceMonitor 팩토리 + gate_summary.py(Gate 점수 즉시 조회)
 ├── llm/            # create_llm() — Ollama/OpenAI/Anthropic 통합 인터페이스
 ├── models.py       # ChapterSpec, parse_toc_manifest (```toc 매니페스트)
 └── cli/            # Click 진입점
@@ -661,14 +666,14 @@ src/book_forge/
 
 > **왜 `conversation_eval`이 아닌가**: 실제 소스(`decorators.py`의
 > `_CONVERSATION_EVAL_UNUSED_HARNESS_PARAMS`)를 확인한 결과, `conversation_eval`은
-> 30개 Harness Config 전부를 시그니처로만 받고 평가에 반영하지 않습니다(SPEC-039
-> REQ-5, Non-Goal). 저자 리뷰 루프에서 `LoopDetectionConfig`가 실제로 작동해야 하므로,
+> 30개 Harness Config 전부를 시그니처로만 받고 평가에 반영하지 않습니다(설계상
+> Non-Goal). 저자 리뷰 루프에서 `LoopDetectionConfig`가 실제로 작동해야 하므로,
 > 각 라운드를 독립된 TaskResult로 기록하는 `@agent_eval` 개별 호출 방식을 씁니다.
 
 `book-forge gate <slug>`는 `--file`을 안 주면 `eval_results/`의 챕터별 결과
 전부를 `PerformanceMonitor.merge()`(agent-evaluator 기존 기능, 새 판정 로직
 아님)로 책 한 권 분량으로 집계한 뒤 agent-evaluator의 `agent-eval gate` CLI를
-그대로 위임 호출합니다(일반 능력 AF) — 파일이 하나뿐이면 병합 없이 그대로
+그대로 위임 호출합니다 — 파일이 하나뿐이면 병합 없이 그대로
 씁니다. 특정 챕터 하나만 다시 보고 싶으면 `--file`로 명시하세요.
 
 ## Book/AOO 마이그레이션
@@ -718,7 +723,7 @@ python scripts/migrate_legacy_book.py \
   사람이 검토·정리한다는 전제입니다. `HallucinationDetector`가 근거 없는 서술을
   Gate C 점수(warn/fail)로 잡아내므로, 초안 승인 전 `book-forge gate`로 확인을
   권장합니다.
-- **챕터 구조 템플릿(일반 능력 M)은 강제되지 않습니다**: `## 이 챕터에서 배우는
+- **[챕터 구조 템플릿](#챕터-구조-템플릿)은 강제되지 않습니다**: `## 이 챕터에서 배우는
   것`/`## 이 챕터의 핵심` 두 섹션은 프롬프트 지시일 뿐이라 `demonstration_verifier.py`가
   존재 여부를 검사하지 않습니다 — 소스가 아주 빈약한 챕터 등에서는 모델이 섹션을
   빠뜨리거나 형식을 살짝 바꿀 수 있습니다.
