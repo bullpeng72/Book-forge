@@ -1,5 +1,9 @@
 # Book-forge
 
+[![PyPI](https://img.shields.io/pypi/v/book-forge)](https://pypi.org/project/book-forge/)
+[![Python](https://img.shields.io/pypi/pyversions/book-forge)](https://pypi.org/project/book-forge/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 **AI 협업 다권 도서 저술 파이프라인** — 주제 하나(또는 분석하고 싶은 코드 저장소)를 주면
 기획안·목차 승인 루프를 거쳐 챕터를 집필하고, HTML·PDF·EPUB·발표자료로 만들어냅니다.
 저술 전 과정을 [agent-evaluator](https://pypi.org/project/agent-evaluator/) SDK의
@@ -67,15 +71,101 @@ OpenAI/Anthropic도 선택할 수 있습니다.
 
 ## 설치
 
+### 사전 준비 (OS 패키지)
+
+pip만으로 해결되지 않는 두 가지가 있습니다 — **Ollama**(기본 LLM Provider, 별도 데몬)와
+**Playwright Chromium의 런타임 공유 라이브러리**(`[pdf]` extra 사용 시)입니다. 둘 다
+운영체제에 직접 설치해야 합니다.
+
+**1. Python 3.11 이상**
+
 ```bash
+# Ubuntu/Debian — 기본 저장소에 3.11이 없으면 deadsnakes PPA 추가 필요
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3-pip
+
+# macOS (Homebrew)
+brew install python@3.11
+```
+
+**2. Ollama (기본 LLM Provider — API 키 불필요)**
+
+Ollama는 apt/pip 패키지가 아니라 로컬에서 상시 실행되는 별도 데몬입니다.
+
+```bash
+# Linux (Ubuntu/Debian 포함)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# macOS (Homebrew)
+brew install ollama
+# 또는 https://ollama.com/download 에서 앱으로 설치
+
+ollama serve &            # 데몬 실행(기본 포트 11434) — 이미 실행 중이면 생략
+ollama pull llama3.2       # book-forge 기본 모델(DEFAULT_OLLAMA_MODEL) 다운로드
+```
+
+OpenAI/Anthropic만 쓸 계획이면 Ollama 설치는 건너뛰고 [공통 설정](#공통-설정)의
+`LLM_PROVIDER` 환경변수만 지정하면 됩니다.
+
+**3. Playwright Chromium 런타임 라이브러리 (`[pdf]` extra 사용 시)**
+
+`playwright install chromium`은 브라우저 바이너리만 받습니다 — 리눅스(특히 데스크톱
+환경이 없는 서버/컨테이너)에서는 Chromium 구동에 필요한 공유 라이브러리가 시스템에
+따로 없을 수 있습니다. 가장 안전한 방법은 Playwright가 배포판을 자동 감지해
+`apt`까지 대신 호출해주는 커맨드를 쓰는 것입니다:
+
+```bash
+python -m playwright install --with-deps chromium   # 브라우저 + OS 의존성 한 번에
+```
+
+`--with-deps`를 못 쓰는 제한된/오프라인 환경에서 수동으로 apt 패키지를 지정해야
+한다면 Ubuntu 22.04/24.04 기준 대략 다음과 같습니다(Ubuntu 버전에 따라 패키지명이
+조금씩 다를 수 있어 참고용입니다 — `--with-deps`가 가능하면 그쪽이 더 안전합니다):
+
+```bash
+sudo apt install -y \
+  libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+  libdrm2 libdbus-1-3 libxcb1 libxkbcommon0 libx11-6 \
+  libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
+  libgbm1 libpango-1.0-0 libcairo2 libasound2
+```
+
+macOS는 별도 시스템 패키지 없이 `playwright install chromium`만으로 충분합니다.
+
+### PyPI에서 설치 (일반 사용자)
+
+```bash
+pip install book-forge                  # 코어만 — 저작/기획/목차 루프, HTML 빌드
+pip install "book-forge[pdf]"           # + Playwright (PDF/EPUB 빌드용)
+pip install "book-forge[serve]"         # + Flask (웹 에디터용)
+pip install "book-forge[rag]"           # + pypdf/numpy (RAG 집필 보조용, Ollama 임베딩 필요)
+pip install "book-forge[pdf,serve,rag]" # 전체 기능
+
+python -m playwright install --with-deps chromium   # [pdf] 설치 시 1회(리눅스 OS 의존성 포함)
+
+book-forge init                         # LLM Provider 설정 (기본 Ollama — API 키 불필요)
+```
+
+`pipx`로 CLI만 격리 설치하고 싶다면 `pipx install book-forge`(extras가 필요하면
+`pipx install "book-forge[pdf,serve,rag]"`)도 동일하게 동작합니다.
+
+### 소스에서 설치 (개발/최신 버전)
+
+저장소를 직접 받아 편집 가능 모드로 설치하려면(기여, 최신 미배포 변경 반영):
+
+```bash
+git clone https://github.com/bullpeng72/Book_forge.git
+cd Book_forge
 pip install -e ".[dev]"          # 코어 + 테스트 도구
 pip install -e ".[pdf]"          # + Playwright (PDF/EPUB 빌드용)
 pip install -e ".[serve]"        # + Flask (웹 에디터용)
 pip install -e ".[rag]"          # + pypdf/numpy (RAG 집필 보조용, Ollama 임베딩 필요)
-playwright install chromium      # [pdf] 설치 시 1회
+python -m playwright install --with-deps chromium   # [pdf] 설치 시 1회(리눅스 OS 의존성 포함)
 
 book-forge init                  # LLM Provider 설정 (기본 Ollama — API 키 불필요)
 ```
+
+### 공통 설정
 
 OpenAI/Anthropic을 쓰려면 `book-forge init`에서 provider를 선택하거나 `.env`에
 `LLM_PROVIDER=openai`(+ `OPENAI_API_KEY`) 또는 `LLM_PROVIDER=anthropic`(+
@@ -243,13 +333,29 @@ Book-forge는 [agent-evaluator](https://pypi.org/project/agent-evaluator/) SDK �
 
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
-playwright install chromium
+python -m playwright install --with-deps chromium
 pytest                 # 408개 테스트
 ruff check src tests scripts
-python -m build --wheel   # 패키징 검증 (editor/templates/*.html 포함 여부 확인 필수)
+python -m build           # sdist + wheel 둘 다 생성 (패키징 검증 —
+                          # editor/templates/*.html 포함 여부 확인 필수)
 ```
 
 개발 컨벤션·아키텍처·agent-evaluator 통합 세부사항은 [CLAUDE.md](CLAUDE.md)를 참고하세요.
+
+### PyPI 배포
+
+```bash
+pip install build twine
+rm -rf dist build src/*.egg-info
+python -m build                 # sdist(.tar.gz) + wheel(.whl) 생성
+twine check dist/*              # 메타데이터/README 렌더링 검증 (업로드 전 필수)
+twine upload --repository testpypi dist/*   # TestPyPI에서 먼저 검증(권장)
+twine upload dist/*             # 실제 PyPI 업로드
+```
+
+`version`은 `pyproject.toml`의 `[project].version`이 유일한 소스입니다 — 배포 전
+반드시 올려야 하며(PyPI는 동일 버전 재업로드를 허용하지 않음), 다른 버전 문자열
+참조(`__init__.py` 등)와 동기화되어 있는지 확인하세요.
 
 ---
 
