@@ -63,17 +63,17 @@ class SLAConfig:
 
 ## 9.2 33개 Config·25개 트래커가 아니라, Book-forge가 실제로 쓰는 것만
 
-Agent-Evaluator SDK 전체는 25개 네이티브 트래커와 33개 Harness Config를 제공한다. 이 챕터는 그 전체 카탈로그를 나열하지 않는다 — 8장에서 확인한 Book-forge의 실제 에이전트 7개가 **실제로 건드리는** Gate만 정리한다.
+Agent-Evaluator SDK 전체는 25개 네이티브 트래커와 33개 Harness Config를 제공한다. 이 챕터는 그 전체 카탈로그를 나열하지 않는다 — 8장에서 확인한 Book-forge의 실제 에이전트 14개가 **실제로 건드리는** Gate만 정리한다.
 
 | Gate | Book-forge가 채우는 값 | 어느 에이전트가 기여하는가 |
 |---|---|---|
-| **A** 목표 달성 | TaskCompletionTracker + AccuracyEvaluator 블렌딩(0.6×TCR+0.4×Accuracy) | 전체 — `ground_truth`를 넘기는 모든 에이전트 |
-| **B** 행동 무결성 | LoopDetectionConfig 기반 반복 탐지 | `revise()`(`review_loop.py`)만 — 나머지 에이전트는 대부분 N/A |
-| **C** 신뢰성 | HallucinationDetector(RAG 근거 대조) | ChapterDrafterAgent·ChatAgent(`rag_mode=True`) |
+| **A** 목표 달성 | TaskCompletionTracker + AccuracyEvaluator 블렌딩(0.4×TCR+0.6×Accuracy) | 전체 14개 — `ground_truth`를 넘기는 모든 에이전트 |
+| **B** 행동 무결성 | LoopDetectionConfig 기반 반복 탐지 | `revise()`(`review_loop.py`)만 — 나머지 13개는 대부분 N/A |
+| **C** 신뢰성 | HallucinationDetector(RAG 근거 대조) | `rag_mode=True`인 6개(ChapterDrafter·ReferenceTable·Diagram·Capstone·ModuleReference·Chat) |
 | **D** 성능 계약 | LatencyTracker(항상) + SLAConfig 위반 여부 | 전체(LatencyTracker는 항상 기록) |
-| **E** 보안 경계 | 5개 보안 트래커 + ThreatSeverityConfig | ChapterDrafterAgent가 명시적, 나머지는 `enable_security_metrics=True`로 상시 on |
+| **E** 보안 경계 | 5개 보안 트래커 + ThreatSeverityConfig | 위 6개(`rag_mode=True`)가 명시적, 나머지는 `enable_security_metrics=True`로 상시 on |
 | **F** 다중 에이전트 | AgentCoordinationTracker + ConflictResolutionConfig | ReviewPanel(5장)만 — 유일하게 값이 나오는 지점 |
-| **G** 관측성 | ExplainabilityConfig(PlannerAgent) | PlannerAgent만 명시적, 나머지는 대부분 N/A |
+| **G** 관측성 | ExplainabilityConfig | PlannerAgent·AlternativeSuggesterAgent·SlideCondenserAgent 3개가 명시적, 나머지는 대부분 N/A |
 
 ## 9.3 "N/A"가 버그가 아니라 정직한 신호인 이유
 
@@ -147,8 +147,7 @@ def format_gate_line(gate: str, score: Optional[float]) -> str:
 
 ## 참고 자료
 
-- 부록 A.1(Harness Config 사용 현황) — 이 챕터가 다룬 7개 에이전트의 Config를 Gate 관점이 아니라 에이전트 관점으로 재배열한 표
-- 부록 C.1·C.2(업계 동향) — 환각 탐지·에이전트 관측성이 업계 전체에서는 어떤 규모·이름으로 다뤄지는지
+- 부록 B.1·B.2(업계 동향) — 환각 탐지·에이전트 관측성이 업계 전체에서는 어떤 규모·이름으로 다뤄지는지
 - `Agent-Evaluator/CLAUDE.md` — Gate별 트래커 기여 방식 전체 표
 - `Agent-Evaluator/agent_evaluator/core/trackers/monitor.py` — `PerformanceMonitor.__init__()`의 Tracker 초기화, `layer1.py`/`layer2.py`/`security.py`의 개별 Tracker 클래스
 - `Agent-Evaluator/agent_evaluator/gates/gate_d_performance/configs.py` — `SLAConfig`

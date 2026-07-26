@@ -562,10 +562,22 @@ def _rewrite_img_paths(html_str: str, base_dir: Path) -> str:
 
 # ── Playwright 변환 ───────────────────────────────────────────────────────────
 
-async def convert_one(md_path: Path, browser, *, verbose: bool = True) -> Path:
-    """md 파일 하나를 PDF로 변환하고 출력 경로를 반환한다."""
+async def convert_one(
+    md_path: Path, browser, *, verbose: bool = True, out_path: Path | None = None
+) -> Path:
+    """md 파일 하나를 PDF로 변환하고 출력 경로를 반환한다.
+
+    out_path를 지정하면 그 경로에 저장한다(기본은 Book-forge/Book/pdf/ 아래
+    디렉토리 구조를 그대로 유지) — --merge가 이 함수를 그대로 재사용해 각
+    파일을 임시 디렉토리에 렌더링한 뒤 PDF 레벨에서 합칠 때 쓴다(convert_merged
+    참고). 개별 변환과 병합 변환이 폰트 크기·다이어그램 해상도까지 완전히
+    동일하게 나오도록, "같은 코드로 각자 렌더링 후 합친다"를 보장하기 위함이다
+    — 여러 챕터를 하나의 거대한 HTML로 이어붙여 한 번에 렌더링하면(과거 방식),
+    문서가 매우 길어질수록 Chromium의 레이아웃/스크린샷 측정이 개별 렌더링과
+    미묘하게 달라질 위험이 있다.
+    """
     rel = md_path.relative_to(BOOK_DIR)
-    out = PDF_DIR / rel.with_suffix(".pdf")
+    out = out_path if out_path is not None else PDF_DIR / rel.with_suffix(".pdf")
     out.parent.mkdir(parents=True, exist_ok=True)
 
     raw  = md_path.read_text(encoding="utf-8")
@@ -771,142 +783,36 @@ def _find_md_files(arg: str) -> list[Path]:
 async def convert_merged(
     md_paths: list[Path], out_path: Path, browser, *, verbose: bool = True
 ) -> Path:
-    """여러 .md 파일을 지정 순서대로 하나의 PDF로 병합한다."""
-    import math, shutil, tempfile
+    """여러 .md 파일을 각각 convert_one()으로 개별 렌더링한 뒤 PDF 레벨에서 병합한다.
+
+    과거에는 모든 파일의 HTML을 하나로 이어붙여 한 번에 렌더링했다 — 문서가
+    길어질수록 Chromium의 레이아웃/스크린샷 측정이 개별 렌더링과 미묘하게
+    달라질 위험이 있었다. 지금은 개별 변환과 완전히 같은 코드 경로
+    (convert_one)로 각 파일을 독립 렌더링한 뒤, pypdf로 PDF 객체 레벨에서
+    합친다 — 폰트 크기·다이어그램 해상도가 개별 생성 결과와 항상 동일하다.
+    """
+    import shutil
+    import tempfile
+
+    import pypdf
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    _PAGE_BREAK    = '<div style="break-before:page;page-break-before:always;margin:0;padding:0;"></div>\n'
-    _PDF_CONTENT_W = 624
-    _AVAIL_W       = _PDF_CONTENT_W - 32
-    _CHUNK_H       = 300
-
-    bodies: list[str] = []
-    for md_path in md_paths:
-        raw  = md_path.read_text(encoding="utf-8")
-        raw  = inject_mermaid(md_path.stem, raw)
-        body = md_to_html(raw)
-        body = _rewrite_img_paths(body, md_path.parent)
-        bodies.append(body)
-
-    combined_body = _PAGE_BREAK.join(bodies)
-    title = (
-        f"{md_paths[0].stem} … {md_paths[-1].stem}"
-        if len(md_paths) > 1
-        else md_paths[0].stem
-    )
-    html = build_page_html(combined_body, title)
-
-    temp_dir = Path(tempfile.mkdtemp(prefix="mermaid_merge_"))
+    temp_dir = Path(tempfile.mkdtemp(prefix="pdf_merge_"))
     try:
-        ctx1 = await browser.new_context(device_scale_factor=1)
-        render_page = await ctx1.new_page()
-        await render_page.set_content(html, wait_until="networkidle")
-        try:
-            await render_page.wait_for_function(
-                "() => window.__mermaidDone === true", timeout=20000)
-        except Exception:
-            pass
-        full_h = await render_page.evaluate(
-            "() => Math.max(document.body.scrollHeight, 6000)")
-        await render_page.set_viewport_size({"width": _PDF_CONTENT_W, "height": full_h})
+        part_paths: list[Path] = []
+        for idx, md_path in enumerate(md_paths):
+            part_out = temp_dir / f"{idx:03d}.pdf"
+            await convert_one(md_path, browser, verbose=False, out_path=part_out)
+            part_paths.append(part_out)
+            if verbose:
+                print(f"    · {md_path.stem}")
 
-        mermaid_diagrams: list[list[tuple[str, int, int]]] = []
-        n_containers = await render_page.locator(".mermaid").count()
-        for idx in range(n_containers):
-            try:
-                info = await render_page.evaluate(f"""() => {{
-                    const c = document.querySelectorAll('.mermaid')[{idx}];
-                    const s = c.querySelector('svg');
-                    if (!s) return null;
-                    const r = s.getBoundingClientRect();
-                    if (r.width <= 0 || r.height <= 0) return null;
-                    const sc = r.width > {_AVAIL_W} ? {_AVAIL_W} / r.width : 1;
-                    const tw = Math.ceil(r.width * sc), th = Math.ceil(r.height * sc);
-                    s.setAttribute('width', tw); s.setAttribute('height', th);
-                    s.style.cssText = 'display:block;margin:0 auto;';
-                    const b = s.getBoundingClientRect();
-                    return {{x: b.x, y: b.y, w: Math.round(b.width), h: Math.round(b.height)}};
-                }}""")
-                if not info:
-                    mermaid_diagrams.append([])
-                    continue
-                sx, sy, tw, th = info['x'], info['y'], info['w'], info['h']
-                chunks: list[tuple[str, int, int]] = []
-                for ci in range(max(1, math.ceil(th / _CHUNK_H))):
-                    ry = round(sy + ci * _CHUNK_H)
-                    ch = min(_CHUNK_H, round(sy + th) - ry)
-                    if ch <= 0:
-                        break
-                    png = await render_page.screenshot(
-                        type="png",
-                        clip={"x": round(sx), "y": ry, "width": tw, "height": ch},
-                    )
-                    chunk_path = temp_dir / f"m_{idx:04d}_{ci:02d}.png"
-                    chunk_path.write_bytes(png)
-                    chunks.append((f"file://{chunk_path}", tw, ch))
-                mermaid_diagrams.append(chunks)
-            except Exception:
-                mermaid_diagrams.append([])
-        await render_page.close()
-        await ctx1.close()
-
-        p2_html = html
-        if any(mermaid_diagrams):
-            diag_iter = iter(mermaid_diagrams)
-
-            def _replace_mermaid(m: re.Match) -> str:
-                try:
-                    chunks = next(diag_iter)
-                except StopIteration:
-                    return m.group(0)
-                if not chunks:
-                    return m.group(0)
-                n = len(chunks)
-                parts = []
-                for ci2, (fu, w, h) in enumerate(chunks):
-                    mt = "14px" if ci2 == 0 else "0"
-                    mb = "14px" if ci2 == n - 1 else "0"
-                    parts.append(
-                        f'<div class="mermaid-chunk" style="margin:{mt} 0 {mb};'
-                        f'display:table;width:100%;break-inside:avoid;page-break-inside:avoid;">'
-                        f'<img src="{fu}" width="{w}" height="{h}" '
-                        f'style="display:block;margin:0 auto;width:{w}px;height:{h}px;max-width:none;border:none;">'
-                        f'</div>'
-                    )
-                return "".join(parts)
-
-            p2_html = re.sub(
-                r'<div\s+class="mermaid"[^>]*>.*?</div>',
-                _replace_mermaid,
-                p2_html,
-                flags=re.DOTALL,
-            )
-
-        html_file = temp_dir / "merged.html"
-        html_file.write_text(p2_html, encoding="utf-8")
-
-        ctx2 = await browser.new_context(device_scale_factor=1)
-        page = await ctx2.new_page()
-        await page.set_viewport_size({"width": _PDF_CONTENT_W, "height": 6000})
-        await page.goto(f"file://{html_file}", wait_until="networkidle")
-        await page.wait_for_load_state("load")
-        try:
-            await page.wait_for_function(
-                "() => window.__mermaidDone === true", timeout=10000)
-        except Exception:
-            pass
-        real_h = await page.evaluate("document.body.scrollHeight")
-        await page.set_viewport_size({"width": _PDF_CONTENT_W, "height": max(real_h, 6000)})
-        await page.pdf(
-            path=str(out_path),
-            format="A4",
-            margin={"top": "22mm", "right": "20mm", "bottom": "25mm", "left": "25mm"},
-            print_background=True,
-        )
-        await page.close()
-        await ctx2.close()
-
+        writer = pypdf.PdfWriter()
+        for part_path in part_paths:
+            writer.append(str(part_path))
+        with open(out_path, "wb") as f:
+            writer.write(f)
+        writer.close()
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -954,15 +860,17 @@ def _print_help() -> None:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   python build_pdf_chapters.py
 
-  build_book.py 의 ORDERED_FILES(00_서문 + Ch01~15 + 부록 A, 총 17개 —
-  HTML 책(book-forge-agent-harness.html)과 동일한 목록)를 그대로 변환한다.
-  이 디렉토리에 섞여 있는 00_기획안.md·02_목차_초안.md(집필 관리 문서)는
-  기본 실행에 포함되지 않는다 — 필요하면 모드 2로 직접 지정.
+  build_book.py 의 ORDERED_FILES(00_서문 + 0장 둘러보기 + Ch01~15 + 맺음말
+  + 부록 A·B, 총 20개 — HTML 책(book-forge-agent-harness.html)과 동일한
+  목록)를 그대로 변환한다. 이 디렉토리에 섞여 있는 00_기획안.md·
+  02_목차_초안.md(집필 관리 문서)는 기본 실행에 포함되지 않는다 — 필요하면
+  모드 2로 직접 지정.
 
   출력: Book-forge/Book/pdf/ (디렉토리 구조 그대로 유지)
     Part_I_AI_에이전트란_무엇인가/Chapter_01_*.pdf
     Part_IV_실행_전에_막고_조정한다/Chapter_15_*.pdf
-    Appendix/A_Harness_Config_사용현황.pdf  ← Appendix 포함
+    Appendix/A_용어집.pdf                   ← Appendix 포함
+    Appendix/B_업계_동향과_더_읽을거리.pdf
     00_서문.pdf                             ← 서문 포함
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1045,7 +953,8 @@ def main() -> None:
         files = ordered if merge_out else sorted(ordered)
     else:
         # 인수 없음: build_book.py의 ORDERED_FILES를 우선 사용 — HTML 책과
-        # 정확히 동일한 17개 파일(00_서문 + Ch01~15 + 부록 A)만 대상으로 삼는다.
+        # 정확히 동일한 20개 파일(00_서문 + 0장 둘러보기 + Ch01~15 + 맺음말
+        # + 부록 A·B)만 대상으로 삼는다.
         if _BUILD_MOD is not None and hasattr(_BUILD_MOD, "ORDERED_FILES"):
             all_md = [f for f in _BUILD_MOD.ORDERED_FILES if f.exists()]
             files = all_md if merge_out is not None else sorted(all_md)

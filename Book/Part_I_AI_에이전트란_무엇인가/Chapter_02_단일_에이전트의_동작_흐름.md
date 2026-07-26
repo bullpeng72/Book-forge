@@ -59,7 +59,7 @@ PLAN_PROMPT = """다음 주제로 도서 기획안을 작성하세요.
 
 이 프롬프트가 왜 "## 목적" 같은 정확한 마크다운 헤딩을 요구하는지는 우연이 아니다 — 이 응답은 나중에 `plan_cmd.py`가 파싱해 재사용하고, `00_기획안.md` 파일로 그대로 저장된다. **프롬프트의 출력 형식은 다음 단계 소비자(다른 코드 또는 다른 에이전트)의 파싱 요구사항에 맞춰 설계된다** — 이 원칙은 이 책 전체에서 반복된다(4장에서 다시 다룬다).
 
-`system=PLAN_SYSTEM_PROMPT`는 "당신은 기술 도서 기획 편집자입니다... 기획안 본문만 마크다운으로 출력하세요"라는 역할 지시를 담당한다. `system`과 `prompt`(user 메시지)를 분리하는 것도 `LLM` Protocol의 계약 그대로다(1장 §1.1) — 세 provider 구현체 모두 이 두 값을 각자의 API 형식에 맞게 재조립한다.
+`system=PLAN_SYSTEM_PROMPT`는 "당신은 기술 도서 기획 편집자입니다... 기획안 본문만 마크다운으로 출력하세요"라는 역할 지시를 담당한다. `system`과 `prompt`(user 메시지)를 분리하는 것도 `LLM` Protocol의 계약 그대로다(1장 §1.2) — 세 provider 구현체 모두 이 두 값을 각자의 API 형식에 맞게 재조립한다.
 
 ## 2.3 `@agent_eval`이 가로채는 지점
 
@@ -88,7 +88,7 @@ sequenceDiagram
 
 ## 2.4 `EvalMetadata`는 20여 개 필드 중 딱 하나만 쓴다
 
-`EvalMetadata`(Agent-Evaluator SDK, `decorators.py`)는 함수가 데코레이터에게 "자동으로 계산할 수 없는 값"을 되돌려주는 통로다. 실제 정의를 열어보면 LangChain의 `chain_steps`, LangGraph의 `graph_traversal`, AutoGen의 `conversation_turns`처럼 다른 에이전트 프레임워크 통합을 위한 필드가 20개 넘게 있다.
+`EvalMetadata`(Agent-Evaluator SDK, `decorators.py`)는 함수가 데코레이터에게 "자동으로 계산할 수 없는 값"을 되돌려주는 통로다. 실제 정의를 열어보면 LangChain의 `chain_steps`, LangGraph의 `graph_traversal`, AutoGen의 `conversation_turns`처럼 다른 에이전트 프레임워크 통합을 위한 필드가 정확히 20개 있다.
 
 ```python
 @dataclass
@@ -99,11 +99,11 @@ class EvalMetadata:
     chain_steps: list[dict[str, Any]] | None = None       # LangChain 전용
     graph_traversal: dict[str, Any] | None = None          # LangGraph 전용
     conversation_turns: list[dict[str, Any]] | None = None # AutoGen 전용
-    # ... (그 외 15개 필드 생략, 전부 기본값 None)
+    # ... (그 외 13개 필드 생략, 전부 기본값 None)
     extra: dict[str, Any] | None = None  # 사용자 정의 자유 형식 메타데이터
 ```
 
-Book-forge는 이 중 **`extra` 하나만** 채운다 — `propose_plan()`의 `EvalMetadata(extra={"phase": "planning", "topic": topic})`이 그 예다. 나머지 필드는 전부 `None`으로 남아 "자동 계산값을 유지하라"는 뜻으로 해석된다. 8장(§8.5)에서 다시 강조할 원칙이 여기서도 그대로 드러난다 — **SDK가 제공하는 표면적을 전부 쓰는 것이 아니라, 이 프로젝트에 실제로 필요한 조각만 정확히 골라 쓴다.** `extra`에 담긴 `phase`/`topic` 같은 값은 Gate 점수 계산에 직접 관여하지 않고, 나중에 `eval_results/*.json`을 사람이 훑어볼 때 "이 태스크가 어느 단계에서 나왔는가"를 알아보기 쉽게 하는 부가 정보다.
+Book-forge는 이 중 **`extra` 하나만** 채운다 — `propose_plan()`의 `EvalMetadata(extra={"phase": "planning", "topic": topic})`이 그 예다. 나머지 필드는 전부 `None`으로 남아 "자동 계산값을 유지하라"는 뜻으로 해석된다. 8장(§8.6)에서 다시 강조할 원칙이 여기서도 그대로 드러난다 — **SDK가 제공하는 표면적을 전부 쓰는 것이 아니라, 이 프로젝트에 실제로 필요한 조각만 정확히 골라 쓴다.** `extra`에 담긴 `phase`/`topic` 같은 값은 Gate 점수 계산에 직접 관여하지 않고, 나중에 `eval_results/*.json`을 사람이 훑어볼 때 "이 태스크가 어느 단계에서 나왔는가"를 알아보기 쉽게 하는 부가 정보다.
 
 ## 2.5 실제 호출 지점 — `new_cmd.py`
 

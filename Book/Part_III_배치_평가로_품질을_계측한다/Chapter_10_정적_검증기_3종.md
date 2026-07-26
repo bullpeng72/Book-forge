@@ -130,6 +130,15 @@ def _fold_key(term: str) -> str:
 
 > 👨‍💻 **개발자 TIP**: 이 세 검증기는 모두 "발견해서 보고만 한다, 자동 수정하지 않는다"는 원칙을 공유한다 — `draft_cmd.py`는 이 결과를 `ChapterDraftResult`에 실어 CLI 요약에 노출할 뿐, `book-forge gate`처럼 빌드를 막지 않는다. Gate 점수 노출과 같은 철학이다(9장 §9.5의 "참고용" 문구를 떠올려보라).
 
+## 10.5 챕터 제목의 "3종" 밖에 있는 나머지 2종
+
+`agents/` 디렉토리에는 `@agent_eval`도 `@tool_guard`도 없는 순수 정적 검증기가 실제로는 5개다 — 이 챕터가 깊이 다룬 셋 외에 둘이 더 있다.
+
+- **`code_example_verifier.py`**: `demonstration_verifier.verify_exercise_code()`(§10.3)가 문법만 확인하는 것과 달리, `--execute-examples` 플래그를 명시적으로 켰을 때만 코드를 **실제로 실행**한다. LLM이 생성한 임의 코드를 자동 실행하는 것은 "안 한다"는 §10.3의 원칙을 뒤집는 게 아니라, 그 원칙 위에 완전히 별도의 옵트인 계층을 얹은 것이다.
+- **`sdk_version_pin.py`**: `--check-package`가 기준 삼는 SDK 버전을 프로젝트별로 `sdk_versions.json`에 한 번 고정해두고, 이후 호출마다 현재 설치된 버전과 대조해 드리프트를 알린다 — "본문이 틀렸다"와 "SDK가 그새 바뀌었다"를 구분하지 못했던 문제를 고친 모듈이다.
+
+둘 다 LLM 호출 없이 정적으로 동작한다는 점, "발견해서 보고만 한다"는 원칙을 공유한다는 점에서 앞의 셋과 같은 축에 있다 — 다만 각각 `--execute-examples`/`--check-package`라는 별도 옵트인 플래그 뒤에 있어 기본 흐름(`book-forge draft`)만으로는 마주치지 않으므로, 이 챕터는 나머지 셋만 깊이 다뤘다.
+
 ---
 
 ## 직접 해보기
@@ -147,8 +156,8 @@ def _fold_key(term: str) -> str:
 
 ## 참고 자료
 
-- 부록 A.6(Harness Config 사용 현황) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 **생성 코드** 자체
-- 부록 C.1(업계 동향) — RAG·자기일관성·불확실성 추정을 조합하는 업계의 환각 대응과, Book-forge가 그중 가장 단순한 축만 쓰는 이유
+- 8장(§8.4) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 **생성 코드** 자체
+- 부록 B.1(업계 동향) — RAG·자기일관성·불확실성 추정을 조합하는 업계의 환각 대응과, Book-forge가 그중 가장 단순한 축만 쓰는 이유
 - `src/book_forge/agents/code_consistency_checker.py`
 - `src/book_forge/agents/demonstration_verifier.py`
 - `src/book_forge/agents/term_consistency_checker.py`

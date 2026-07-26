@@ -234,11 +234,9 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 <a class="chapter toc-link" href="#ch15">15. 한계와 열린 문제</a>
 <a class="chapter toc-link" href="#afterword">맺음말</a>
 <a class="part-heading">부록</a>
-<a class="appendix toc-link" href="#appA">부록 A. Harness Config 사용 현황</a>
-<a class="appendix toc-link" href="#appB">부록 B. 용어집</a>
-<a class="appendix toc-link" href="#appC">부록 C. 업계 동향과 더 읽을거리</a>
-<a class="appendix toc-link" href="#appD">부록 D. 구조적 코드 인덱싱 상세</a></div></nav><main id="main"><section class="chapter-section" id="preface" data-section-title="서문 — 이 책은 왜 Book-forge 자신을 예제로 삼는가">
-<h2 id="book-forge">서문 — 이 책은 왜 Book-forge 자신을 예제로 삼는가</h2>
+<a class="appendix toc-link" href="#appA">부록 A. 용어집</a>
+<a class="appendix toc-link" href="#appB">부록 B. 업계 동향과 더 읽을거리</a></div></nav><main id="main"><section class="chapter-section" id="preface" data-section-title="서문 — Book-forge로 읽는 AI 에이전트와 Harness Engineering">
+<h2 id="book-forge-ai-harness-engineering">서문 — Book-forge로 읽는 AI 에이전트와 Harness Engineering</h2>
 <h3 id="1-ai">① AI 에이전트로 얻는 것 — 이 책이 지키려는 것</h3>
 <p>Book-forge 한 줄 요약: "주제만 주면(또는 코드 저장소만 가리키면) 기획→목차→집필까지 자동으로 진행해 HTML/PDF/EPUB/슬라이드를 만드는 도구." 이 도구가 실제로 주는 이득은 구체적이다 — 기획안 초안을 몇 초 만에 받아 저자는 "고치는" 작업부터 시작할 수 있고, 코드 저장소를 가리키면 실제 모듈·클래스·함수 목록을 목차 설계에 반영해 존재하지 않는 기능을 지어내지 않으며(<code>knowledge/code_index.py</code>의 구조적 코드 인덱싱), 챕터 하나하나를 저자가 손으로 쓰지 않고도 RAG(관련 자료를 먼저 검색해 LLM에 근거로 주는 기법 — 처음 듣는 단어라면 <code>00_Book_forge_둘러보기.md</code> §0.0 참고)로 실제 소스를 근거 삼아 초안을 채운다. 이 책 자체도 정확히 이 이득을 논증하는 사례다 — 다만 이 책은 그 파이프라인을 자동으로 돌리는 대신, 그 파이프라인을 <strong>설명하기 위해</strong> 사람이 직접 소스를 읽고 썼다(이유는 <code>00_기획안.md</code> §6).</p>
 <h3 id="2">② 문제 — 그 이득이 새는 지점</h3>
@@ -262,7 +260,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 <tr>
 <td><strong>정적 검증</strong></td>
 <td>LLM 호출 없이, 결정론적 규칙으로 "이 서술이 사실과 다른가"를 대조</td>
-<td><code>code_consistency_checker.py</code>·<code>demonstration_verifier.py</code>·<code>term_consistency_checker.py</code></td>
+<td><code>code_consistency_checker.py</code>·<code>demonstration_verifier.py</code>·<code>term_consistency_checker.py</code> 등</td>
 </tr>
 <tr>
 <td><strong>실시간 가드레일</strong></td>
@@ -277,8 +275,10 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
     Q -->|"실행 후, 결정론적<br/>규칙으로 대조 가능한가"| S["정적 검증<br/>code_consistency_checker 등"]
     Q -->|"실행 후, 통계적·의미적<br/>품질을 점수화해야 하는가"| B["배치 평가<br/>Gate A–G · agent_eval"]
 </div>
+<blockquote><p>이 세 채널 위에 하나가 더 있다 — "이 채널들이 무엇을 기준으로 판정할지" 자체를 프로젝트마다 조정하는 <strong>모니터 설정</strong>(14장)이다. 채널이 아니라 채널의 다이얼이라 이 표에는 넣지 않았다 — 15개 챕터를 다 읽은 뒤 <code>99_맺음말.md</code>가 네 축을 하나의 그림으로 다시 모은다.</p>
+</blockquote>
 <h3 id="_1">장점·문제·해결채널 매핑표</h3>
-<p>이 책 15개 챕터가 아래 문제들에 각각 대응한다. 전체 부연 설명은 <a href="Appendix/A_Harness_Config_사용현황.md">부록 A</a>를 참고하라.</p>
+<p>이 책 15개 챕터가 아래 문제들에 각각 대응한다 — 각 행의 "담당 챕터"가 그 부연 설명이다.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -328,7 +328,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 <tr>
 <td>7</td>
 <td>챕터 하나만 판정되고 책 전체 품질을 못 봄</td>
-<td>배치 평가(PerformanceMonitor.merge)</td>
+<td>배치 평가(<code>PerformanceMonitor.merge()</code>)</td>
 <td>§11</td>
 </tr>
 <tr>
@@ -346,7 +346,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 <tr>
 <td>10</td>
 <td>품질 기준이 프로젝트마다 다르게 조정되지 않음</td>
-<td>배치 평가 설정(Gate 가중치·.env)</td>
+<td>모니터 설정(Gate 가중치·<code>.env</code>)</td>
 <td>§14</td>
 </tr>
 </tbody>
@@ -354,6 +354,8 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 <blockquote><p>이 매핑표에 없는 문제 — 예를 들어 "검증에서 낮은 점수가 나온 결과를 에이전트가 스스로 고쳐 쓰는 것" — 는 Book-forge가 아직 다루지 못하는 영역이다. §15(한계와 열린 문제)에서 이 경계를 정직하게 다룬다.</p>
 </blockquote>
 <hr />
+<h3 id="book-forge">이 책이 다루는 범위 — Book-forge 하나, 그러나 그 이상</h3>
+<p>이 책은 Book-forge라는 구체적인 도구 하나를 처음부터 끝까지 뜯어보지만, 목표는 그 도구 자체가 아니다. Part I(1~3장)은 "AI 에이전트"라는 말이 업계에서 대략 어떤 요소(추론 엔진·도구·메모리·오케스트레이션)의 조합을 가리키는지부터 정리한 뒤에야 Book-forge의 최소 정의로 들어간다(1장 §1.1) — Book-forge를 접해본 적 없어도, "에이전트"라는 단어 자체가 낯선 개발자도 따라올 수 있게 하기 위해서다. Part II~IV는 그 에이전트들이 실제로 어떻게 협업하고(4~7장), 그 결과물의 품질을 어떻게 배치로 채점하고(8~11장), 어떻게 실행 전에 막고 프로젝트마다 다르게 조정하는지(12~15장)를 실제 코드로 따라간다. 각 챕터는 "직접 해보기" 상자로 끝난다 — Book-forge 코드를 읽는 데서 그치지 않고, 같은 질문을 여러분 자신의 에이전트에 던져보라는 요청이다.</p>
 <h3 id="book-forge_1">이 책과 Book-forge 소스의 관계</h3>
 <p>이 책은 Book-forge 저장소 안(<code>Book-forge/Book/</code>)에 있지만, Book-forge CLI로 만들어지지 않았다 — 소스 코드를 직접 읽고 사람이 쓴 독립 문서다(<code>00_기획안.md</code> §6). Book-forge SDK 사용법은 <code>Book-forge/README.md</code>를, Agent-Evaluator SDK 전체(58개 지표)는 <code>Agent-Evaluator/Media/Book/</code>을 참고하라 — 이 책은 그 둘을 처음부터 설명하지 않고, 필요한 곳마다 소스 파일로 직접 연결한다.</p>
 <h3 id="_2">독자별 읽기 경로</h3>
@@ -369,7 +371,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 <tbody>
 <tr>
 <td>AI 에이전트 개발이 아예 처음인 개발자</td>
-<td>둘러보기 §0.0(용어) → §0.1–0.6(§0.6에서 직접 설치·실행) → Part I(§1–3) — 막히는 용어가 나오면 <a href="Appendix/B_용어집.md">부록 B 용어집</a>으로</td>
+<td>둘러보기 §0.0(용어) → §0.1–0.6(§0.6에서 직접 설치·실행) → Part I(§1–3, §1.1의 일반 개념부터) — 막히는 용어가 나오면 <a href="Appendix/A_용어집.md">부록 A 용어집</a>으로</td>
 <td>약 1.5~2시간</td>
 </tr>
 <tr>
@@ -379,18 +381,18 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 </tr>
 <tr>
 <td>Agent-Evaluator SDK 도입을 검토 중인 팀</td>
-<td>둘러보기 → Part III(§8–11) → Part IV(§12–15)</td>
+<td>둘러보기(특히 §0.4) → Part III(§8–11) → Part IV(§12–15)</td>
 <td>약 3.5시간</td>
 </tr>
 <tr>
 <td>Book-forge 자체를 확장·기여하려는 개발자</td>
-<td>둘러보기 → 전체(Part I → II → III → IV) → 부록 A·B</td>
+<td>둘러보기 → 전체(Part I → II → III → IV) → 맺음말 → 부록 A·B</td>
 <td>약 6~7시간(한 번에 다 읽기보다 여러 세션에 나누길 권한다)</td>
 </tr>
 <tr>
-<td>"이미 SDK는 아는데 실전 배선 예시가 필요하다"</td>
+<td>이미 SDK는 아는데 실전 배선 예시가 필요하다</td>
 <td>Part III·IV만 순서대로(둘러보기는 건너뛰어도 무방)</td>
-<td></td>
+<td>약 2시간</td>
 </tr>
 </tbody>
 </table></div>
@@ -438,11 +440,11 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 </tr>
 </tbody>
 </table></div>
-<blockquote><p>이후 장에서 이 단어들이 다시 나올 때 뜻이 가물가물하면 이 표로 돌아오면 된다. 더 많은 용어(개별 Harness Config 이름 등)는 <a href="Appendix/B_용어집.md">부록 B. 용어집</a>에 정리돼 있다.</p>
+<blockquote><p>이후 장에서 이 단어들이 다시 나올 때 뜻이 가물가물하면 이 표로 돌아오면 된다. 더 많은 용어(개별 Harness Config 이름 등)는 <a href="Appendix/A_용어집.md">부록 A. 용어집</a>에 정리돼 있다.</p>
 </blockquote>
 <h3 id="01-book-forge">0.1 Book-forge는 무엇을 하는 도구인가</h3>
 <p>한 줄로: <strong>주제 하나(또는 코드 저장소 경로)를 주면, 기획안·목차를 저자와 함께 확정한 뒤, 챕터 초안을 자동으로 쓰고, 그 결과를 HTML·PDF·EPUB·발표자료로 만들어내는 CLI 도구.</strong> 그리고 이 책의 핵심 관심사인 "품질을 어떻게 보장하는가"는 이 파이프라인의 매 단계에 계측이 이미 배선돼 있다는 사실에서 나온다.</p>
-<div class="mermaid" data-lf-preserve="mermaid">flowchart LR
+<div class="mermaid" data-lf-preserve="mermaid">flowchart TD
     IN["입력<br/>주제 + (선택)코드 저장소"] --> PL["기획안<br/>PlannerAgent"]
     PL -->|"저자 승인 루프"| TOC["목차<br/>TOCDesignerAgent"]
     TOC -->|"저자 승인 루프"| SC["스캐폴딩<br/>빈 챕터 파일 생성"]
@@ -470,7 +472,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 </tr>
 <tr>
 <td><code>book-forge draft &lt;slug&gt; &lt;ch\|--all&gt;</code></td>
-<td>RAG 보조 챕터 초안 생성(narrative/reference_table/diagram/exercise/capstone)</td>
+<td>RAG 보조 챕터 초안 생성(narrative/reference_table/diagram/exercise/capstone/module_reference)</td>
 <td>7장</td>
 </tr>
 <tr>
@@ -615,7 +617,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 </tr>
 </tbody>
 </table></div>
-<blockquote><p>이 표에 없는 세부 Config(<code>ThreatSeverityConfig</code>, <code>ConflictResolutionConfig</code> 등)는 등장하는 장에서 그 자리에 필요한 만큼만 설명한다. 33개 Config 전체를 한눈에 정리한 표는 <a href="Appendix/A_Harness_Config_사용현황.md">부록 A</a>에, 개별 용어는 <a href="Appendix/B_용어집.md">부록 B</a>에 있다.</p>
+<blockquote><p>이 표에 없는 세부 Config(<code>ThreatSeverityConfig</code>, <code>ConflictResolutionConfig</code> 등)는 등장하는 장에서 그 자리에 필요한 만큼만 설명한다 — 14개 에이전트 전체가 쓰는 Config를 한 표로 보고 싶다면 8장(§8.1), 개별 용어는 <a href="Appendix/A_용어집.md">부록 A</a>에 있다.</p>
 </blockquote>
 <h3 id="05-gate">0.5 이 지도를 어떻게 쓰는가 — 파이프라인 ↔ 챕터 ↔ Gate 대응표</h3>
 <p>앞으로 어떤 장을 읽든, "지금 0.1의 파이프라인 중 어느 화살표를 보고 있는가"를 이 표로 확인할 수 있다.</p>
@@ -676,7 +678,7 @@ mark.search-hit.current { background: #ff9800; color: #fff; outline: 2px solid #
 </tbody>
 </table></div>
 <h3 id="06-gate">0.6 직접 재현해보기 — 설치부터 첫 Gate 점수까지</h3>
-<p>이 책은 "실측으로 재현 가능하다"는 말을 여러 번 쓴다(1장 §1.3 등). 말로만 남기지 않고, 여기서 그 재현 절차를 실제 명령 순서로 적어둔다 — Book-forge 저장소를 로컬에 클론했다는 전제다.</p>
+<p>이 책은 "실측으로 재현 가능하다"는 말을 여러 번 쓴다(1장 §1.4 등). 말로만 남기지 않고, 여기서 그 재현 절차를 실제 명령 순서로 적어둔다 — Book-forge 저장소를 로컬에 클론했다는 전제다.</p>
 <pre><code class="language-bash"># 1. 설치 — RAG(--source)까지 쓰려면 [rag] extra 포함
 pip install -e &quot;.[dev,rag]&quot;
 
@@ -699,14 +701,608 @@ book-forge gate &quot;테스트 프로젝트&quot; --min-gate-score 0.0
 <blockquote><p>⚠️ <strong>로컬 실행 환경(Ollama 등)이 없다면</strong>: 이 5단계, 그리고 이후 챕터의 "직접 해보기" 상자 중 CLI 실행을 요구하는 것들은 건너뛰어도 이 책을 읽는 데 지장이 없다 — 모든 챕터 본문이 실제 실행 로그·소스 코드를 이미 인용해 보여주므로, 코드를 읽는 것만으로도 각 장의 핵심 주장은 그대로 따라갈 수 있다. "직접 해보기"는 이해를 검증하고 손에 익히는 보너스지, 본문 이해의 전제 조건이 아니다. 회사 PC 등 설치가 어려운 환경이라면, 각 상자의 코드/명령을 읽고 "이걸 실행하면 무엇이 나올지" 스스로 예측해본 뒤 본문의 설명과 맞춰보는 것만으로도 충분한 학습 효과가 있다.</p>
 </blockquote>
 <hr />
-<h3 id="_1">이 장의 핵심</h3>
+<h3 id="07">0.7 프로젝트 아키텍처 — 패키지 구조와 의존 라이브러리</h3>
+<p>Book-forge의 실제 코드는 <code>src/book_forge/</code> 아래 7개 서브패키지(+ 루트 3개 모듈)로 나뉜다. 이 절은 "어떤 묶음이 무슨 일을 하는가"를 30,000피트 상공에서 조망한다 — 각 파일의 역할은 바로 다음 절(0.8)에서 표로 정리한다.</p>
+<pre><code>src/book_forge/
+├── models.py, config.py, exceptions.py   # 루트 — 목차 데이터 모델·설정·예외 계층(3개 파일, 특정 패키지에 속하지 않음)
+├── llm/            # LLM Protocol + OpenAI·Anthropic·Ollama 통합(provider.py 1개 파일)
+├── agents/         # LLM 에이전트 13개 + @tool_guard 1개(scaffold) + 정적 검증기 5개 + 프롬프트 상수 1개
+├── knowledge/      # RAG — 소스 어댑터·임베딩·지식창고·구조적 코드 인덱싱(7개 파일)
+├── publish/        # 마크다운 → HTML/PDF/EPUB/Slides(9개 파일)
+├── editor/         # Flask 웹 에디터(server.py 1개 파일)
+├── eval/           # PerformanceMonitor 팩토리(2개 파일)
+└── cli/            # click 진입점 + 13개 서브커맨드(15개 파일)
+</code></pre>
+<p><code>__init__.py</code>처럼 실질적인 로직이 없는 빈 파일을 제외하면 약 58개 파일, 총 7,019줄(조사 시점 <code>wc -l</code> 기준)이 Book-forge 전체 구현이다 — 이 책이 지금까지 인용해온 코드는 전부 이 58개 파일 중 일부다.</p>
+<p>의존 라이브러리는 <code>pyproject.toml</code>이 코어와 옵트인 extra를 명확히 나눈다:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>구분</th>
+<th>라이브러리</th>
+<th>어디서 쓰는가</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>코어(항상 설치)</td>
+<td><code>click</code></td>
+<td><code>cli/</code> 전체 — 커맨드 정의</td>
+</tr>
+<tr>
+<td>코어</td>
+<td><code>python-dotenv</code></td>
+<td><code>config.py</code> — <code>.env</code> 로드</td>
+</tr>
+<tr>
+<td>코어</td>
+<td><code>pydantic</code></td>
+<td>(설정 검증용으로 선언돼 있으나 이 책이 다루는 핵심 경로에서는 직접 노출되지 않는다)</td>
+</tr>
+<tr>
+<td>코어</td>
+<td><code>markdown</code></td>
+<td><code>publish/markdown_engine.py</code> — <code>md_to_html()</code>의 실제 변환 엔진</td>
+</tr>
+<tr>
+<td>코어</td>
+<td><code>requests</code></td>
+<td><code>knowledge/embeddings.py</code>(Ollama API), <code>knowledge/web_search.py</code>, <code>knowledge/sources.py</code>(URL 소스)</td>
+</tr>
+<tr>
+<td>코어</td>
+<td><code>agent-evaluator&gt;=0.9.9</code></td>
+<td><code>agents/*</code>(<code>@agent_eval</code>/<code>@tool_guard</code>), <code>eval/monitor.py</code>, <code>cli/commands/gate_cmd.py</code></td>
+</tr>
+<tr>
+<td><code>[pdf]</code></td>
+<td><code>playwright</code></td>
+<td><code>publish/pdf_builder.py</code> — Chromium headless 인쇄</td>
+</tr>
+<tr>
+<td><code>[rag]</code></td>
+<td><code>pypdf</code>, <code>numpy</code></td>
+<td><code>knowledge/pdf_source.py</code>(PDF 추출), <code>knowledge/store.py</code>(코사인 유사도 행렬 연산)</td>
+</tr>
+<tr>
+<td><code>[serve]</code></td>
+<td><code>flask</code></td>
+<td><code>editor/server.py</code></td>
+</tr>
+<tr>
+<td><code>[korean]</code></td>
+<td><code>agent-evaluator[korean]</code></td>
+<td><code>eval/monitor.py</code>의 <code>use_korean_tokenizer=True</code>가 기대하는 형태소 분석기</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote><p>⚠️ <strong><code>pyproject.toml</code>에 없는 의존성</strong>: <code>llm/provider.py</code>는 provider로 OpenAI 또는 Anthropic을 선택했을 때만 <code>from openai import OpenAI</code> / <code>from anthropic import Anthropic</code>을 함수 내부에서 지연 import한다 — 두 SDK 모두 <code>pyproject.toml</code>의 어떤 의존성 목록에도 선언돼 있지 않다. 기본값인 Ollama만 쓰면 이 문제를 겪을 일이 없지만, <code>LLM_PROVIDER=openai</code>로 전환하려면 <code>pip install openai</code>를 별도로 실행해야 한다 — 이 책이 반복해서 강조하는 "관대한 파싱, 그러나 숨겨진 전제조건은 정직하게 문서화한다"는 원칙이 놓치기 쉬운 지점이다.</p>
+</blockquote>
+<p>이 8개 패키지 전부가 공통으로 따르는 두 가지 배선 패턴(<code>build_X(llm, monitor) -&gt; Fn</code> 팩토리, <code>@agent_eval</code> vs <code>@tool_guard</code>의 축 구분)은 이미 이 책의 핵심 주제이므로 2·8·12장에서 각각 코드로 따라간다 — 이 절은 "그 패턴들이 정확히 어느 파일에 있는가"의 지도 역할만 한다.</p>
+<h3 id="08">0.8 파일별 책임 지도</h3>
+<p>아래 표는 Book-forge 소스 전체(58개 실질 파일)를 패키지별로 나눠, 각 파일의 책임과 이 책에서 주로 다루는 곳을 정리한 것이다 — 처음 읽을 때 전부 외울 필요는 없다. 이후 장에서 낯선 파일 이름이 나올 때 돌아와 찾아보는 용도다.</p>
+<h4 id="_1">루트 모듈</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>핵심 요소</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>models.py</code></td>
+<td>목차 데이터 모델 — <code>ChapterSpec</code>, <code>```toc</code> 매니페스트 파싱, 목차 개정 이력 조작</td>
+<td><code>ChapterSpec</code>, <code>parse_toc_manifest()</code>, <code>append_toc_revision_entries()</code></td>
+</tr>
+<tr>
+<td><code>config.py</code></td>
+<td><code>~/Documents/BookForge/</code> 데이터 디렉토리 관리, <code>.env</code> 경로 해석</td>
+<td><code>get_data_dir()</code>, <code>load_config()</code>, <code>project_dir_for()</code></td>
+</tr>
+<tr>
+<td><code>exceptions.py</code></td>
+<td>예외 계층</td>
+<td><code>BookForgeError</code>(base), <code>MissingAPIKeyError</code>, <code>TocParseError</code> 등</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="llm-llm"><code>llm/</code> — LLM 통합</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>핵심 요소</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>llm/provider.py</code></td>
+<td>OpenAI/Anthropic/Ollama를 하나의 인터페이스로 통합, provider별 SDK 지연 로딩</td>
+<td><code>LLM</code>(Protocol), <code>OpenAILLM</code>/<code>AnthropicLLM</code>/<code>OllamaLLM</code>, <code>create_llm()</code></td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="agents-llm-13-build_xllm-monitor-fn-agent_eval"><code>agents/</code> — LLM 호출 에이전트(13개, <code>build_X(llm, monitor) -&gt; Fn</code> 팩토리 + <code>@agent_eval</code>)</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>담당 챕터</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agents/planner.py</code></td>
+<td>PlannerAgent — 주제/제약 → 기획안 마크다운</td>
+<td>2장</td>
+</tr>
+<tr>
+<td><code>agents/toc_designer.py</code></td>
+<td>TOCDesignerAgent — 기획안(+코드 구조) → 목차 마크다운</td>
+<td>4장</td>
+</tr>
+<tr>
+<td><code>agents/chapter_drafter.py</code></td>
+<td>ChapterDrafterAgent — narrative/exercise 서술형 챕터 초안(기본 생성기)</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/reference_table.py</code></td>
+<td>ReferenceTableAgent — RAG 소스에서 구조화된 사실만 표로 추출</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/diagram_generator.py</code></td>
+<td>DiagramGeneratorAgent — RAG 소스 → Mermaid 다이어그램 중심 챕터</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/capstone_generator.py</code></td>
+<td>CapstoneGeneratorAgent — 빈 템플릿+모범 정답을 한 번의 호출로 생성</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/module_reference.py</code></td>
+<td>ModuleReferenceAgent — 구조적 코드 인덱싱 결과를 빠짐없이 표로 정리(전체 커버리지)</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/alternative_suggester.py</code></td>
+<td>AlternativeSuggesterAgent — 저커버리지 상황에서 자동 차단 대신 대안 제시</td>
+<td>3장</td>
+</tr>
+<tr>
+<td><code>agents/chat_agent.py</code></td>
+<td>ChatAgent — 지식창고 발췌+대화 이력 기반 Q&amp;A</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/research_agent.py</code></td>
+<td>ResearchAgent — 챕터 제목 → 검색 쿼리 생성(검색 자체는 <code>knowledge/web_search.py</code>)</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>agents/review_loop.py</code></td>
+<td>AuthorReviewLoop — 저자 피드백에 따른 반복 개정(<code>run_review_loop()</code>는 LLM 미호출 순수 오케스트레이션)</td>
+<td>6장</td>
+</tr>
+<tr>
+<td><code>agents/review_panel.py</code></td>
+<td>ReviewerAgent(정확성/가독성)·ChiefEditorAgent — 감독자-작업자 다관점 리뷰</td>
+<td>5장</td>
+</tr>
+<tr>
+<td><code>agents/slide_condenser.py</code></td>
+<td>SlideCondenserAgent — 책 섹션 하나 → 슬라이드 한 장</td>
+<td>(범위 밖)</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="agents-llm-7"><code>agents/</code> — 그 외(LLM 호출 방식이 다르거나 아예 안 하는 7개 파일)</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>비고</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agents/scaffold.py</code></td>
+<td>ScaffoldAgent — 승인된 목차 → 빈 챕터 스텁 생성 + 목차 재조정</td>
+<td><code>@agent_eval</code>이 아니라 <code>@tool_guard</code>(부작용 있는 파일 쓰기, 실행 전 차단 대상) — 12장</td>
+</tr>
+<tr>
+<td><code>agents/prompts.py</code></td>
+<td>위 13개 에이전트 중 다수가 공유하는 프롬프트 템플릿 문자열 저장소</td>
+<td>순수 상수 모듈, LLM 미호출</td>
+</tr>
+<tr>
+<td><code>agents/demonstration_verifier.py</code></td>
+<td>content_type별 생성 후 정적 검증(exercise 문법·diagram 구조·capstone TODO 등)</td>
+<td>LLM 미호출, <code>@agent_eval</code> 없음 — 10장</td>
+</tr>
+<tr>
+<td><code>agents/code_consistency_checker.py</code></td>
+<td>본문의 import/백틱 심볼이 실제 target_package에 존재하는지 대조</td>
+<td>LLM 미호출 — 10장</td>
+</tr>
+<tr>
+<td><code>agents/sdk_version_pin.py</code></td>
+<td><code>--check-package</code> 대상 버전을 프로젝트별로 최초 1회 고정, 드리프트 경고</td>
+<td>LLM 미호출 — 10장</td>
+</tr>
+<tr>
+<td><code>agents/code_example_verifier.py</code></td>
+<td>python 코드 블록을 subprocess로 실제 실행해 exit code 검증(<code>--execute-examples</code>)</td>
+<td>LLM 미호출 — 10장</td>
+</tr>
+<tr>
+<td><code>agents/term_consistency_checker.py</code></td>
+<td>챕터 간 백틱 기술 용어 표기 불일치 후보 검출</td>
+<td>LLM 미호출 — 10장</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="knowledge-rag"><code>knowledge/</code> — RAG</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>담당 챕터</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>knowledge/store.py</code></td>
+<td><code>KnowledgeStore</code> — numpy 인메모리 코사인 유사도 벡터 스토어, JSON 영속화</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>knowledge/embeddings.py</code></td>
+<td>Ollama <code>/api/embeddings</code> 호출 래퍼(RAG는 항상 Ollama만 사용)</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>knowledge/sources.py</code></td>
+<td>PDF/코드저장소/텍스트/URL을 동일한 청크 리스트로 변환하는 소스 어댑터 라우터</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>knowledge/pdf_source.py</code></td>
+<td>PDF → 텍스트 → 고정폭 슬라이딩 청크</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>knowledge/web_search.py</code></td>
+<td>DuckDuckGo HTML 엔드포인트 검색(API 키 불필요)</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>knowledge/code_index.py</code></td>
+<td>Python <code>ast</code>로 모듈/클래스/함수 인벤토리 + 의존관계 정적 분석</td>
+<td>4·7장</td>
+</tr>
+<tr>
+<td><code>knowledge/lifecycle.py</code></td>
+<td>지식창고 청크를 소스 태그별로 집계(<code>book-forge knowledge status</code>)</td>
+<td>(범위 밖)</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="publish"><code>publish/</code> — 빌드</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>비고</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>publish/config.py</code></td>
+<td><code>BookConfig</code> — HTML/PDF/EPUB/Slide 엔진 공통 설정 dataclass</td>
+<td>이 책 범위 밖(README 참고)</td>
+</tr>
+<tr>
+<td><code>publish/front_matter.py</code></td>
+<td><code>FrontMatter</code> — 저자/저작권/판 메타데이터를 별도 JSON으로 분리 저장</td>
+<td>〃</td>
+</tr>
+<tr>
+<td><code>publish/toc_loader.py</code></td>
+<td><code>01_목차.md</code> 매니페스트 → 실제 파일 경로가 채워진 <code>ResolvedChapter</code> 목록</td>
+<td>4장</td>
+</tr>
+<tr>
+<td><code>publish/book_index.py</code></td>
+<td>책 전체 찾아보기(색인) 항목 빌드(<code>term_consistency_checker</code>의 용어 추출 재사용)</td>
+<td>〃</td>
+</tr>
+<tr>
+<td><code>publish/markdown_engine.py</code></td>
+<td><code>md_to_html()</code> — mermaid/커스텀 HTML/코드 보존 3단계 마크다운 변환 엔진(공용)</td>
+<td>〃</td>
+</tr>
+<tr>
+<td><code>publish/html_builder.py</code></td>
+<td>전체 도서를 단일 HTML 파일로 빌드(사이드바 내비게이션 자동 생성)</td>
+<td>〃</td>
+</tr>
+<tr>
+<td><code>publish/pdf_builder.py</code></td>
+<td>Playwright(Chromium headless)로 챕터별 개별 PDF 인쇄</td>
+<td>〃</td>
+</tr>
+<tr>
+<td><code>publish/epub_builder.py</code></td>
+<td>순수 <code>zipfile</code>(표준 라이브러리)로 EPUB 3 컨테이너 조립</td>
+<td>〃</td>
+</tr>
+<tr>
+<td><code>publish/slide_builder.py</code></td>
+<td>마크다운 챕터 → Reveal.js 발표자료(<code>slide_condenser.py</code> 호출)</td>
+<td>〃</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="editor-eval"><code>editor/</code>, <code>eval/</code></h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>담당 챕터</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>editor/server.py</code></td>
+<td>Flask 웹 에디터 — Part/Chapter MD 편집 + 팀 동시성 클레임 충돌 방지</td>
+<td>13장</td>
+</tr>
+<tr>
+<td><code>eval/monitor.py</code></td>
+<td><code>PerformanceMonitor</code> 팩토리 — 한국어 형태소 토크나이저, Gate 가중치 <code>.env</code> 오버라이드</td>
+<td>14장</td>
+</tr>
+<tr>
+<td><code>eval/gate_summary.py</code></td>
+<td>방금 저장된 평가 결과 JSON에서 Gate A–G 점수를 즉시 읽어 CLI에 표시</td>
+<td>9장</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="cli"><code>cli/</code> — 명령 오케스트레이션</h4>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>파일</th>
+<th>책임</th>
+<th>담당 챕터</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cli/main.py</code></td>
+<td>click 그룹 진입점 — 13개 서브커맨드 등록</td>
+<td>0.2절</td>
+</tr>
+<tr>
+<td><code>cli/project_utils.py</code></td>
+<td>슬러그 → <code>BookConfig</code> 해석 공통 유틸(build/edit/gate/draft/plan이 공유)</td>
+<td>(범위 밖)</td>
+</tr>
+<tr>
+<td><code>cli/commands/new_cmd.py</code></td>
+<td><code>book-forge new</code> — 기획~스캐폴딩 오케스트레이션, <code>--source</code> 배치 초안 연쇄</td>
+<td>4장</td>
+</tr>
+<tr>
+<td><code>cli/commands/draft_cmd.py</code></td>
+<td><code>book-forge draft</code> — RAG 초안 생성 오케스트레이션(733줄, 가장 큰 파일)</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>cli/commands/gate_cmd.py</code></td>
+<td><code>book-forge gate</code> — 여러 챕터 결과 병합 + <code>agent-eval gate</code> CLI 위임</td>
+<td>9·11장</td>
+</tr>
+<tr>
+<td><code>cli/commands/plan_cmd.py</code></td>
+<td><code>book-forge plan</code> — 기획/목차 재검토, <code>--revise</code> 재승인 루프</td>
+<td>6장</td>
+</tr>
+<tr>
+<td><code>cli/commands/review_cmd.py</code></td>
+<td><code>book-forge review</code> — 리뷰 패널 호출 래퍼</td>
+<td>5장</td>
+</tr>
+<tr>
+<td><code>cli/commands/chat_cmd.py</code></td>
+<td><code>book-forge chat</code> — 지식창고 기반 대화형 Q&amp;A REPL</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>cli/commands/research_cmd.py</code></td>
+<td><code>book-forge research</code> — 검색 쿼리 생성 → 웹 검색 → 저자 선택 → 지식창고 추가</td>
+<td>7장</td>
+</tr>
+<tr>
+<td><code>cli/commands/lint_cmd.py</code></td>
+<td><code>book-forge lint</code> — 챕터 간 용어 불일치 발견·보고</td>
+<td>10장</td>
+</tr>
+<tr>
+<td><code>cli/commands/build_cmd.py</code></td>
+<td><code>book-forge build html\|pdf\|epub\|slides</code> 서브그룹</td>
+<td>(범위 밖)</td>
+</tr>
+<tr>
+<td><code>cli/commands/edit_cmd.py</code></td>
+<td><code>book-forge edit</code> — 웹 에디터 서버 실행</td>
+<td>13장</td>
+</tr>
+<tr>
+<td><code>cli/commands/init_cmd.py</code></td>
+<td><code>book-forge init</code> — LLM provider/API 키 대화형 <code>.env</code> 설정 마법사</td>
+<td>(범위 밖)</td>
+</tr>
+<tr>
+<td><code>cli/commands/home_cmd.py</code></td>
+<td><code>book-forge home</code> — 데이터/프로젝트 폴더를 OS 파일 탐색기로 열기</td>
+<td>(범위 밖)</td>
+</tr>
+<tr>
+<td><code>cli/commands/knowledge_cmd.py</code></td>
+<td><code>book-forge knowledge status\|reset</code></td>
+<td>(범위 밖)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="09">0.9 모듈 간 관계 — 누가 누구를 부르는가</h3>
+<p>파일 67개 전부를 하나의 그래프에 그리면 알아볼 수 없으므로, 패키지 단위로 뭉쳐 실제 import 관계를 그린다 — 화살표는 전부 실제 <code>from book_forge.X import Y</code> 문을 근거로 삼았다.</p>
+<div class="mermaid" data-lf-preserve="mermaid">graph TD
+    CLI["cli/commands/*<br/>(오케스트레이션)"] --> AGENTS["agents/*<br/>(LLM 에이전트 13 + 정적 검증기 5)"]
+    CLI --> KNOW["knowledge/*<br/>(RAG)"]
+    CLI --> PUB["publish/*<br/>(빌드)"]
+    CLI --> EVAL["eval/*<br/>(계측 팩토리)"]
+    CLI --> LLMP["llm/provider.py"]
+    CLI --> ROOT["models.py · config.py · exceptions.py"]
+
+    AGENTS --> LLMP
+    AGENTS --> ROOT
+    AGENTS -->|"prompts.py 공유"| AGENTS
+    AGENTS -.->|"code_consistency_checker.py만<br/>(로컬 모드 한정)"| KNOW
+
+    KNOW --> ROOT
+
+    PUB --> ROOT
+    PUB -.->|"book_index.py<br/>(용어 추출 재사용)"| AGENTS
+    PUB -.->|"slide_builder.py<br/>(slide_condenser.py 호출)"| AGENTS
+
+    EDITOR["editor/server.py"] --> PUB
+
+    AGENTS --> AE["agent_evaluator<br/>(외부 SDK)"]
+    EVAL --> AE
+    EDITOR --> AE
+</div>
+<p>이 그래프에서 눈에 띄는 비대칭이 두 가지 있다.</p>
+<ol>
+<li><strong><code>agents/</code>는 <code>knowledge/</code>를 몰라도 대부분 동작한다.</strong> RAG 소스(<code>sources</code>)는 <code>cli/commands/draft_cmd.py</code>가 <code>knowledge/store.py</code>에서 미리 꺼내 문자열로 넘겨주므로, 대부분의 에이전트 함수는 <code>KnowledgeStore</code> 객체 자체를 본 적이 없다 — 유일한 예외가 <code>agents/code_consistency_checker.py</code>(점선 화살표)로, 로컬 디렉토리 모드에서만 <code>knowledge/code_index.py</code>를 직접 지연 import한다.</li>
+<li><strong><code>publish/</code>는 원칙적으로 <code>agents/</code>를 몰라야 하는 레이어지만(빌드는 집필과 무관한 별도 단계), 실제로는 두 파일이 예외다.</strong> <code>publish/book_index.py</code>는 <code>agents/term_consistency_checker.py</code>의 용어 추출 함수(순수 함수, LLM 미호출)를 재사용한다 — 찾아보기(색인)를 만들 때 "이미 있는 로직을 새로 만들지 않는다"는 판단에서 나온 얕은 예외다. <code>publish/slide_builder.py</code>는 이보다 근본적인 의존이다 — 챕터 섹션을 슬라이드 한 장으로 압축하는 작업 자체를 <code>agents/slide_condenser.py</code>의 <code>build_condense_section()</code>(LLM 호출 에이전트)에 위임하므로, "빌드는 집필과 무관하다"는 원칙이 발표자료 빌드에는 처음부터 적용되지 않는다.</li>
+</ol>
+<p><code>editor/server.py</code>가 <code>publish/</code>(마크다운 렌더링)와 <code>agent_evaluator</code>(팀 동시성 가드레일) 둘만 직접 의존하고 <code>agents/</code>나 <code>knowledge/</code>는 전혀 모른다는 점도 이 그래프에서 확인할 수 있다 — 웹 에디터는 "사람이 직접 쓴 텍스트를 저장·미리보기"할 뿐, LLM을 한 번도 호출하지 않는다.</p>
+<h3 id="010">0.10 핵심 흐름 시퀀스 다이어그램</h3>
+<p>지금까지의 표와 그래프가 "무엇이 있는가"를 보여줬다면, 이 절은 "실제로 실행하면 어떤 순서로 호출되는가"를 세 가지 핵심 명령으로 보여준다. 각 다이어그램의 세부 사항은 표기된 장에서 코드로 다시 따라간다.</p>
+<h4 id="book-forge-new-4"><code>book-forge new "&lt;제목&gt;"</code> — 기획부터 스캐폴딩까지 (4장)</h4>
+<div class="mermaid" data-lf-preserve="mermaid">sequenceDiagram
+    participant Author as 저자
+    participant CLI as new_cmd.py
+    participant Planner as PlannerAgent
+    participant RL as AuthorReviewLoop
+    participant TOC as TOCDesignerAgent
+    participant SC as ScaffoldAgent
+
+    Author->>CLI: book-forge new "제목"
+    CLI->>Planner: propose_plan(topic, constraints)
+    Planner-->>CLI: 기획안 초안(md)
+    loop 승인까지 반복(최대 5회, LoopDetectionConfig)
+        CLI->>RL: run_review_loop(kind="plan", ...)
+        RL->>Author: render(md) + ask_feedback()
+        Author-->>RL: Enter(승인) 또는 수정 요청
+        opt 피드백 있음
+            RL->>Planner: revise(current_md, feedback)
+            Planner-->>RL: 수정된 md
+        end
+    end
+    CLI->>CLI: 00_기획안.md 저장
+    CLI->>TOC: design_toc(proposal_md, code_structure)
+    TOC-->>CLI: 목차 초안(md)
+    CLI->>RL: run_review_loop(kind="toc", ...) — 동일 패턴 재사용
+    RL-->>CLI: 승인된 목차 md
+    CLI->>CLI: parse_toc_manifest() → 01_목차.md 저장
+    CLI->>SC: scaffold_project(project_dir, chapters)
+    SC->>SC: write_chapter_stub() × N (@tool_guard)
+    SC-->>CLI: 생성 결과 로그
+    CLI-->>Author: 완료 + eval_results/ 경로
+</div>
+<p><code>RL</code>(AuthorReviewLoop)가 기획안·목차 두 단계에서 완전히 같은 함수로 재사용된다는 점이 이 다이어그램의 핵심이다 — <code>kind</code> 인자 하나로 어떤 문서를 개정 중인지만 구분한다(6장).</p>
+<h4 id="book-forge-draft-slug-ch-rag-710"><code>book-forge draft &lt;slug&gt; &lt;ch&gt;</code> — RAG 조회부터 정적 검증까지 (7·10장)</h4>
+<div class="mermaid" data-lf-preserve="mermaid">sequenceDiagram
+    participant Author as 저자
+    participant CLI as draft_cmd.py
+    participant Store as KnowledgeStore
+    participant Gen as 생성 에이전트*
+    participant Verify as 정적 검증기
+
+    Author->>CLI: book-forge draft SLUG N
+    CLI->>Store: query_with_scores(chapter_title, top_k, max_per_source)
+    Store-->>CLI: [(청크, 코사인 유사도), ...]
+    CLI->>CLI: avg_score 계산 → --min-coverage와 대조(D)
+    alt 커버리지 미달
+        CLI->>Gen: (AlternativeSuggesterAgent) suggest_alternatives(...)
+        Gen-->>Author: 대안 제안 후 생성 보류
+    else 커버리지 충분
+        CLI->>CLI: content_type으로 생성기 분기(B)
+        CLI->>Gen: build_generate_*(llm, monitor)(sources=...)
+        Gen-->>CLI: 챕터 초안 md (+ capstone이면 solution md 별도)
+        CLI->>CLI: 챕터 .md 저장 + 인용 URL 자동 부착
+        CLI->>Verify: verify_demonstration() / verify_capstone()
+        Verify-->>CLI: VerificationResult(문법·구조 대조, LLM 미호출)
+        opt --check-package
+            CLI->>Verify: verify_code_consistency() / check_version_drift()
+        end
+        opt --execute-examples
+            CLI->>Verify: verify_code_execution() (subprocess)
+        end
+    end
+    CLI-->>Author: Gate 요약 + 검증 결과 출력
+</div>
+<blockquote><p>* <code>Gen</code>은 content_type에 따라 실제로는 5개 서로 다른 파일 중 하나로 바뀐다 — narrative/exercise는 <code>chapter_drafter.py</code>, <code>reference_table</code>은 동명 파일, <code>module_reference</code>는 동명 파일(RAG 대신 구조 인덱싱 요약 사용), <code>diagram</code>은 <code>diagram_generator.py</code>, <code>capstone</code>은 <code>capstone_generator.py</code>다. 이 분기 전체는 0.8절의 "agents/ — LLM 호출 에이전트" 표와 대응한다.</p>
+</blockquote>
+<p>RAG 조회(<code>Store.query_with_scores</code>)가 콘텐츠 생성기 분기(B)보다 <strong>먼저</strong> 일어난다는 순서가 중요하다 — 검색된 청크의 평균 유사도가 낮으면 어떤 생성기를 부를지 결정하기도 전에 대안 제안 경로로 빠진다.</p>
+<h4 id="book-forge-gate-slug-911"><code>book-forge gate &lt;slug&gt;</code> — 병합부터 최종 판정까지 (9·11장)</h4>
+<div class="mermaid" data-lf-preserve="mermaid">sequenceDiagram
+    participant Author as 저자
+    participant CLI as gate_cmd.py
+    participant PM as PerformanceMonitor(SDK)
+    participant Sub as agent-eval CLI(subprocess)
+
+    Author->>CLI: book-forge gate SLUG
+    CLI->>CLI: _all_result_files() — eval_results/*.json 수집
+    alt 결과 파일 1개
+        CLI->>CLI: target = 그 파일 그대로(병합 왕복 없음)
+    else 결과 파일 2개 이상
+        CLI->>PM: PerformanceMonitor.load_from_file(files[0])
+        loop 나머지 파일
+            CLI->>PM: merged.merge(load_from_file(extra))
+        end
+        PM-->>CLI: merged
+        CLI->>CLI: merged.save_to_file(_merged_gate_result.json)
+    end
+    CLI->>Sub: subprocess.run([sys.executable,"-m","agent_evaluator.cli.main","gate",target,...])
+    Sub-->>CLI: exit code(0=통과 / 1=미달 / 2=baseline 회귀 / 3=골든셋 회귀)
+    CLI-->>Author: exit code 그대로 전달
+</div>
+<p>이 다이어그램에서 가장 중요한 사실은 <code>gate_cmd.py</code> 안 어디에도 Gate A–G 점수를 실제로 계산하는 코드가 없다는 것이다 — <code>PerformanceMonitor.merge()</code>(SDK 기존 기능)로 병합만 하고, 최종 판정은 <code>agent-eval</code> CLI subprocess에 완전히 위임한다. Book-forge가 "품질 판정 로직을 만들지 않고, agent-evaluator가 이미 제공하는 계측·게이팅 기능을 가져다 쓰는 응용 프로그램"이라는 이 책 전체의 전제(서문·CLAUDE.md)가 코드 레벨에서 가장 명확하게 드러나는 지점이 바로 여기다.</p>
+<hr />
+<h3 id="_2">이 장의 핵심</h3>
 <ul>
 <li><strong>Book-forge는 입력 하나가 여러 에이전트를 순서대로 거쳐 출력물이 되는 파이프라인이다.</strong> 0.1의 다이어그램이 이 책 전체의 뼈대다.</li>
 <li><strong>CLI 명령 하나하나가 이 책의 특정 장에 대응한다.</strong> 0.2의 표로 "지금 읽는 장이 실제로 어떤 명령을 설명하는가"를 확인할 수 있다.</li>
 <li><strong>Agent-Evaluator는 전통적 QA(로그·테스트·CI 게이트)의 LLM 버전이다.</strong> Tracker(항상 켜짐)·Config(옵트인 조정)·Gate(최종 판정)라는 세 층으로 나뉜다 — 이후 장에서 <code>@agent_eval</code>이나 <code>PerformanceMonitor</code>가 나오면 이 절(0.4)로 돌아와 확인할 수 있다.</li>
 <li><strong>말로만 "재현 가능하다"고 하지 않는다.</strong> 0.6의 5단계를 그대로 실행하면 이 책이 인용하는 모든 실측 예제의 형식을 직접 확인할 수 있다.</li>
+<li><strong>소스 전체는 8개 패키지·67개 파일·약 7,000줄이다.</strong> 0.7~0.8이 그 전체 지도이고, 0.9의 관계 그래프는 계층 간 의존 방향(그리고 그 방향을 깨는 두 예외)을, 0.10의 시퀀스 다이어그램 3개는 <code>new</code>/<code>draft</code>/<code>gate</code> 세 핵심 명령이 실제로 어떤 순서로 함수를 호출하는지 보여준다.</li>
 </ul>
-<h3 id="_2">참고 자료</h3>
+<h3 id="_3">참고 자료</h3>
 <ul>
 <li><code>Book-forge/README.md</code> — CLI 전체 옵션과 설치 방법(이 장은 그 축약본)</li>
 <li><code>Book-forge/CLAUDE.md</code> — 프로세스 아키텍처 전체 다이어그램과 파일 구조</li>
@@ -721,14 +1317,52 @@ book-forge gate &quot;테스트 프로젝트&quot; --min-gate-score 0.0
 <h3 id="part-i-ai">Part I. AI 에이전트란 무엇인가</h3>
 <p>이제부터 3개 챕터 동안, "AI 에이전트"라는 말이 실제 코드에서 정확히 무엇을 가리키는지부터 시작해(1장), 그 최소 단위 하나가 어떻게 동작하는지 한 줄씩 따라가고(2장), 마지막으로 그게 실제로 어떻게, 왜 실패하는지(3장)까지 확인한다. Part II부터는 "여러 에이전트가 어떻게 협업하는가"로 넘어가므로, Part I은 그 전에 필요한 <strong>에이전트 하나</strong>에 대한 그림을 완성하는 구간이다.</p>
 <p><strong>이 챕터에서 배우는 것</strong><br />
-- "AI 에이전트"라는 말이 실제 코드에서는 무엇을 가리키는지<br />
+- 업계에서 "AI 에이전트"를 설명할 때 공통으로 등장하는 요소(추론 엔진·도구·메모리·오케스트레이션)와 자율성 스펙트럼<br />
+- "AI 에이전트"라는 말이 Book-forge 실제 코드에서는 무엇을 가리키는지<br />
 - Book-forge의 <code>LLM</code> Protocol이 왜 OpenAI/Anthropic/Ollama를 똑같은 인터페이스로 감싸는지<br />
 - 에이전트를 최소로 정의하면 무엇이 남고 무엇이 빠지는지</p>
 <p><strong>이런 분이 먼저 읽으면 좋습니다</strong>: "에이전트"라는 단어를 여러 문서에서 다르게 쓰는 걸 보고 혼란스러웠던 분. 이 챕터는 정의를 논쟁하는 대신, 실제로 동작하는 코드 하나를 기준점으로 삼는다.</p>
 </blockquote>
 <hr />
-<h3 id="11">1.1 가장 작은 정의부터 시작한다</h3>
-<p>"AI 에이전트"라는 말은 문맥마다 다른 것을 가리킨다 — 어떤 글은 자율적으로 도구를 골라 쓰는 시스템을 뜻하고, 어떤 글은 단순히 "LLM을 호출하는 함수"를 그렇게 부른다. 이 책은 논쟁에 끼어드는 대신 Book-forge가 실제로 코드로 구현한 정의에서 출발한다 — <code>src/book_forge/llm/provider.py</code>가 그 출발점이다.</p>
+<h3 id="11-ai">1.1 일반적으로 "AI 에이전트"란 무엇을 가리키는가</h3>
+<p>Book-forge의 정의로 들어가기 전에, 업계에서 "AI 에이전트"라는 말이 대략 어떤 공통 요소를 가리키는지부터 정리한다 — 이후 Book-forge의 선택이 이 스펙트럼 어디에 있는지 판단할 기준이 된다.</p>
+<p><strong>공통으로 등장하는 네 가지 구성 요소.</strong> 문헌마다 용어는 다르지만, "AI 에이전트"를 설명할 때 대체로 이 네 요소의 조합으로 이야기한다.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>요소</th>
+<th>하는 일</th>
+<th>Book-forge의 대응(1~2장에서 확인)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>추론 엔진</strong>(reasoning core)</td>
+<td>입력을 이해하고 다음 행동을 결정한다 — 보통 LLM이 이 역할을 맡는다</td>
+<td><code>LLM</code> Protocol의 <code>generate()</code>(§1.2)</td>
+</tr>
+<tr>
+<td><strong>도구</strong>(tools)</td>
+<td>에이전트가 세계에 영향을 미치는 수단 — 함수 호출, 파일 쓰기, 웹 검색 등</td>
+<td>이 책의 개별 에이전트에는 거의 없다(§1.5) — 파일 쓰기는 별도 <code>@tool_guard</code> 축(12장)이 담당</td>
+</tr>
+<tr>
+<td><strong>메모리</strong>(memory)</td>
+<td>이전 상호작용이나 축적된 지식을 다음 판단에 반영하는 저장소</td>
+<td><code>conversation_history</code>(7장), <code>KnowledgeStore</code>(7장)</td>
+</tr>
+<tr>
+<td><strong>오케스트레이션</strong>(orchestration/planning)</td>
+<td>여러 단계·여러 에이전트를 어떤 순서로 실행할지 결정하는 상위 로직</td>
+<td><code>new_cmd.py</code>의 <code>new()</code>(4장), 승인 루프(6장)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>자율성은 스펙트럼이다.</strong> 이 네 요소를 얼마나 갖췄는가에 따라 "에이전트"라 불리는 것들은 실제로 매우 다른 자율성 수준에 있다 — 한쪽 끝에는 "프롬프트 하나 → 응답 하나"로 끝나는 단순 래퍼가 있고, 반대쪽 끝에는 스스로 목표를 여러 하위 작업으로 쪼개고, 어떤 도구를 쓸지 매 단계 스스로 판단하고, 실패하면 다른 방법을 시도하는 완전 자율 에이전트가 있다. 대부분의 실무 시스템은 이 둘 사이 어딘가에 있다 — <strong>그리고 그 위치를 정확히 아는 것이, "에이전트"라는 한 단어보다 훨씬 중요한 정보다.</strong> 3장(§3.6)에서 다시 확인하겠지만, 어떤 방어 메커니즘이 필요한가는 정확히 이 위치에서 결정된다 — 도구를 안 쓰는 에이전트에는 도구 오남용 방어가 필요 없고, 반복 루프가 없는 에이전트에는 무한 루프 방어가 필요 없다.</p>
+<p><strong>단일 에이전트와 멀티 에이전트.</strong> 위 네 요소는 에이전트 하나의 내부 구조를 말한다 — 그런데 실무에서는 에이전트 하나로 끝나는 경우보다, 여러 에이전트가 각자 다른 역할을 맡아 협업하는 경우가 더 흔하다(검색 전담, 코드 작성 전담, 검토 전담처럼 역할을 나누는 방식). "협업"이 정확히 어떤 형태를 띠는지는 시스템마다 다르다 — 정해진 순서로 결과를 넘기기만 하는 파이프라인일 수도 있고, 여러 에이전트가 동시에 같은 문제를 보고 토론하는 구조일 수도 있다. Part II(4~7장) 전체가 이 "여러 에이전트의 협업"이 Book-forge에서 실제로 어떤 네 가지 형태로 나타나는지 다룬다.</p>
+<p>이 책은 위 개념들에 대한 논쟁(어디까지가 "진짜 에이전트"인가 같은)에 끼어들지 않는다 — 대신 Book-forge가 실제로 코드로 구현한 선택에서 출발해, 그 선택이 왜 이 스펙트럼의 그 위치에 있는지를 실제 코드로 보여준다. 가장 작은 단위(에이전트 하나)부터 시작한다.</p>
+<h3 id="12">1.2 가장 작은 정의부터 시작한다</h3>
+<p>"AI 에이전트"라는 말은 문맥마다 다른 것을 가리킨다 — 어떤 글은 자율적으로 도구를 골라 쓰는 시스템을 뜻하고, 어떤 글은 단순히 "LLM을 호출하는 함수"를 그렇게 부른다. 이 책은 Book-forge가 실제로 코드로 구현한 정의에서 출발한다 — <code>src/book_forge/llm/provider.py</code>가 그 출발점이다.</p>
 <pre><code class="language-python">@runtime_checkable
 class LLM(Protocol):
     &quot;&quot;&quot;모든 provider 구현체가 만족해야 하는 최소 인터페이스.&quot;&quot;&quot;
@@ -740,7 +1374,7 @@ class LLM(Protocol):
     ) -&gt; str: ...
 </code></pre>
 <p>이게 전부다 — 문자열 하나(<code>prompt</code>)를 받아 문자열 하나(<code>generate()</code>의 반환값)를 돌려주는 것. Book-forge의 모든 에이전트는 이 인터페이스 위에 얇게 쌓은 껍데기일 뿐이다. "에이전트가 무엇을 하는가"는 이 <code>generate()</code> 호출 앞뒤에 무엇을 붙이느냐로 결정된다 — 어떤 프롬프트를 조립해 넘기는지, 응답을 어떻게 파싱하는지, 그 결과로 무엇을 하는지.</p>
-<h3 id="12">1.2 세 개의 구현체, 하나의 계약</h3>
+<h3 id="13">1.3 세 개의 구현체, 하나의 계약</h3>
 <p><code>LLM</code> Protocol을 실제로 만족하는 구현체는 세 개다.</p>
 <div class="table-wrap"><table>
 <thead>
@@ -818,7 +1452,7 @@ class AnthropicLLM:
         return &quot;&quot;.join(block.text for block in response.content if hasattr(block, &quot;text&quot;))
 </code></pre>
 <p>세 구현체를 나란히 놓고 보면 "Protocol을 만족한다"는 말이 코드로 무엇을 뜻하는지 뚜렷해진다 — <code>OpenAILLM</code>은 <code>messages</code> 리스트(역할별 딕셔너리)를 조립하고, <code>AnthropicLLM</code>은 <code>system</code>을 별도 인자로 넘기고, <code>OllamaLLM</code>은 순수 JSON 페이로드를 만든다. 세 API의 요청 형식은 서로 판이하게 다르지만, 세 클래스 모두 <code>prompt</code>와 <code>system</code>을 받아 문자열 하나를 돌려준다는 점만은 동일하다 — 이 책의 나머지 부분(2장부터)이 "LLM을 어떤 provider가 서비스하는지"를 단 한 번도 신경 쓰지 않는 이유가 바로 여기, <code>provider.py</code> 안에서 이미 흡수됐기 때문이다.</p>
-<h3 id="13-provider">1.3 provider 선택 — 환경변수 하나가 전체 파이프라인을 바꾼다</h3>
+<h3 id="14-provider">1.4 provider 선택 — 환경변수 하나가 전체 파이프라인을 바꾼다</h3>
 <p><code>create_llm()</code> 팩토리 함수가 어떤 구현체를 만들지 결정한다.</p>
 <pre><code class="language-python">def create_llm(provider: Optional[str] = None, model: Optional[str] = None) -&gt; LLM:
     resolved = (provider or os.environ.get(&quot;LLM_PROVIDER&quot;) or &quot;ollama&quot;).lower()
@@ -827,14 +1461,16 @@ class AnthropicLLM:
 <p>우선순위는 명시적 인자 → <code>LLM_PROVIDER</code> 환경변수 → 기본값 <code>"ollama"</code> 순이다. 기본값을 클라우드가 아니라 로컬로 둔 이유는 코드 주석에 명시돼 있다 — "API 키 없이 바로 동작해 오프라인/로컬 개발을 1급 경로로 만든다." 이 한 줄의 설계 결정이 Book-forge 전체의 성격을 규정한다 — 이 책의 모든 실측 예제도 API 키 없이 로컬 Ollama로 재현 가능하다.</p>
 <div class="tip-box"><p>👨‍💻 <strong>개발자 TIP</strong>: 에이전트를 새로 만들 때 "이 함수가 Protocol을 만족하는가"만 확인하면 provider 걱정 없이 코드를 짤 수 있다. <code>planner.py</code>·<code>chapter_drafter.py</code>·<code>chat_agent.py</code> 어디에도 <code>if provider == "openai"</code> 같은 분기가 없다 — 전부 <code>llm.generate(...)</code> 한 줄만 호출한다.</p>
 </div>
-<h3 id="14">1.4 이 정의에 일부러 넣지 않은 것</h3>
-<p>이 최소 정의에는 "도구를 자율적으로 선택한다"거나 "여러 단계를 스스로 계획한다"는 요건이 없다. Book-forge의 개별 에이전트(<code>propose_plan()</code>, <code>design_toc()</code> 등)는 정확히 한 번 <code>generate()</code>를 호출하고 끝난다 — 도구 호출도, 반복 루프도 없다. 그런데도 이 책은 이들을 "에이전트"라 부른다. 왜인가 — 다음 장에서 확인하겠지만, 이 함수들을 실제 시스템으로 만드는 것은 LLM 호출 자체가 아니라 <strong>그 호출 앞뒤에 계측(<code>@agent_eval</code>)이 붙어 있다는 사실</strong>이다. "에이전트"와 "그냥 LLM을 부르는 함수"를 가르는 경계가 바로 이 책의 3부·4부가 다루는 Harness Engineering이다.</p>
+<h3 id="15">1.5 이 정의에 일부러 넣지 않은 것</h3>
+<p>§1.1의 네 요소로 돌아가 보면, 이 최소 정의에는 "도구를 자율적으로 선택한다"거나 "여러 단계를 스스로 계획한다"는 요건이 없다. Book-forge의 개별 에이전트(<code>propose_plan()</code>, <code>design_toc()</code> 등)는 정확히 한 번 <code>generate()</code>를 호출하고 끝난다 — 도구 호출도, 반복 루프도 없다. <strong>에이전트 하나만 놓고 보면 자율성 스펙트럼의 가장 단순한 쪽 끝에 있다.</strong> 오케스트레이션(여러 에이전트를 어떤 순서로 부를지)과 메모리(무엇을 다음 에이전트에 넘길지)는 에이전트 자신이 아니라 그 바깥(<code>new_cmd.py</code>, <code>KnowledgeStore</code>)이 담당한다 — Part II(4~7장)가 정확히 이 "바깥" 구조를 다룬다.</p>
+<p>그런데도 이 책은 이들을 "에이전트"라 부른다. 왜인가 — 다음 장에서 확인하겠지만, 이 함수들을 실제 시스템으로 만드는 것은 LLM 호출 자체가 아니라 <strong>그 호출 앞뒤에 계측(<code>@agent_eval</code>)이 붙어 있다는 사실</strong>이다. "에이전트"와 "그냥 LLM을 부르는 함수"를 가르는 경계가 바로 이 책의 3부·4부가 다루는 Harness Engineering이다.</p>
 <hr />
 <h3 id="_1">직접 해보기</h3>
-<p><code>provider.py</code>를 보지 않고, <code>LLM</code> Protocol(§1.1)만 기억한 채로 4번째 구현체를 직접 스케치해보라 — 예를 들어 <code>class FakeLLM: model = "fake"</code> 하나에 <code>generate(self, prompt, *, system=None, max_tokens=4000) -&gt; str</code> 메서드만 채워 넣으면(실제로 <code>tests/test_chat_agent.py</code>가 정확히 이 패턴을 쓴다), 그 클래스는 아무 상속 선언 없이도 Book-forge의 모든 에이전트에 그대로 꽂힌다.</p>
+<p><code>provider.py</code>를 보지 않고, <code>LLM</code> Protocol(§1.2)만 기억한 채로 4번째 구현체를 직접 스케치해보라 — 예를 들어 <code>class FakeLLM: model = "fake"</code> 하나에 <code>generate(self, prompt, *, system=None, max_tokens=4000) -&gt; str</code> 메서드만 채워 넣으면(실제로 <code>tests/test_chat_agent.py</code>가 정확히 이 패턴을 쓴다), 그 클래스는 아무 상속 선언 없이도 Book-forge의 모든 에이전트에 그대로 꽂힌다.</p>
 <p>이 질문 하나로 이 장의 핵심을 스스로 테스트할 수 있다 — 지금 만들고 있는(또는 만들 예정인) 에이전트가 실제로 호출하는 LLM API를, 이런 최소 Protocol 하나로 추상화할 수 있는가? "예"라고 답할 수 있다면, provider를 나중에 바꿀 때(OpenAI→로컬 모델 등) 에이전트 코드를 한 줄도 안 고쳐도 된다.</p>
 <h3 id="_2">이 챕터의 핵심</h3>
 <ul>
+<li><strong>"AI 에이전트"는 추론 엔진·도구·메모리·오케스트레이션의 조합이며, 자율성은 스펙트럼이다.</strong> Book-forge의 개별 에이전트는 그 스펙트럼의 단순한 쪽에 있다(§1.5).</li>
 <li><strong>에이전트의 최소 계약은 <code>prompt: str → str</code>이다.</strong> Book-forge의 <code>LLM</code> Protocol이 이를 코드로 명시한다.</li>
 <li><strong>provider(OpenAI/Anthropic/Ollama)는 껍데기일 뿐, 에이전트 코드는 provider를 몰라도 된다.</strong> <code>create_llm()</code>이 환경변수로 그 결정을 한 곳에 모은다.</li>
 <li><strong>작은 구현 디테일(<code>think: False</code>)이 실제 장애로 이어진 사례가 이미 있다.</strong> 에이전트를 다룰 때 "모델이 답을 냈는가"를 당연하게 여기면 안 된다.</li>
@@ -843,7 +1479,7 @@ class AnthropicLLM:
 <ul>
 <li><code>src/book_forge/llm/provider.py</code> — <code>LLM</code> Protocol과 3개 구현체 전체</li>
 <li><code>src/book_forge/config.py</code> — <code>load_config()</code>가 <code>.env</code>를 읽어 <code>LLM_PROVIDER</code> 등을 <code>os.environ</code>에 채우는 경로</li>
-<li>부록 B(용어집) — 이후 장에서 낯선 용어가 나오면 언제든 돌아와 확인할 수 있다</li>
+<li>부록 A(용어집) — 이후 장에서 낯선 용어가 나오면 언제든 돌아와 확인할 수 있다</li>
 </ul>
 <hr />
 <blockquote><p><strong>다음 챕터</strong>는 이 <code>generate()</code> 호출 하나가 실제 에이전트(<code>PlannerAgent</code>) 안에서 어떻게 프롬프트로 조립되고, 응답이 어떻게 파싱되며, <code>@agent_eval</code> 계측이 어느 지점에 끼어드는지 한 줄씩 따라간다.</p>
@@ -898,7 +1534,7 @@ class AnthropicLLM:
 각 항목은 2~4문장으로 구체적으로 작성하세요.&quot;&quot;&quot;
 </code></pre>
 <p>이 프롬프트가 왜 "## 목적" 같은 정확한 마크다운 헤딩을 요구하는지는 우연이 아니다 — 이 응답은 나중에 <code>plan_cmd.py</code>가 파싱해 재사용하고, <code>00_기획안.md</code> 파일로 그대로 저장된다. <strong>프롬프트의 출력 형식은 다음 단계 소비자(다른 코드 또는 다른 에이전트)의 파싱 요구사항에 맞춰 설계된다</strong> — 이 원칙은 이 책 전체에서 반복된다(4장에서 다시 다룬다).</p>
-<p><code>system=PLAN_SYSTEM_PROMPT</code>는 "당신은 기술 도서 기획 편집자입니다... 기획안 본문만 마크다운으로 출력하세요"라는 역할 지시를 담당한다. <code>system</code>과 <code>prompt</code>(user 메시지)를 분리하는 것도 <code>LLM</code> Protocol의 계약 그대로다(1장 §1.1) — 세 provider 구현체 모두 이 두 값을 각자의 API 형식에 맞게 재조립한다.</p>
+<p><code>system=PLAN_SYSTEM_PROMPT</code>는 "당신은 기술 도서 기획 편집자입니다... 기획안 본문만 마크다운으로 출력하세요"라는 역할 지시를 담당한다. <code>system</code>과 <code>prompt</code>(user 메시지)를 분리하는 것도 <code>LLM</code> Protocol의 계약 그대로다(1장 §1.2) — 세 provider 구현체 모두 이 두 값을 각자의 API 형식에 맞게 재조립한다.</p>
 <h3 id="23-agent_eval">2.3 <code>@agent_eval</code>이 가로채는 지점</h3>
 <p><code>@agent_eval</code>은 일반적인 파이썬 데코레이터다 — <code>propose_plan</code> 함수를 감싸 새 함수를 만들고, 호출자는 그 차이를 알아채지 못한다. 실제로 가로채는 일은 대략 이런 순서다.</p>
 <div class="mermaid" data-lf-preserve="mermaid">sequenceDiagram
@@ -920,7 +1556,7 @@ class AnthropicLLM:
 <div class="tip-box"><p>📋 <strong>QA 관리자 TIP</strong>: <code>question_arg="topic"</code>처럼 데코레이터에 지정한 인자 이름이 실제 함수 시그니처의 인자 이름과 정확히 일치해야 한다 — 오타가 나면 계측이 조용히 빈 값을 기록할 뿐, 에러가 나지 않는다. 새 에이전트를 추가할 때 이 짝이 맞는지 코드 리뷰에서 확인하는 습관이 필요하다.</p>
 </div>
 <h3 id="24-evalmetadata-20">2.4 <code>EvalMetadata</code>는 20여 개 필드 중 딱 하나만 쓴다</h3>
-<p><code>EvalMetadata</code>(Agent-Evaluator SDK, <code>decorators.py</code>)는 함수가 데코레이터에게 "자동으로 계산할 수 없는 값"을 되돌려주는 통로다. 실제 정의를 열어보면 LangChain의 <code>chain_steps</code>, LangGraph의 <code>graph_traversal</code>, AutoGen의 <code>conversation_turns</code>처럼 다른 에이전트 프레임워크 통합을 위한 필드가 20개 넘게 있다.</p>
+<p><code>EvalMetadata</code>(Agent-Evaluator SDK, <code>decorators.py</code>)는 함수가 데코레이터에게 "자동으로 계산할 수 없는 값"을 되돌려주는 통로다. 실제 정의를 열어보면 LangChain의 <code>chain_steps</code>, LangGraph의 <code>graph_traversal</code>, AutoGen의 <code>conversation_turns</code>처럼 다른 에이전트 프레임워크 통합을 위한 필드가 정확히 20개 있다.</p>
 <pre><code class="language-python">@dataclass
 class EvalMetadata:
     attempts: int | None = None
@@ -929,10 +1565,10 @@ class EvalMetadata:
     chain_steps: list[dict[str, Any]] | None = None       # LangChain 전용
     graph_traversal: dict[str, Any] | None = None          # LangGraph 전용
     conversation_turns: list[dict[str, Any]] | None = None # AutoGen 전용
-    # ... (그 외 15개 필드 생략, 전부 기본값 None)
+    # ... (그 외 13개 필드 생략, 전부 기본값 None)
     extra: dict[str, Any] | None = None  # 사용자 정의 자유 형식 메타데이터
 </code></pre>
-<p>Book-forge는 이 중 <strong><code>extra</code> 하나만</strong> 채운다 — <code>propose_plan()</code>의 <code>EvalMetadata(extra={"phase": "planning", "topic": topic})</code>이 그 예다. 나머지 필드는 전부 <code>None</code>으로 남아 "자동 계산값을 유지하라"는 뜻으로 해석된다. 8장(§8.5)에서 다시 강조할 원칙이 여기서도 그대로 드러난다 — <strong>SDK가 제공하는 표면적을 전부 쓰는 것이 아니라, 이 프로젝트에 실제로 필요한 조각만 정확히 골라 쓴다.</strong> <code>extra</code>에 담긴 <code>phase</code>/<code>topic</code> 같은 값은 Gate 점수 계산에 직접 관여하지 않고, 나중에 <code>eval_results/*.json</code>을 사람이 훑어볼 때 "이 태스크가 어느 단계에서 나왔는가"를 알아보기 쉽게 하는 부가 정보다.</p>
+<p>Book-forge는 이 중 <strong><code>extra</code> 하나만</strong> 채운다 — <code>propose_plan()</code>의 <code>EvalMetadata(extra={"phase": "planning", "topic": topic})</code>이 그 예다. 나머지 필드는 전부 <code>None</code>으로 남아 "자동 계산값을 유지하라"는 뜻으로 해석된다. 8장(§8.6)에서 다시 강조할 원칙이 여기서도 그대로 드러난다 — <strong>SDK가 제공하는 표면적을 전부 쓰는 것이 아니라, 이 프로젝트에 실제로 필요한 조각만 정확히 골라 쓴다.</strong> <code>extra</code>에 담긴 <code>phase</code>/<code>topic</code> 같은 값은 Gate 점수 계산에 직접 관여하지 않고, 나중에 <code>eval_results/*.json</code>을 사람이 훑어볼 때 "이 태스크가 어느 단계에서 나왔는가"를 알아보기 쉽게 하는 부가 정보다.</p>
 <h3 id="25-new_cmdpy">2.5 실제 호출 지점 — <code>new_cmd.py</code></h3>
 <p><code>propose_plan()</code>을 실제로 부르는 코드는 <code>cli/commands/new_cmd.py</code>의 <code>new()</code> 함수 안에 있다(4장에서 <code>new()</code> 전체 흐름을 다룬다).</p>
 <pre><code class="language-python">click.echo(&quot;📝 기획안 생성 중 (LLM 호출)...&quot;)
@@ -1225,7 +1861,65 @@ if sources:
     from book_forge.cli.commands.draft_cmd import _build_structure_summary_from_sources
     code_structure = _build_structure_summary_from_sources(sources) or &quot;&quot;
 </code></pre>
-<p>이 값은 LLM 호출이 아니라 <strong>순수 AST 파싱</strong>으로 만들어진다 — 세 번째 "협업자"가 있다면 그것은 LLM 에이전트가 아니라 결정론적 정적 분석 도구다. 3장(§3.2)에서 다룬 환각 문제의 첫 방어선이 여기 있다 — <code>design_toc()</code>가 실제로 존재하는 모듈 목록을 프롬프트에 받으면, 존재하지 않는 서브시스템을 목차에 지어낼 여지가 크게 줄어든다. <code>_build_structure_summary_from_sources()</code> 안에서 실제로 파일을 읽어 구조를 뽑는 <code>knowledge/code_index.py</code>는 표준 라이브러리 <code>ast</code>만으로 클래스·함수·독스트링을 파싱하고(코드를 한 줄도 실행하지 않는다), 문법 오류가 있는 파일은 예외 대신 조용히 건너뛴다(3·10장과 같은 원칙) — 이 파서의 전체 구현(<code>ClassSummary</code>/<code>extract_module_summary()</code> 등 실제 코드)은 <a href="Appendix/D_구조적_코드_인덱싱_상세.md">부록 D</a>에서 확인할 수 있다.</p>
+<p>이 값은 LLM 호출이 아니라 <strong>순수 AST 파싱</strong>으로 만들어진다 — 세 번째 "협업자"가 있다면 그것은 LLM 에이전트가 아니라 결정론적 정적 분석 도구다. 3장(§3.2)에서 다룬 환각 문제의 첫 방어선이 여기 있다 — <code>design_toc()</code>가 실제로 존재하는 모듈 목록을 프롬프트에 받으면, 존재하지 않는 서브시스템을 목차에 지어낼 여지가 크게 줄어든다.</p>
+<p><code>_build_structure_summary_from_sources()</code> 안에서 실제로 파일을 읽어 구조를 뽑는 것은 <code>knowledge/code_index.py</code>다. 먼저 한 파일을 어떤 형태로 요약하는지부터 본다.</p>
+<pre><code class="language-python">@dataclass
+class ClassSummary:
+    name: str
+    bases: list[str]
+    docstring: Optional[str]
+    methods: list[str]
+
+@dataclass
+class FunctionSummary:
+    name: str
+    args: list[str]
+    docstring: Optional[str]
+
+@dataclass
+class ModuleSummary:
+    path: str
+    imports: list[str] = field(default_factory=list)
+    classes: list[ClassSummary] = field(default_factory=list)
+    functions: list[FunctionSummary] = field(default_factory=list)
+</code></pre>
+<p>파일 하나가 결국 "이름·상속 관계·독스트링 첫 줄·공개 메서드 목록을 가진 클래스들"과 "이름·인자·독스트링 첫 줄을 가진 함수들"의 목록으로 요약된다. 이 요약을 실제로 뽑는 함수가 표준 라이브러리 <code>ast</code> 모듈만 쓴다.</p>
+<pre><code class="language-python">def _extract_classes(tree: ast.Module) -&gt; list[ClassSummary]:
+    classes: list[ClassSummary] = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = [ast.unparse(b) for b in node.bases]
+        methods = [
+            n.name for n in node.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and not n.name.startswith(&quot;_&quot;)
+        ]
+        classes.append(ClassSummary(
+            name=node.name, bases=bases,
+            docstring=_first_line(ast.get_docstring(node)), methods=methods,
+        ))
+    return classes
+
+
+def extract_module_summary(rel_path: str, source_text: str) -&gt; Optional[ModuleSummary]:
+    &quot;&quot;&quot;단일 .py 파일 내용을 파싱해 ModuleSummary를 만든다.
+
+    문법 오류가 있으면 예외를 던지지 않고 None을 반환한다 — 저장소 전체
+    인덱싱이 파일 하나 때문에 중단되지 않게 한다.
+    &quot;&quot;&quot;
+    try:
+        tree = ast.parse(source_text)
+    except SyntaxError:
+        return None
+    return ModuleSummary(
+        path=rel_path, imports=_extract_imports(tree),
+        classes=_extract_classes(tree), functions=_extract_functions(tree),
+    )
+</code></pre>
+<p><code>ast.parse(source_text)</code>가 이 기능의 핵심이다 — 파이썬 인터프리터가 코드를 실행하기 전에 만드는 것과 같은 구문 트리(AST)를 만든 뒤, <code>tree.body</code>를 순회하며 클래스·함수 정의만 골라낸다. <strong>코드를 한 줄도 실행하지 않는다</strong> — <code>import</code>문이 실행되지 않으므로 어떤 부작용도 없고, 문법만 유효하면 의존성이 하나도 설치되지 않은 저장소도 인덱싱할 수 있다. <code>except SyntaxError: return None</code>이 3장·10장에서 반복된 원칙과 같은 자리에 있다는 것도 눈여겨볼 만하다 — 파일 하나가 깨져 있어도(다른 언어 파일에 <code>.py</code> 확장자가 잘못 붙는 등) 저장소 전체 인덱싱이 죽지 않는다.</p>
+<div class="tip-box"><p>👨‍💻 <strong>개발자 TIP</strong>: <code>code_index.py</code> 모듈 docstring이 이 기능의 범위를 명확히 긋는다 — "<code>ast</code>가 표준 라이브러리라 새 의존성이 필요 없다는 게 이유다(tree-sitter 등 다국어 파서는 추가하지 않는다)." Python(<code>.py</code>) 파일만 지원하고, 다른 언어 파일은 이 인덱서를 건너뛰고 기존 텍스트 청킹(<code>knowledge/sources.py</code>)으로만 처리된다 — "모든 언어를 지원하는 완벽한 인덱서"가 아니라 "가장 흔한 경우(Python 저장소)를 새 의존성 없이 잘 처리하는 인덱서"를 택한 것이다.</p>
+</div>
 <h3 id="44">4.4 승인 게이트 — 사람이 파이프라인에 끼어드는 두 지점</h3>
 <p>이 파이프라인에는 순수 자동 단계만 있는 게 아니다. Planner와 TOCDesigner의 출력 사이에는 각각 <code>run_review_loop()</code>가 있다 — 저자가 Enter를 누르면(승인) 다음 단계로 넘어가고, 피드백을 입력하면 <code>revise()</code>가 그 피드백을 반영해 다시 만든다(6장에서 이 루프 자체를 자세히 다룬다). 즉 이 파이프라인은 순수하게 자동인 것이 아니라, <strong>두 개의 사람 승인 게이트가 순차 흐름 중간에 끼어 있는 구조</strong>다.</p>
 <div class="tip-box"><p>📋 <strong>QA 관리자 TIP</strong>: <code>--source</code>가 있으면 스캐폴딩 직후 곧바로 전체 챕터 배치 초안까지 이어진다(<code>new_cmd.py</code> 마지막 블록) — 승인 게이트는 기획·목차 두 곳에만 있고, 챕터 집필 자체는 저자 확인 없이 진행된다. "주제 입력 → 완성된 초안까지 한 번에"라는 이 도구의 목표와, "위험한 단계에서는 반드시 사람이 확인한다"는 원칙 사이의 실제 트레이드오프 지점이 여기다.</p>
@@ -1246,7 +1940,7 @@ if sources:
 <li><code>src/book_forge/cli/commands/new_cmd.py</code> — 전체 흐름</li>
 <li><code>src/book_forge/agents/toc_designer.py</code> — <code>build_design_toc()</code></li>
 <li><code>src/book_forge/models.py</code> — <code>parse_toc_manifest()</code></li>
-<li>부록 D — <code>knowledge/code_index.py</code>의 AST 파싱 전체 구현</li>
+<li><code>src/book_forge/knowledge/code_index.py</code> — <code>ClassSummary</code>·<code>extract_module_summary()</code>·<code>build_structure_index()</code> 전체</li>
 </ul>
 <hr />
 <blockquote><p><strong>다음 챕터</strong>는 순차 협업과 완전히 다른 패턴 — 여러 에이전트가 <strong>같은 결과물을 놓고 동시에 검토</strong>한 뒤 한 에이전트가 종합 판정하는 검토자-편집장 구조를 다룬다.</p>
@@ -1610,65 +2304,122 @@ if conv.metrics is not None:
 <h3 id="part-iii">Part III. 배치 평가로 품질을 계측한다</h3>
 <p>Part II가 "에이전트들이 어떻게 협업하는가"를 다뤘다면, Part III의 4개 챕터는 그 협업이 만든 <strong>결과물의 품질을 어떻게 판정하는가</strong>로 초점을 옮긴다 — 이미 2·5·6장에서 스쳐 지나간 <code>@agent_eval</code>·Gate·Config를 이제 정면으로 해부한다(8장), Gate A–G가 실제로 무엇을 재는지 정리하고(9장), Gate가 손대지 않는 영역(정적 검증)을 보고(10장), 마지막으로 챕터 하나가 아니라 책 전체를 판정하는 집계로 마무리한다(11장).</p>
 <p><strong>이 챕터에서 배우는 것</strong><br />
-- Book-forge의 7개 에이전트가 각각 어떤 Harness Config를 골랐는지<br />
+- Book-forge의 14개 에이전트 전체가 각각 어떤 Harness Config를 골랐는지<br />
 - 같은 데코레이터인데 왜 매번 다른 Config 조합을 쓰는지<br />
 - "이 에이전트가 무엇을 하는가"를 보면 "어떤 Config가 필요한가"를 예측할 수 있는 이유</p>
 <p><strong>이런 분이 먼저 읽으면 좋습니다</strong>: 2장에서 <code>@agent_eval</code>이 무엇을 가로채는지는 봤지만, 데코레이터 안에 들어가는 Config 값들이 왜 에이전트마다 다른지는 아직 궁금한 분.</p>
 </blockquote>
 <hr />
-<h3 id="81">8.1 일곱 에이전트, 일곱 가지 다른 설정</h3>
-<p>Book-forge에는 <code>@agent_eval</code>이 붙은 함수가 여러 개 있다 — 지금까지 이 책이 다룬 것만 추려도 일곱이다(<code>review_panel.py</code> 한 파일이 <code>ReviewerAgent</code>·<code>ChiefEditorAgent</code> 두 개를 낸다는 점에 유의). 이들을 나란히 놓으면, Config 선택이 무작위가 아니라 <strong>그 에이전트가 정확히 무엇을 하는가</strong>에서 곧바로 도출된다는 것이 보인다.</p>
+<h3 id="81">8.1 열네 에이전트, 몇 가지 패턴</h3>
+<p>Book-forge 소스 전체(<code>agents/*.py</code>)를 뒤지면 <code>@agent_eval</code>이 붙은 함수는 정확히 14개다(<code>review_panel.py</code> 한 파일이 <code>ReviewerAgent</code>·<code>ChiefEditorAgent</code> 두 개를 낸다는 점에 유의). 이 책이 지금까지 이야기·CLI 명령을 통해 자연스럽게 다룬 것은 그중 7개뿐이었다 — 나머지 7개(9~14번)는 각자 독립된 CLI 명령에서 조용히 일하는 에이전트라 이야기에 등장할 기회가 없었을 뿐, Config 선택 원리는 완전히 같다. 열넷을 나란히 놓으면, Config 선택이 무작위가 아니라 <strong>그 에이전트가 정확히 무엇을 하는가</strong>에서 곧바로 도출된다는 것이 훨씬 뚜렷하게 보인다.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
+<th>#</th>
 <th>에이전트</th>
-<th>파일</th>
+<th>파일 · 팩토리 함수</th>
 <th>핵심 Config</th>
-<th>Config가 지키려는 것</th>
+<th>호출하는 CLI</th>
 </tr>
 </thead>
 <tbody>
 <tr>
+<td>1</td>
 <td>PlannerAgent</td>
-<td><code>planner.py</code></td>
+<td><code>planner.py::build_propose_plan</code></td>
 <td><code>GoalAlignmentConfig(ignore_no_tool_tasks=False)</code>, <code>InstructionConfig</code>, <code>ExplainabilityConfig</code></td>
-<td>기획안이 실제로 주제/제약을 반영했는가, 근거를 설명하는가</td>
+<td><code>new</code></td>
 </tr>
 <tr>
+<td>2</td>
 <td>TOCDesignerAgent</td>
-<td><code>toc_designer.py</code></td>
+<td><code>toc_designer.py::build_design_toc</code></td>
 <td><code>PlanConfig</code>, <code>SubtaskConfig</code>, <code>ContextRetentionConfig</code></td>
-<td>목차(subtask들)가 기획안의 결정사항을 이어받았는가</td>
+<td><code>new</code></td>
 </tr>
 <tr>
+<td>3</td>
 <td>ChapterDrafterAgent</td>
-<td><code>chapter_drafter.py</code></td>
+<td><code>chapter_drafter.py::build_draft_chapter</code></td>
 <td><code>SLAConfig(p95_ms=60_000)</code>, <code>ThreatSeverityConfig</code>, <code>rag_mode=True</code></td>
-<td>응답 지연이 허용 범위인가, 외부 RAG 소스에 프롬프트 인젝션은 없는가</td>
+<td><code>draft</code>(narrative·exercise)</td>
 </tr>
 <tr>
+<td>4</td>
+<td>ReferenceTableAgent</td>
+<td><code>reference_table.py::build_generate_reference_table</code></td>
+<td><code>SLAConfig(p95_ms=60_000)</code>, <code>ThreatSeverityConfig</code>, <code>rag_mode=True</code></td>
+<td><code>draft</code>(reference_table)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>DiagramGeneratorAgent</td>
+<td><code>diagram_generator.py::build_generate_diagram</code></td>
+<td><code>SLAConfig(p95_ms=60_000)</code>, <code>ThreatSeverityConfig</code>, <code>rag_mode=True</code></td>
+<td><code>draft</code>(diagram)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>CapstoneGeneratorAgent</td>
+<td><code>capstone_generator.py::build_generate_capstone</code></td>
+<td><code>SLAConfig(p95_ms=90_000)</code>, <code>ThreatSeverityConfig</code>, <code>rag_mode=True</code></td>
+<td><code>draft</code>(capstone)</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ModuleReferenceAgent</td>
+<td><code>module_reference.py::build_generate_module_reference</code></td>
+<td><code>SLAConfig(p95_ms=90_000)</code>, <code>ThreatSeverityConfig</code>, <code>rag_mode=True</code></td>
+<td><code>draft</code>(module_reference)</td>
+</tr>
+<tr>
+<td>8</td>
 <td>ChatAgent</td>
-<td><code>chat_agent.py</code></td>
+<td><code>chat_agent.py::build_answer_question</code></td>
 <td><code>SLAConfig(p95_ms=30_000)</code>, <code>ThreatSeverityConfig</code>, <code>rag_mode=True</code></td>
-<td>대화형 응답이라 더 짧은 지연 허용치, 근거 없는 답을 안 하는가, 외부 RAG 소스에 프롬프트 인젝션은 없는가</td>
+<td><code>chat</code></td>
 </tr>
 <tr>
+<td>9</td>
 <td>ReviewerAgent</td>
-<td><code>review_panel.py</code>(<code>build_reviewer</code>)</td>
+<td><code>review_panel.py::build_reviewer</code></td>
 <td><code>AgentRoleConfig(role_violation_penalty=0.3)</code></td>
-<td>자기 역할(정확성/가독성)을 벗어나지 않는가</td>
+<td><code>review</code></td>
 </tr>
 <tr>
+<td>10</td>
 <td>ChiefEditorAgent</td>
-<td><code>review_panel.py</code>(<code>build_chief_editor</code>)</td>
+<td><code>review_panel.py::build_chief_editor</code></td>
 <td><code>ConflictResolutionConfig</code></td>
-<td>리뷰어 간 이견을 실제로 조정하는가</td>
+<td><code>review</code></td>
 </tr>
 <tr>
+<td>11</td>
 <td><code>revise()</code></td>
-<td><code>review_loop.py</code></td>
+<td><code>review_loop.py::build_revise</code></td>
 <td><code>LoopDetectionConfig(consecutive_repeat_threshold=3)</code></td>
-<td>같은 피드백이 반복되지 않는가</td>
+<td><code>new</code>·<code>plan --revise</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td>ResearchAgent</td>
+<td><code>research_agent.py::build_generate_search_queries</code></td>
+<td><code>InstructionConfig</code></td>
+<td><code>research</code></td>
+</tr>
+<tr>
+<td>13</td>
+<td>AlternativeSuggesterAgent</td>
+<td><code>alternative_suggester.py::build_suggest_alternatives</code></td>
+<td><code>InstructionConfig</code>, <code>ExplainabilityConfig</code></td>
+<td><code>draft</code>(저커버리지 대안 제안)</td>
+</tr>
+<tr>
+<td>14</td>
+<td>SlideCondenserAgent</td>
+<td><code>slide_condenser.py::build_condense_section</code></td>
+<td><code>InstructionConfig</code>, <code>ExplainabilityConfig</code>, <code>SLAConfig(p95_ms=20_000)</code></td>
+<td><code>build slides</code></td>
 </tr>
 </tbody>
 </table></div>
@@ -1702,14 +2453,48 @@ if conv.metrics is not None:
 
     return draft_chapter
 </code></pre>
-<p><code>content_type</code> 인자가 <code>_CONTENT_TYPE_PROMPTS</code>에서 어떤 프롬프트 템플릿을 쓸지 고른다 — <code>narrative</code>/<code>reference_table</code>/<code>diagram</code>/<code>exercise</code>/<code>capstone</code>/<code>module_reference</code> 6가지 콘텐츠 유형(00_Book_forge_둘러보기.md §0.2에서 이미 본 <code>book-forge draft</code>의 콘텐츠 유형)이 결국 이 한 줄의 딕셔너리 조회로 갈라진다는 것도 눈여겨볼 지점이다 — 유형마다 별도 함수를 만드는 대신, 프롬프트 템플릿만 바꿔치기한다. <code>sources[:6000]</code>처럼 소스를 6000자로 자르는 것도 실무적인 선택이다 — 프롬프트 길이 제한과 응답 지연(<code>SLAConfig</code>가 60초로 여유를 두는 이유) 사이의 균형이다.</p>
+<p><code>content_type</code> 인자가 하는 일은 여기서는 딱 하나, <code>exercise</code>인지 아닌지만 가른다 — <code>_CONTENT_TYPE_PROMPTS</code>에는 <code>"exercise"</code> 키 하나만 있고, 나머지는 전부 <code>DRAFT_PROMPT</code>(narrative 기본값)로 떨어진다. <code>reference_table</code>/<code>diagram</code>/<code>capstone</code>/<code>module_reference</code> 네 유형은 이 함수까지 오지도 않는다 — <code>draft_cmd.py</code>가 <code>content_type</code>을 보고 애초에 다른 에이전트(<code>ReferenceTableAgent</code>/<code>DiagramGeneratorAgent</code>/<code>CapstoneGeneratorAgent</code>/<code>ModuleReferenceAgent</code>, §8.4에서 코드로 확인한다)로 통째로 라우팅해버리기 때문이다. 즉 콘텐츠 유형 6종은 "한 함수 안의 프롬프트 바꿔치기"(narrative·exercise 둘)와 "아예 다른 에이전트로 위임"(나머지 넷)이라는 <strong>두 가지 다른 방식</strong>으로 갈라진다 — 겉보기엔 <code>content_type</code> 문자열 하나로 통일된 인터페이스처럼 보이지만, 실제 분기 방식은 유형마다 다르다. <code>sources[:6000]</code>처럼 소스를 6000자로 자르는 것도 실무적인 선택이다 — 프롬프트 길이 제한과 응답 지연(<code>SLAConfig</code>가 60초로 여유를 두는 이유) 사이의 균형이다.</p>
 <p><code>SLAConfig</code>의 값 차이도 같은 원리다 — <code>ChapterDrafterAgent</code>(60초)는 소스 청크를 프롬프트에 실어 긴 응답을 생성하는 무거운 작업이고, <code>ChatAgent</code>(30초)는 대화형이라 사용자가 즉시 응답을 기다린다. "얼마나 걸려도 되는가"는 UX 성격에서 직접 도출된다.</p>
-<h3 id="84-3-agent_eval">8.4 패턴 ③ — 부작용이 있는 동작은 <code>@agent_eval</code>이 아니다</h3>
+<h3 id="84-6">8.4 아직 안 보여준 코드 — 나머지 6개 에이전트</h3>
+<p>§8.1 표의 4~7·12~14번은 이 책이 코드로 보여준 적 없는 에이전트다. 다 보여줄 필요는 없다 — 패턴이 몇 개로 수렴하는지 보이면 충분하다.</p>
+<p><strong>RAG 생성기 4·5·6·7번은 §8.3의 <code>ChapterDrafterAgent</code>와 사실상 같은 틀이다.</strong> <code>DiagramGeneratorAgent</code>를 예로 확인한다.</p>
+<pre><code class="language-python">def build_generate_diagram(llm: LLM, monitor: PerformanceMonitor) -&gt; GenerateFn:
+    @agent_eval(
+        monitor, task_type=&quot;document_creation&quot;, question_arg=&quot;chapter_title&quot;,
+        rag_mode=True, context_arg=&quot;sources&quot;,
+        sla=SLAConfig(p95_ms=60_000, p99_ms=90_000),
+        threat_severity=ThreatSeverityConfig(),
+    )
+    def generate_diagram(chapter_title, chapter_no, sources, ground_truth=&quot;&quot;) -&gt; tuple[str, EvalMetadata]:
+        prompt = DIAGRAM_PROMPT.format(chapter_title=chapter_title, chapter_no=chapter_no, sources=sources[:6000])
+        return llm.generate(prompt, system=DIAGRAM_SYSTEM_PROMPT, max_tokens=3000), \
+            EvalMetadata(extra={&quot;phase&quot;: &quot;diagram&quot;, &quot;chapter_no&quot;: chapter_no})
+    return generate_diagram
+</code></pre>
+<p><code>rag_mode=True</code> + <code>SLAConfig</code> + <code>ThreatSeverityConfig</code> 조합, 프롬프트만 다르게 조립하고 <code>llm.generate()</code>를 부르는 세 줄짜리 본문 — <code>CapstoneGeneratorAgent</code>·<code>ReferenceTableAgent</code>도 글자 그대로 같은 골격이다(캡스톤만 템플릿+정답을 한 번에 생성하느라 <code>SLAConfig(p95_ms=90_000)</code>로 여유를 더 준다). <strong>한 에이전트를 이해하면 나머지 셋을 거의 다 이해한 것</strong>이라는 뜻이다 — 이것도 8장이 반복해온 원칙의 증거다: 다른 게 아니라 프롬프트와 SLA뿐이면, Config 선택도 그대로 복사된다.</p>
+<p><code>ModuleReferenceAgent</code>만 예외다 — <code>rag_mode=True</code>를 똑같이 쓰지만, <code>sources</code>에 RAG <strong>검색</strong> 결과가 아니라 4장(§4.3)의 구조적 코드 인덱싱이 만든 <strong>전체</strong> 모듈/클래스/함수 목록을 그대로 넣는다. 모듈 docstring이 그 이유를 실측 수치로 남겼다.</p>
+<blockquote><p>"<code>reference_table.py</code>는 RAG로 검색된 소스 발췌문에서 '확인되는 값만' 표로 만든다 — 검색이 놓친 항목은 애초에 LLM 눈에 안 보이므로 조용히 빠진다(실측: Book-forge 자신의 <code>agents/</code> 13개 파일 중 4개만 우연히 top-k에 뽑혀 다뤄짐). 이 에이전트는 RAG 검색을 거치지 않고, 구조 요약(모든 모듈/클래스/함수를 결정론적으로 나열)을 그대로 <code>sources</code>로 받는다."</p>
+</blockquote>
+<p><strong>"확인되는 값만"(누락 가능)과 "빠짐없이"(날조 가능)라는 정반대 실패 모드</strong>가, 같은 <code>rag_mode=True</code> 아래 <code>sources</code>에 무엇이 담기느냐로 갈린다 — <code>demonstration_verifier.py</code>가 이 둘을 반대 방향으로 검증하는 이유(10장)가 바로 여기 있다.</p>
+<p><strong>12~14번(<code>ResearchAgent</code>·<code>AlternativeSuggesterAgent</code>·<code>SlideCondenserAgent</code>)은 <code>rag_mode</code>도 <code>threat_severity</code>도 없다.</strong> <code>ResearchAgent</code>가 특히 흥미롭다 — §8.3의 예측("<code>rag_mode=True</code>인가로 <code>threat_severity</code> 필요 여부를 100% 예측할 수 있다")이 여기서도 거꾸로 확인된다.</p>
+<pre><code class="language-python">def build_generate_search_queries(llm: LLM, monitor: PerformanceMonitor) -&gt; GenerateQueriesFn:
+    @agent_eval(
+        monitor, task_type=&quot;planning&quot;, question_arg=&quot;chapter_title&quot;,
+        instructions=InstructionConfig(fail_on_violation=False),
+    )
+    def generate_search_queries(chapter_title: str, ground_truth: str = &quot;&quot;) -&gt; tuple[str, EvalMetadata]:
+        prompt = RESEARCH_QUERY_PROMPT.format(chapter_title=chapter_title)
+        raw = llm.generate(prompt, system=RESEARCH_QUERY_SYSTEM_PROMPT, max_tokens=300)
+        return raw, EvalMetadata(extra={&quot;phase&quot;: &quot;research_query_generation&quot;})
+    return generate_search_queries
+</code></pre>
+<p>이 에이전트는 <code>chapter_title</code>(저자가 직접 입력)만 받아 검색 <strong>쿼리</strong>를 만들 뿐이다 — 검색된 웹 콘텐츠 자체는 저자가 검토한 뒤에야 지식창고에 들어간다(<code>knowledge/web_search.py</code>가 검색 실행을 전담, 관심사 분리). 프롬프트에 외부 콘텐츠가 섞이는 지점이 아예 없으므로 <code>threat_severity</code>가 필요 없다 — <code>InstructionConfig</code> 하나로 "제약을 어기지 않았는가"만 본다. <code>AlternativeSuggesterAgent</code>·<code>SlideCondenserAgent</code>도 <code>InstructionConfig</code>+<code>ExplainabilityConfig</code>(+<code>SlideCondenserAgent</code>는 <code>SLAConfig</code>) 조합으로, 둘 다 "저자가 준 텍스트를 다른 형태로 다듬는" 작업이라 외부 신뢰 경계를 건널 일이 없다는 점에서 같은 이유를 공유한다.</p>
+<h3 id="85-3-agent_eval">8.5 패턴 ③ — 부작용이 있는 동작은 <code>@agent_eval</code>이 아니다</h3>
 <p>이 표에 <code>ScaffoldAgent</code>(<code>scaffold.py</code>)가 없다는 것도 의미가 있다 — 3장(§3.5)에서 봤듯 그 모듈은 <code>@agent_eval</code>이 아니라 <code>@tool_guard</code> + <code>live_guardrail_session</code>을 쓴다. <code>scaffold.py</code>의 주석이 이 경계를 정확히 그린다.</p>
 <blockquote><p>"파일 쓰기는 '사후 채점'이 아니라 '실행 전 차단'이 맞는 성격이라 <code>@agent_eval</code>이 아니라 <code>@tool_guard</code> + <code>live_guardrail_session</code>을 쓴다."</p>
 </blockquote>
 <p>이 구분이 이 책의 핵심 축이다 — <strong>"결과를 만드는 함수"(LLM 응답을 반환)는 <code>@agent_eval</code>로 사후 채점하고, "부작용을 일으키는 함수"(파일을 씀)는 <code>@tool_guard</code>로 실행 전에 막는다.</strong> 12장에서 이 두 번째 축을 깊이 다룬다.</p>
-<h3 id="85-config">8.5 Config를 고르는 법 — 이 표를 거꾸로 읽는다</h3>
+<h3 id="86-config">8.6 Config를 고르는 법 — 이 표를 거꾸로 읽는다</h3>
 <p>이 챕터의 표는 새 에이전트를 설계할 때 체크리스트로 거꾸로 쓸 수 있다.</p>
 <div class="mermaid" data-lf-preserve="mermaid">flowchart TD
     Q1{"이 함수가<br/>부작용을 일으키는가?"}
@@ -1722,7 +2507,7 @@ if conv.metrics is not None:
     Q4 -->|"예"| AR["agent_role / conflict_resolution(5장)"]
     Q4 -->|"아니오"| SLA["최소한 sla=SLAConfig()는 고려"]
 </div>
-<div class="tip-box"><p>📋 <strong>QA 관리자 TIP</strong>: 이 책의 7개 에이전트 중 어느 하나도 33개 Harness Config를 전부 쓰지 않는다 — <code>ReviewerAgent</code>·<code>ChiefEditorAgent</code>·<code>revise()</code> 셋은 각 1개만, <code>ChapterDrafterAgent</code>·<code>ChatAgent</code>는 2개(<code>SLAConfig</code>+<code>ThreatSeverityConfig</code>), <code>PlannerAgent</code>·<code>TOCDesignerAgent</code>는 3개를 쓴다. "Config를 많이 켤수록 안전하다"는 것은 이 코드베이스가 보여주는 실제 관례가 아니다 — 오히려 "이 에이전트가 정말로 무엇을 할 수 있는가"를 좁게 규정한 뒤, 그 범위에 정확히 맞는 Config만 켜는 것이 Book-forge의 일관된 패턴이다.</p>
+<div class="tip-box"><p>📋 <strong>QA 관리자 TIP</strong>: 이 책이 다룬 14개 에이전트 중 어느 하나도 33개 Harness Config를 전부 쓰지 않는다 — <code>ReviewerAgent</code>·<code>ChiefEditorAgent</code>·<code>revise()</code>·<code>ResearchAgent</code> 넷은 각 1개만, RAG 생성기 5개(<code>ChapterDrafterAgent</code>·<code>ReferenceTableAgent</code>·<code>DiagramGeneratorAgent</code>·<code>CapstoneGeneratorAgent</code>·<code>ModuleReferenceAgent</code>)와 <code>ChatAgent</code>·<code>AlternativeSuggesterAgent</code>는 2개, <code>PlannerAgent</code>·<code>TOCDesignerAgent</code>·<code>SlideCondenserAgent</code>는 3개를 쓴다. "Config를 많이 켤수록 안전하다"는 것은 이 코드베이스가 보여주는 실제 관례가 아니다 — 오히려 "이 에이전트가 정말로 무엇을 할 수 있는가"를 좁게 규정한 뒤, 그 범위에 정확히 맞는 Config만 켜는 것이 Book-forge의 일관된 패턴이다.</p>
 </div>
 <hr />
 <h3 id="_1">직접 해보기</h3>
@@ -1735,8 +2520,10 @@ if conv.metrics is not None:
 </ul>
 <h3 id="_3">참고 자료</h3>
 <ul>
-<li>부록 C.3(업계 동향) — <code>ThreatSeverityConfig</code>가 대응하는 OWASP LLM01(프롬프트 인젝션) 순위와 최근 RAG 오염 연구</li>
+<li>부록 B.3(업계 동향) — <code>ThreatSeverityConfig</code>가 대응하는 OWASP LLM01(프롬프트 인젝션) 순위와 최근 RAG 오염 연구</li>
 <li><code>src/book_forge/agents/planner.py</code>·<code>toc_designer.py</code>·<code>chapter_drafter.py</code>·<code>chat_agent.py</code>·<code>review_panel.py</code>·<code>review_loop.py</code></li>
+<li><code>src/book_forge/agents/reference_table.py</code>·<code>diagram_generator.py</code>·<code>capstone_generator.py</code>·<code>module_reference.py</code> — RAG 생성기 4종</li>
+<li><code>src/book_forge/agents/research_agent.py</code>·<code>alternative_suggester.py</code>·<code>slide_condenser.py</code> — <code>rag_mode</code> 없는 나머지 3종</li>
 <li><code>src/book_forge/agents/scaffold.py</code> — <code>@tool_guard</code>로 갈라지는 경계</li>
 </ul>
 <hr />
@@ -1791,7 +2578,7 @@ class SLAConfig:
 </code></pre>
 <p><code>ChapterDrafterAgent</code>(8장)가 <code>SLAConfig(p95_ms=60_000, p99_ms=90_000)</code>를 넘기는 것은, <code>LatencyTracker</code>가 이미 계산해 둔 p95·p99 값을 "이 숫자를 넘으면 위반"이라는 기준과 대조하라고 Gate D에 알려주는 것이다 — <code>LatencyTracker</code> 자신은 <code>SLAConfig</code>가 있는지 없는지조차 모른다. <strong>Tracker는 "무슨 일이 있었는가"를 객관적으로 기록하고, Config는 "그게 괜찮은 일이었는가"를 판단할 기준선을 정하고, Gate는 그 판단들을 모아 하나의 점수로 압축한다</strong> — 이 세 층의 역할 분리가 8~11장 전체를 관통하는 뼈대다.</p>
 <h3 id="92-33-config25-book-forge">9.2 33개 Config·25개 트래커가 아니라, Book-forge가 실제로 쓰는 것만</h3>
-<p>Agent-Evaluator SDK 전체는 25개 네이티브 트래커와 33개 Harness Config를 제공한다. 이 챕터는 그 전체 카탈로그를 나열하지 않는다 — 8장에서 확인한 Book-forge의 실제 에이전트 7개가 <strong>실제로 건드리는</strong> Gate만 정리한다.</p>
+<p>Agent-Evaluator SDK 전체는 25개 네이티브 트래커와 33개 Harness Config를 제공한다. 이 챕터는 그 전체 카탈로그를 나열하지 않는다 — 8장에서 확인한 Book-forge의 실제 에이전트 14개가 <strong>실제로 건드리는</strong> Gate만 정리한다.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -1803,18 +2590,18 @@ class SLAConfig:
 <tbody>
 <tr>
 <td><strong>A</strong> 목표 달성</td>
-<td>TaskCompletionTracker + AccuracyEvaluator 블렌딩(0.6×TCR+0.4×Accuracy)</td>
-<td>전체 — <code>ground_truth</code>를 넘기는 모든 에이전트</td>
+<td>TaskCompletionTracker + AccuracyEvaluator 블렌딩(0.4×TCR+0.6×Accuracy)</td>
+<td>전체 14개 — <code>ground_truth</code>를 넘기는 모든 에이전트</td>
 </tr>
 <tr>
 <td><strong>B</strong> 행동 무결성</td>
 <td>LoopDetectionConfig 기반 반복 탐지</td>
-<td><code>revise()</code>(<code>review_loop.py</code>)만 — 나머지 에이전트는 대부분 N/A</td>
+<td><code>revise()</code>(<code>review_loop.py</code>)만 — 나머지 13개는 대부분 N/A</td>
 </tr>
 <tr>
 <td><strong>C</strong> 신뢰성</td>
 <td>HallucinationDetector(RAG 근거 대조)</td>
-<td>ChapterDrafterAgent·ChatAgent(<code>rag_mode=True</code>)</td>
+<td><code>rag_mode=True</code>인 6개(ChapterDrafter·ReferenceTable·Diagram·Capstone·ModuleReference·Chat)</td>
 </tr>
 <tr>
 <td><strong>D</strong> 성능 계약</td>
@@ -1824,7 +2611,7 @@ class SLAConfig:
 <tr>
 <td><strong>E</strong> 보안 경계</td>
 <td>5개 보안 트래커 + ThreatSeverityConfig</td>
-<td>ChapterDrafterAgent가 명시적, 나머지는 <code>enable_security_metrics=True</code>로 상시 on</td>
+<td>위 6개(<code>rag_mode=True</code>)가 명시적, 나머지는 <code>enable_security_metrics=True</code>로 상시 on</td>
 </tr>
 <tr>
 <td><strong>F</strong> 다중 에이전트</td>
@@ -1833,8 +2620,8 @@ class SLAConfig:
 </tr>
 <tr>
 <td><strong>G</strong> 관측성</td>
-<td>ExplainabilityConfig(PlannerAgent)</td>
-<td>PlannerAgent만 명시적, 나머지는 대부분 N/A</td>
+<td>ExplainabilityConfig</td>
+<td>PlannerAgent·AlternativeSuggesterAgent·SlideCondenserAgent 3개가 명시적, 나머지는 대부분 N/A</td>
 </tr>
 </tbody>
 </table></div>
@@ -1891,8 +2678,7 @@ class SLAConfig:
 </ul>
 <h3 id="_3">참고 자료</h3>
 <ul>
-<li>부록 A.1(Harness Config 사용 현황) — 이 챕터가 다룬 7개 에이전트의 Config를 Gate 관점이 아니라 에이전트 관점으로 재배열한 표</li>
-<li>부록 C.1·C.2(업계 동향) — 환각 탐지·에이전트 관측성이 업계 전체에서는 어떤 규모·이름으로 다뤄지는지</li>
+<li>부록 B.1·B.2(업계 동향) — 환각 탐지·에이전트 관측성이 업계 전체에서는 어떤 규모·이름으로 다뤄지는지</li>
 <li><code>Agent-Evaluator/CLAUDE.md</code> — Gate별 트래커 기여 방식 전체 표</li>
 <li><code>Agent-Evaluator/agent_evaluator/core/trackers/monitor.py</code> — <code>PerformanceMonitor.__init__()</code>의 Tracker 초기화, <code>layer1.py</code>/<code>layer2.py</code>/<code>security.py</code>의 개별 Tracker 클래스</li>
 <li><code>Agent-Evaluator/agent_evaluator/gates/gate_d_performance/configs.py</code> — <code>SLAConfig</code></li>
@@ -2008,6 +2794,13 @@ def _walk_package_symbols(root_module) -&gt; set[str]:
 <p><code>ToolCallAnalyzer</code>와 <code>tool_call_analyzer</code>는 겉보기엔 다른 문자열이지만, <code>_fold_key()</code>를 거치면 같은 키(<code>toolcallanalyzer</code>)로 묶인다 — 같은 키에 서로 다른 실제 표기가 2개 이상 나타나면 "표기 불일치 후보"로 보고한다. 이 검사도 자동으로 통일하지 않는다 — 후보만 보여주고 최종 판단은 저자가 한다는 원칙이 §10.2·§10.3과 동일하게 반복된다.</p>
 <div class="tip-box"><p>👨‍💻 <strong>개발자 TIP</strong>: 이 세 검증기는 모두 "발견해서 보고만 한다, 자동 수정하지 않는다"는 원칙을 공유한다 — <code>draft_cmd.py</code>는 이 결과를 <code>ChapterDraftResult</code>에 실어 CLI 요약에 노출할 뿐, <code>book-forge gate</code>처럼 빌드를 막지 않는다. Gate 점수 노출과 같은 철학이다(9장 §9.5의 "참고용" 문구를 떠올려보라).</p>
 </div>
+<h3 id="105-3-2">10.5 챕터 제목의 "3종" 밖에 있는 나머지 2종</h3>
+<p><code>agents/</code> 디렉토리에는 <code>@agent_eval</code>도 <code>@tool_guard</code>도 없는 순수 정적 검증기가 실제로는 5개다 — 이 챕터가 깊이 다룬 셋 외에 둘이 더 있다.</p>
+<ul>
+<li><strong><code>code_example_verifier.py</code></strong>: <code>demonstration_verifier.verify_exercise_code()</code>(§10.3)가 문법만 확인하는 것과 달리, <code>--execute-examples</code> 플래그를 명시적으로 켰을 때만 코드를 <strong>실제로 실행</strong>한다. LLM이 생성한 임의 코드를 자동 실행하는 것은 "안 한다"는 §10.3의 원칙을 뒤집는 게 아니라, 그 원칙 위에 완전히 별도의 옵트인 계층을 얹은 것이다.</li>
+<li><strong><code>sdk_version_pin.py</code></strong>: <code>--check-package</code>가 기준 삼는 SDK 버전을 프로젝트별로 <code>sdk_versions.json</code>에 한 번 고정해두고, 이후 호출마다 현재 설치된 버전과 대조해 드리프트를 알린다 — "본문이 틀렸다"와 "SDK가 그새 바뀌었다"를 구분하지 못했던 문제를 고친 모듈이다.</li>
+</ul>
+<p>둘 다 LLM 호출 없이 정적으로 동작한다는 점, "발견해서 보고만 한다"는 원칙을 공유한다는 점에서 앞의 셋과 같은 축에 있다 — 다만 각각 <code>--execute-examples</code>/<code>--check-package</code>라는 별도 옵트인 플래그 뒤에 있어 기본 흐름(<code>book-forge draft</code>)만으로는 마주치지 않으므로, 이 챕터는 나머지 셋만 깊이 다뤘다.</p>
 <hr />
 <h3 id="_1">직접 해보기</h3>
 <p>이미 집필된 챕터 파일 하나를 열어, 백틱으로 감싼 실제 코드 심볼(<code>`SomeClass`</code>) 하나를 일부러 존재하지 않는 이름으로 바꿔보고 <code>book-forge draft &lt;slug&gt; &lt;ch&gt; --check-package book_forge</code>를 실행해보라 — <code>code_consistency_checker.py</code>가 이 오류를 실제로 잡아내는지 확인할 수 있다.</p>
@@ -2021,8 +2814,8 @@ def _walk_package_symbols(root_module) -&gt; set[str]:
 </ul>
 <h3 id="_3">참고 자료</h3>
 <ul>
-<li>부록 A.6(Harness Config 사용 현황) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 <strong>생성 코드</strong> 자체</li>
-<li>부록 C.1(업계 동향) — RAG·자기일관성·불확실성 추정을 조합하는 업계의 환각 대응과, Book-forge가 그중 가장 단순한 축만 쓰는 이유</li>
+<li>8장(§8.4) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 <strong>생성 코드</strong> 자체</li>
+<li>부록 B.1(업계 동향) — RAG·자기일관성·불확실성 추정을 조합하는 업계의 환각 대응과, Book-forge가 그중 가장 단순한 축만 쓰는 이유</li>
 <li><code>src/book_forge/agents/code_consistency_checker.py</code></li>
 <li><code>src/book_forge/agents/demonstration_verifier.py</code></li>
 <li><code>src/book_forge/agents/term_consistency_checker.py</code></li>
@@ -2122,7 +2915,7 @@ else:
 </blockquote>
 <hr />
 <h3 id="121">12.1 두 축의 경계 — 다시 확인한다</h3>
-<p>8장(§8.4)에서 이미 이 경계를 예고했다 — 결과(응답 문자열)를 반환하는 함수는 <code>@agent_eval</code>로 사후 채점하고, 파일 쓰기 같은 부작용이 있는 함수는 <code>@tool_guard</code>로 실행 전에 막는다. <code>scaffold.py</code>의 <code>write_chapter_stub()</code>가 그 실제 사례다.</p>
+<p>8장(§8.5)에서 이미 이 경계를 예고했다 — 결과(응답 문자열)를 반환하는 함수는 <code>@agent_eval</code>로 사후 채점하고, 파일 쓰기 같은 부작용이 있는 함수는 <code>@tool_guard</code>로 실행 전에 막는다. <code>scaffold.py</code>의 <code>write_chapter_stub()</code>가 그 실제 사례다.</p>
 <pre><code class="language-python">@tool_guard(audit_blocked=True)
 def write_chapter_stub(
     project_dir: str, part_dir_name: str, chapter_file_name: str,
@@ -2394,7 +3187,7 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 </ul>
 <h3 id="_3">참고 자료</h3>
 <ul>
-<li>부록 C.5(업계 동향) — LLM Judge의 신뢰성·편향 논쟁, <code>--enable-llm-judge</code>가 기본 off인 선택이 왜 최근 연구와도 맞물리는지</li>
+<li>부록 B.5(업계 동향) — LLM Judge의 신뢰성·편향 논쟁, <code>--enable-llm-judge</code>가 기본 off인 선택이 왜 최근 연구와도 맞물리는지</li>
 <li><code>src/book_forge/eval/monitor.py</code> — 전체</li>
 <li><code>src/book_forge/cli/commands/new_cmd.py</code>·<code>draft_cmd.py</code> — 실제 플래그 배선</li>
 <li><code>Book-forge/pyproject.toml</code> — <code>korean</code> extra(<code>agent-evaluator[korean]</code>)</li>
@@ -2464,6 +3257,35 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 </tbody>
 </table></div>
 <p>이 목록을 이 챕터에 그대로 남기는 이유는 이 책 자체의 원칙(<code>00_기획안.md</code> §2)과 같다 — <strong>정확성이 핵심 가치인 책이라면, 다루지 못한 것도 숨기지 않고 명시해야 한다.</strong></p>
+<h3 id="156-config">15.6 명시적으로 안 쓰는 Config — "안 켬"도 하나의 결정이다</h3>
+<p>8장(§8.6)의 관례를 뒤집어, "Book-forge의 14개 에이전트가 33개 Config 중 명시적으로 안 쓰는 것"도 정리해둔다 — 무엇을 켰는가만큼, 무엇을 일부러 안 켰는가도 이 프로젝트의 성격을 보여준다.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>안 쓰는 Config/기능</th>
+<th>관련 Gate</th>
+<th>이유</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>자동 재작성 트리거</td>
+<td>—</td>
+<td>검증 결과를 근거로 스스로 다시 쓰는 경로 자체가 없다(§15.1)</td>
+</tr>
+<tr>
+<td><code>ScopeConfig</code></td>
+<td>B</td>
+<td>경로 검사는 직접 구현(12장 §12.3) — 이 Config는 도구 이름 목록이라 애초에 용도가 다르다</td>
+</tr>
+<tr>
+<td>이미지 검색/배치 관련 기능</td>
+<td>—</td>
+<td>Book-forge에 대응 기능 자체가 없다(§15.3)</td>
+</tr>
+</tbody>
+</table></div>
+<p>세 항목 다 "Config를 몰라서 안 켰다"가 아니라 "이 프로젝트 범위 밖이라고 판단해 안 켰다"는 점이 중요하다 — <code>ScopeConfig</code>는 특히 자주 오해되는 지점이다(12장 §12.3에서 이미 짚었듯, 도구 이름 검사이지 경로 검사가 아니다). Config 하나를 "안 쓴다"는 결정도, "이 에이전트가 정확히 무엇을 하는가"를 좁게 규정하는 이 책 전체의 원칙(8장 §8.6)이 그대로 적용된 결과다.</p>
 <hr />
 <h3 id="_1">직접 해보기</h3>
 <p>이 책 전체에서 여러분이 점검해온 것(3장의 실패 유형 체크리스트, 8장의 Config 결정 트리)을 이제 반대 방향으로 뒤집어보라 — 여러분의 에이전트(또는 앞으로 만들 에이전트)에서 "검증은 하지만 자동으로 고치지는 못하는" 지점이 어디인지, "클라이언트가 자발적으로 지켜야만 작동하는" 방어가 어디에 있는지 직접 목록으로 적어보라. 이 책이 15개 챕터에 걸쳐 Book-forge에 대해 한 일을 여러분 자신의 코드에 대해 해보는 것이 이 챕터, 그리고 이 책 전체의 마지막 실습이다.</p>
@@ -2476,7 +3298,7 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 </ul>
 <h3 id="_3">참고 자료</h3>
 <ul>
-<li>부록 C(업계 동향) — 특히 C.2(에이전트 관측성)·C.4(Model Context Protocol, Book-forge가 채택하지 않은 인접 기술)</li>
+<li>부록 B(업계 동향) — 특히 B.2(에이전트 관측성)·B.4(Model Context Protocol, Book-forge가 채택하지 않은 인접 기술)</li>
 <li><code>Book-forge/SPEC.md</code> — 3부(V–AE), 특히 AB·AC·AD·AE</li>
 <li><code>src/book_forge/agents/review_loop.py</code> — 자동 교정 루프의 가장 가까운 전신</li>
 <li><code>src/book_forge/knowledge/store.py</code> — 지식창고 설계의 명시적 트레이드오프</li>
@@ -2507,7 +3329,7 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 <tr>
 <td><strong>Config</strong></td>
 <td>"에이전트별로 판정 기준을 조정하는 dataclass"</td>
-<td><code>GoalAlignmentConfig</code>(2장)부터 <code>TeamConcurrencyConfig</code>(13장)까지, 7개 에이전트가 왜 서로 다른 조합을 골랐는지(8장 §8.5의 결정 트리)까지 설명할 수 있다</td>
+<td><code>GoalAlignmentConfig</code>(2장)부터 <code>TeamConcurrencyConfig</code>(13장)까지, 14개 에이전트가 왜 서로 다른 조합을 골랐는지(8장 §8.6의 결정 트리)까지 설명할 수 있다</td>
 </tr>
 <tr>
 <td><strong>Gate</strong></td>
@@ -2516,7 +3338,21 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 </tr>
 </tbody>
 </table></div>
-<p>그리고 배치 평가와는 완전히 다른 축이 하나 더 있었다 — 실행 <strong>전에</strong> 막는 <code>LiveGuardrail</code>/<code>@tool_guard</code>(12장), 그리고 그 메커니즘이 팀 동시성이라는 전혀 다른 문제에 재사용되는 것(13장)까지 봤다.</p>
+<p>그리고 배치 평가와는 완전히 다른 축이 하나 더 있었다 — 실행 <strong>전에</strong> 막는 <code>LiveGuardrail</code>/<code>@tool_guard</code>(12장), 그리고 그 메커니즘이 팀 동시성이라는 전혀 다른 문제에 재사용되는 것(13장)까지 봤다. 정적 검증(10장)과 모니터 설정(14장)까지 더하면 네 축이다 — 한 챕터가 만들어지는 순간, 이 넷은 이런 순서로 개입한다.</p>
+<div class="mermaid" data-lf-preserve="mermaid">sequenceDiagram
+    participant D as 생성 에이전트(예: ChapterDrafterAgent)
+    participant Tr as Tracker(배치 평가, 항상)
+    participant St as 정적 검증기(10장)
+    participant LG as LiveGuardrail(파일 쓰기 시점, 12장)
+
+    D->>Tr: @agent_eval이 호출을 감싸며 자동 기록
+    D-->>D: llm.generate() 실행
+    Tr-->>Tr: TaskResult 저장(Gate 점수는 아직 미집계)
+    D->>St: 생성 직후 demonstration_verifier 등 실행(참고용 리포트)
+    D->>LG: 스캐폴딩된 파일에 쓸 때 live_guardrail_session 통과
+    Note over D: book-forge gate 실행 시점에<br/>비로소 배치 평가가 Gate A–G로 집계된다(9·11장)
+</div>
+<p><strong>"이 챕터는 품질이 보장됐는가"라는 질문의 정직한 답은 "어느 축을 말하는가에 따라 다르다"다.</strong> 정적 검증을 통과했어도 Gate C(신뢰성) 점수가 낮을 수 있고, <code>book-forge gate</code>가 아직 안 돌았다면 배치 평가 축은 아직 아무 판정도 내리지 않은 상태다 — 이 넷을 하나의 "품질 보장"으로 뭉뚱그리지 않는 것이, 이 책이 15개 챕터에 걸쳐 반복해온 유일한 주장이다.</p>
 <h3 id="_3">네 가지 협업 — 각 챕터가 따로 답하지 않은 질문: "언제 어느 것을 쓰는가"</h3>
 <p>Part II의 네 챕터는 각자 자기 패턴이 무엇인지는 답했지만, "그럼 언제 어느 패턴을 골라야 하는가"는 어느 챕터도 정면으로 묻지 않았다. 네 패턴을 나란히 놓으면 답이 보인다 — 가르는 기준은 <strong>"이전 단계의 결과를 다음이 검증 없이 그대로 믿어도 되는가"</strong> 하나다.</p>
 <ul>
@@ -2526,6 +3362,66 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 <li>애초에 같은 세션에 있지 않은 두 프로세스가 지식을 나눠야 한다면 <strong>파일 매개 간접 협업</strong>(7장)만 남는다.</li>
 </ul>
 <p>이 넷은 서로 대체재가 아니라 <strong>신뢰 경계가 어디 있는가에 대한 네 가지 다른 답</strong>이다 — Book-forge의 실제 파이프라인(0장 §0.1)이 이 넷을 전부 쓰는 이유도 여기 있다. 한 파이프라인 안에서도 단계마다 신뢰 경계의 위치가 다르기 때문이다.</p>
+<h3 id="book-forge-21">Book-forge 전체 인벤토리 — 21개 컴포넌트를 한 표로</h3>
+<p>8장이 14개 LLM 에이전트를, 12·13장이 2개 실시간 가드레일 지점을, 10장이 5개 정적 검증기를 각자 필요할 때 하나씩 꺼내 다뤘다. 마지막으로 전부를 한 표에 모은다 — Book-forge 한 권 분량 파이프라인은 정확히 이 21개로 이뤄진다.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>축</th>
+<th>개수</th>
+<th>소속</th>
+<th>담당 챕터</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>배치 평가(<code>@agent_eval</code>)</td>
+<td>14</td>
+<td>순차 파이프라인 7(Planner·TOCDesigner + RAG 생성기 5개) · 검토자-편집장 2 · 사람 루프 1 · 파일 매개 간접 협업 1(ChatAgent) · 독립 보조 3</td>
+<td>2·5·6·7·8장</td>
+</tr>
+<tr>
+<td>실시간 가드레일(<code>@tool_guard</code>)</td>
+<td>2</td>
+<td>스캐폴딩 1 · 웹 에디터 저장 1</td>
+<td>12·13장</td>
+</tr>
+<tr>
+<td>정적 검증(계측 없음)</td>
+<td>5</td>
+<td>코드 정합성·실습 검증·용어 일관성·실행 검증·SDK 버전 고정</td>
+<td>10장</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>어느 것이 4가지 협업 패턴 중 무엇에 속하는가</strong>도 정리해둔다.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>협업 패턴</th>
+<th>참여하는 컴포넌트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>순차 파이프라인(4장)</td>
+<td>PlannerAgent → TOCDesignerAgent → ScaffoldAgent → (ChapterDrafterAgent | ReferenceTableAgent | DiagramGeneratorAgent | CapstoneGeneratorAgent | ModuleReferenceAgent)</td>
+</tr>
+<tr>
+<td>검토자-편집장(5장)</td>
+<td>ReviewerAgent × N → ChiefEditorAgent</td>
+</tr>
+<tr>
+<td>사람-에이전트 루프(6장)</td>
+<td><code>revise()</code> + 저자(사람)</td>
+</tr>
+<tr>
+<td>파일 매개 간접 협업(7장)</td>
+<td>생성 에이전트(쓰기) ↔ ChatAgent(읽기), <code>ConversationSession</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>ResearchAgent</code>·<code>AlternativeSuggesterAgent</code>·<code>SlideCondenserAgent</code>(8장 §8.4)는 이 네 패턴 어디에도 깔끔하게 들어가지 않는다 — 각자 독립된 CLI 명령에서 단발로 호출되는, 협업이라기보다 파이프라인에 매달린 보조 단계에 가깝다. 이 역시 정직한 관찰이다 — Book-forge의 모든 에이전트가 거창한 협업 구조에 속해 있는 것은 아니다.</p>
 <h3 id="_4">이 책이 정직하게 남긴 빈칸</h3>
 <p>15장이 이미 밝혔듯, 이 책은 Book-forge를 완결된 정답으로 그리지 않았다. 검증은 하지만 스스로 고치지는 못하고, 클라이언트가 자발적으로 지켜야만 작동하는 방어가 있고, 지식창고는 의도적으로 단순한 대신 규모의 한계가 있다. <strong>이 빈칸들을 숨기지 않고 남겨둔 것 자체가 이 책의 방법론이다</strong> — <code>00_기획안.md</code> §2가 처음부터 약속한 "정확성이 핵심 가치"라는 원칙은, 잘 되는 부분만큼이나 안 되는 부분을 정확히 말하는 데서도 지켜져야 한다.</p>
 <h3 id="_5">이제 여러분 차례다</h3>
@@ -2536,335 +3432,12 @@ def _gate_weight_overrides() -&gt; dict[str, float]:
 </blockquote>
 <p>— Sungwoo Kim</p>
 </section>
-<section class="chapter-section" id="appA" data-section-title="부록 A. Harness Config 사용 현황">
-<h2 id="a-harness-config">부록 A. Harness Config 사용 현황</h2>
-<p>이 책 15개 챕터가 인용한 Harness Config·트래커·검증기 전체를 에이전트별로 재정렬한 참조표다. Agent-Evaluator SDK 전체(33개 Config·25개 트래커)가 아니라, <strong>Book-forge가 실제로 코드에서 쓰는 것만</strong> 담는다 — 8장(§8.1)의 표를 Gate 관점이 아니라 에이전트 관점으로 재배열한 것이다.</p>
-<h3 id="a1-agent_eval">A.1 배치 평가(<code>@agent_eval</code>) — 에이전트별 전체 목록</h3>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>에이전트</th>
-<th>파일</th>
-<th>데코레이터 인자</th>
-<th>채점 축(Gate)</th>
-<th>담당 챕터</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>PlannerAgent</td>
-<td><code>planner.py</code></td>
-<td><code>goal_alignment=GoalAlignmentConfig(ignore_no_tool_tasks=False)</code></td>
-<td>A</td>
-<td>§2, §9</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>instructions=InstructionConfig(fail_on_violation=False)</code></td>
-<td>A</td>
-<td>§9</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>explainability=ExplainabilityConfig(min_reasoning_length=30)</code></td>
-<td>G</td>
-<td>§9</td>
-</tr>
-<tr>
-<td>TOCDesignerAgent</td>
-<td><code>toc_designer.py</code></td>
-<td><code>plan_tracking=PlanConfig()</code></td>
-<td>A</td>
-<td>§9</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>subtask_tracking=SubtaskConfig()</code></td>
-<td>A</td>
-<td>§9</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>context_retention=ContextRetentionConfig()</code></td>
-<td>A</td>
-<td>§9</td>
-</tr>
-<tr>
-<td>ChapterDrafterAgent</td>
-<td><code>chapter_drafter.py</code></td>
-<td><code>rag_mode=True, context_arg="sources"</code></td>
-<td>C(HallucinationDetector 자동 on)</td>
-<td>§7, §9</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>sla=SLAConfig(p95_ms=60_000, p99_ms=90_000)</code></td>
-<td>D</td>
-<td>§8, §9</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>threat_severity=ThreatSeverityConfig()</code></td>
-<td>E</td>
-<td>§8</td>
-</tr>
-<tr>
-<td>ChatAgent</td>
-<td><code>chat_agent.py</code></td>
-<td><code>rag_mode=True, context_arg="sources"</code></td>
-<td>C(HallucinationDetector 자동 on)</td>
-<td>§7</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>sla=SLAConfig(p95_ms=30_000, p99_ms=60_000)</code></td>
-<td>D</td>
-<td>§7, §8</td>
-</tr>
-<tr>
-<td></td>
-<td></td>
-<td><code>threat_severity=ThreatSeverityConfig()</code></td>
-<td>E</td>
-<td>§7, §8</td>
-</tr>
-<tr>
-<td>ReviewerAgent</td>
-<td><code>review_panel.py</code>(<code>build_reviewer</code>)</td>
-<td><code>agent_role=AgentRoleConfig(role_violation_penalty=0.3)</code></td>
-<td>F</td>
-<td>§5, §8</td>
-</tr>
-<tr>
-<td>ChiefEditorAgent</td>
-<td><code>review_panel.py</code>(<code>build_chief_editor</code>)</td>
-<td><code>conflict_resolution=ConflictResolutionConfig()</code></td>
-<td>F</td>
-<td>§5, §8</td>
-</tr>
-<tr>
-<td><code>revise()</code></td>
-<td><code>review_loop.py</code></td>
-<td><code>loop_detection=LoopDetectionConfig(consecutive_repeat_threshold=3)</code></td>
-<td>B</td>
-<td>§6, §8</td>
-</tr>
-</tbody>
-</table></div>
-<h3 id="a2-liveguardrailtool_guard">A.2 실시간 가드레일(<code>LiveGuardrail</code>/<code>tool_guard</code>) — 배치 평가와 분리된 축</h3>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>사용처</th>
-<th>파일</th>
-<th>설정</th>
-<th>막는 것</th>
-<th>담당 챕터</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>챕터 스캐폴딩</td>
-<td><code>scaffold.py</code>(<code>write_chapter_stub</code>)</td>
-<td><code>LiveGuardrail(loop_detection=LoopDetectionConfig(consecutive_repeat_threshold=5))</code></td>
-<td>같은 도구 호출의 5회 연속 반복</td>
-<td>§12</td>
-</tr>
-<tr>
-<td>목차 개정 재조정</td>
-<td><code>scaffold.py</code>(<code>reconcile_chapters</code>)</td>
-<td>위와 동일</td>
-<td>위와 동일</td>
-<td>§12</td>
-</tr>
-<tr>
-<td>웹 에디터 저장</td>
-<td><code>editor/server.py</code>(<code>_write_chapter_file</code>)</td>
-<td><code>LiveGuardrail(team_concurrency=TeamConcurrencyConfig(claims_path=..., owner="auto"))</code></td>
-<td>여러 저자의 스코프 겹침(편집 충돌)</td>
-<td>§13</td>
-</tr>
-</tbody>
-</table></div>
-<h3 id="a3-gate">A.3 정적 검증기 — Gate 점수와 무관한 별도 축</h3>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>검증기</th>
-<th>파일</th>
-<th>검증 대상</th>
-<th>담당 챕터</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>코드-본문 정합성</td>
-<td><code>code_consistency_checker.py</code></td>
-<td>본문의 백틱 심볼·import가 실제 패키지/로컬 저장소에 존재하는가</td>
-<td>§10</td>
-</tr>
-<tr>
-<td>실증 가능성 검증</td>
-<td><code>demonstration_verifier.py</code></td>
-<td>exercise/diagram/reference_table/capstone 콘텐츠가 문법적으로 유효한가</td>
-<td>§10</td>
-</tr>
-<tr>
-<td>용어 일관성 검사</td>
-<td><code>term_consistency_checker.py</code></td>
-<td>여러 챕터가 같은 개념을 같은 표기로 부르는가</td>
-<td>§10</td>
-</tr>
-</tbody>
-</table></div>
-<h3 id="a4">A.4 모니터 수준 설정 — 프로젝트 전체에 적용</h3>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>설정</th>
-<th>위치</th>
-<th>기본값</th>
-<th>조정 방법</th>
-<th>담당 챕터</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enable_security_metrics</code></td>
-<td><code>build_book_monitor()</code></td>
-<td><code>True</code>(상시 on)</td>
-<td>—</td>
-<td>§9</td>
-</tr>
-<tr>
-<td><code>enable_hallucination_detection</code></td>
-<td><code>build_book_monitor()</code></td>
-<td><code>False</code></td>
-<td>—</td>
-<td>§9</td>
-</tr>
-<tr>
-<td><code>enable_llm_judge</code></td>
-<td><code>build_book_monitor()</code></td>
-<td><code>False</code></td>
-<td><code>--enable-llm-judge</code>(CLI)</td>
-<td>§14</td>
-</tr>
-<tr>
-<td><code>gate_a_tcr_weight</code></td>
-<td><code>PerformanceMonitor</code></td>
-<td><code>0.4</code></td>
-<td><code>BOOK_FORGE_GATE_A_TCR_WEIGHT</code>(.env)</td>
-<td>§9, §14</td>
-</tr>
-<tr>
-<td><code>gate_c_tcr_weight</code></td>
-<td><code>PerformanceMonitor</code></td>
-<td><code>0.4</code></td>
-<td><code>BOOK_FORGE_GATE_C_TCR_WEIGHT</code>(.env)</td>
-<td>§14</td>
-</tr>
-<tr>
-<td><code>gate_b_loop_weight</code></td>
-<td><code>PerformanceMonitor</code></td>
-<td><code>0.0</code></td>
-<td><code>BOOK_FORGE_GATE_B_LOOP_WEIGHT</code>(.env)</td>
-<td>§14</td>
-</tr>
-</tbody>
-</table></div>
-<h3 id="a5">A.5 챕터별 부재 항목 — 명시적으로 안 쓴 것</h3>
-<p>이 책의 관례(8장 §8.5)를 뒤집어, "이 책의 에이전트들이 33개 Config 중 명시적으로 안 쓰는 것"도 참고로 남긴다 — Book-forge가 아직 다루지 않는 영역을 코드 레벨에서 확인할 수 있다.</p>
-<div class="table-wrap"><table>
-<thead>
-<tr>
-<th>안 쓰는 Config/기능</th>
-<th>Gate</th>
-<th>이유(15장 참고)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>자동 재작성 트리거</td>
-<td>—</td>
-<td>검증 결과를 근거로 스스로 다시 쓰는 경로 부재</td>
-</tr>
-<tr>
-<td><code>ScopeConfig</code></td>
-<td>B</td>
-<td>경로 검사는 직접 구현(§12) — 이 Config는 도구 이름 목록이라 용도가 다름</td>
-</tr>
-<tr>
-<td>이미지 검색/배치 관련 기능</td>
-<td>—</td>
-<td>Book-forge에 대응 기능 자체가 없음</td>
-</tr>
-</tbody>
-</table></div>
-<h3 id="a6-narrative-4">A.6 <code>narrative</code> 밖의 다섯 콘텐츠 유형 — 본문에서 다루지 않은 생성기 4종</h3>
-<p>이 책의 15개 챕터는 <code>ChapterDrafterAgent</code>(<code>content_type="narrative"</code>, 7·8장)를 집중적으로 다뤘다 — 목차 매니페스트(4장)가 지원하는 6개 콘텐츠 유형(<code>narrative</code>/<code>reference_table</code>/<code>diagram</code>/<code>exercise</code>/<code>capstone</code>/<code>module_reference</code>) 중 <code>exercise</code>는 같은 <code>draft_chapter()</code>가 프롬프트만 바꿔 생성하므로(8장에서 이미 확인한 <code>_CONTENT_TYPE_PROMPTS.get(content_type, ...)</code>) 별도 코드가 없지만, 나머지 넷은 각자 독립된 전용 에이전트다. 10장이 이들의 <strong>정적 검증</strong>(<code>verify_diagram()</code> 등)은 다뤘지만 <strong>생성 코드 자체</strong>는 다루지 않았다 — 여기서 그 공백을 채운다.</p>
-<pre><code class="language-python"># diagram_generator.py — mermaid 다이어그램 생성
-def build_generate_diagram(llm: LLM, monitor: PerformanceMonitor) -&gt; GenerateFn:
-    @agent_eval(
-        monitor, task_type=&quot;document_creation&quot;, question_arg=&quot;chapter_title&quot;,
-        rag_mode=True, context_arg=&quot;sources&quot;,
-        sla=SLAConfig(p95_ms=60_000, p99_ms=90_000),
-        threat_severity=ThreatSeverityConfig(),
-    )
-    def generate_diagram(chapter_title, chapter_no, sources, ground_truth=&quot;&quot;) -&gt; tuple[str, EvalMetadata]:
-        prompt = DIAGRAM_PROMPT.format(chapter_title=chapter_title, chapter_no=chapter_no, sources=sources[:6000])
-        return llm.generate(prompt, system=DIAGRAM_SYSTEM_PROMPT, max_tokens=3000), \
-            EvalMetadata(extra={&quot;phase&quot;: &quot;diagram&quot;, &quot;chapter_no&quot;: chapter_no})
-    return generate_diagram
-</code></pre>
-<pre><code class="language-python"># capstone_generator.py — 템플릿(TODO 포함) + 정답 코드를 한 번에 생성
-def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; CapstoneFn:
-    @agent_eval(
-        monitor, task_type=&quot;document_creation&quot;, question_arg=&quot;chapter_title&quot;,
-        rag_mode=True, context_arg=&quot;sources&quot;,
-        # 템플릿+정답 두 부분을 한 번에 생성하므로 서술형보다 응답이 길다 — SLA도 넉넉하게.
-        sla=SLAConfig(p95_ms=90_000, p99_ms=120_000),
-        threat_severity=ThreatSeverityConfig(),
-    )
-    def generate_capstone(chapter_title, chapter_no, sources, ground_truth=&quot;&quot;) -&gt; tuple[str, EvalMetadata]:
-        prompt = CAPSTONE_PROMPT.format(chapter_title=chapter_title, chapter_no=chapter_no, sources=sources[:6000])
-        return llm.generate(prompt, system=CAPSTONE_SYSTEM_PROMPT, max_tokens=3500), \
-            EvalMetadata(extra={&quot;phase&quot;: &quot;capstone&quot;, &quot;chapter_no&quot;: chapter_no})
-    return generate_capstone
-</code></pre>
-<p><code>ModuleReferenceAgent</code>가 가장 흥미로운 사례다 — <code>rag_mode=True</code>를 똑같이 쓰지만, <code>sources</code>에 RAG <strong>검색</strong> 결과가 아니라 4장(§4.3)의 구조적 코드 인덱싱이 만든 <strong>전체</strong> 모듈/클래스/함수 목록을 그대로 넣는다. 모듈 docstring이 그 이유를 실측 수치로 남겼다.</p>
-<blockquote><p>"<code>reference_table.py</code>는 RAG로 검색된 소스 발췌문에서 '확인되는 값만' 표로 만든다 — 검색이 놓친 항목은 애초에 LLM 눈에 안 보이므로 조용히 빠진다(실측: Book-forge 자신의 <code>agents/</code> 13개 파일 중 4개만 우연히 top-k에 뽑혀 다뤄짐). 이 에이전트는 RAG 검색을 거치지 않고, H가 만든 구조 요약(모든 모듈/클래스/함수를 결정론적으로 나열)을 그대로 <code>sources</code>로 받는다."</p>
-</blockquote>
-<pre><code class="language-python">def build_generate_module_reference(llm: LLM, monitor: PerformanceMonitor) -&gt; GenerateFn:
-    @agent_eval(
-        monitor, task_type=&quot;document_creation&quot;, question_arg=&quot;chapter_title&quot;,
-        rag_mode=True, context_arg=&quot;sources&quot;,
-        sla=SLAConfig(p95_ms=90_000, p99_ms=120_000),
-        threat_severity=ThreatSeverityConfig(),
-    )
-    def generate_module_reference(chapter_title, chapter_no, sources, ground_truth=&quot;&quot;) -&gt; tuple[str, EvalMetadata]:
-        prompt = MODULE_REFERENCE_PROMPT.format(chapter_title=chapter_title, chapter_no=chapter_no, sources=sources[:8000])
-        return llm.generate(prompt, system=MODULE_REFERENCE_SYSTEM_PROMPT, max_tokens=4000), \
-            EvalMetadata(extra={&quot;phase&quot;: &quot;module_reference&quot;, &quot;chapter_no&quot;: chapter_no})
-    return generate_module_reference
-</code></pre>
-<p>이 넷이 전부 <code>rag_mode=True</code> + <code>threat_severity=ThreatSeverityConfig()</code> 조합을 공유한다는 사실은 8장(§8.3)의 예측을 다시 한번 확인해준다 — <strong>외부 RAG 소스를 프롬프트에 섞는 모든 에이전트가 예외 없이 이 Config 쌍을 쓴다.</strong> <code>reference_table.py</code>(RAG <strong>검색</strong> 기반, "확인되는 값만")와 <code>module_reference.py</code>(정적 인덱싱 <strong>전체</strong> 목록, "빠짐없이") 사이의 대조는, "같은 <code>rag_mode=True</code>라도 <code>sources</code>에 무엇이 들어오는가"가 완전히 다른 실패 모드(누락 vs 날조)를 만든다는 것을 보여준다 — <code>demonstration_verifier.py</code>가 이 둘을 반대 방향으로 검증하는 이유(10장)가 바로 여기 있다.</p>
-<hr />
-<p>이 표는 이 책이 인용한 소스 코드 커밋(<code>00_기획안.md</code> 참고) 시점을 기준으로 한다 — 코드가 바뀌면 이 표도 낡아진다.</p>
-</section>
-<section class="chapter-section" id="appB" data-section-title="부록 B. 용어집">
-<h2 id="b">부록 B. 용어집</h2>
+<section class="chapter-section" id="appA" data-section-title="부록 A. 용어집">
+<h2 id="a">부록 A. 용어집</h2>
 <p>이 책은 AI 에이전트 개발이나 Agent-Evaluator SDK를 접해본 적 없는 개발자도 읽을 수 있도록 썼다 — 그래도 각 장이 처음 등장하는 용어를 매번 처음부터 다시 설명하지는 않는다(같은 설명이 반복되면 오히려 읽기 피곤해진다). 대신 이 부록에 한자리에 모아 둔다. <code>00_Book_forge_둘러보기.md</code> §0.0이 가장 자주 쓰이는 여섯 단어(LLM·프롬프트·환각·RAG·데코레이터·Harness)를 먼저 짚어주므로, 아직 안 읽었다면 그쪽을 먼저 보는 편이 낫다 — 이 부록은 그보다 범위가 넓은, 책 전체에서 산발적으로 등장하는 용어를 담당한다.</p>
 <p>각 항목은 "이 책에서 그 단어가 정확히 무엇을 가리키는가"만 답한다 — 일반적인 AI 업계 정의와 Book-forge 코드가 실제로 구현한 의미가 다르지 않도록, 가능한 곳마다 실제 소스 파일을 함께 표기했다.</p>
 <hr />
-<h3 id="b1-aillm">B.1 AI/LLM 기본 개념</h3>
+<h3 id="a1-aillm">A.1 AI/LLM 기본 개념</h3>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -2921,7 +3494,7 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 </tr>
 </tbody>
 </table></div>
-<h3 id="b2">B.2 소프트웨어 패턴</h3>
+<h3 id="a2">A.2 소프트웨어 패턴</h3>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -2953,8 +3526,8 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 </tr>
 </tbody>
 </table></div>
-<h3 id="b3-agent-evaluator-harness-engineering">B.3 Agent-Evaluator / Harness Engineering 개념</h3>
-<p>Harness Config 개별 항목의 전체 목록(어느 에이전트가 무엇을 쓰는지)은 <a href="A_Harness_Config_사용현황.md">부록 A</a>를 참고하라. 이 절은 그 개별 항목들이 속하는 더 큰 개념만 정의한다.</p>
+<h3 id="a3-agent-evaluator-harness-engineering">A.3 Agent-Evaluator / Harness Engineering 개념</h3>
+<p>Harness Config 개별 항목의 전체 목록(어느 에이전트가 무엇을 쓰는지)은 8장(§8.1)을 참고하라. 이 절은 그 개별 항목들이 속하는 더 큰 개념만 정의한다.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -3031,7 +3604,7 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 </tr>
 </tbody>
 </table></div>
-<h3 id="b4-book-forge">B.4 Book-forge 고유 개념</h3>
+<h3 id="a4-book-forge">A.4 Book-forge 고유 개념</h3>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -3077,12 +3650,12 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 <blockquote><p>이 부록에도 없는 용어를 만났다면, 그 용어가 처음 등장하는 장의 "참고 자료" 절이 가리키는 실제 소스 파일을 직접 열어보는 것이 가장 정확하다 — 이 책의 원칙이기도 하다(<code>00_기획안.md</code> §2).</p>
 </blockquote>
 </section>
-<section class="chapter-section" id="appC" data-section-title="부록 C. 업계 동향과 더 읽을거리">
-<h2 id="c">부록 C. 업계 동향과 더 읽을거리</h2>
+<section class="chapter-section" id="appB" data-section-title="부록 B. 업계 동향과 더 읽을거리">
+<h2 id="b">부록 B. 업계 동향과 더 읽을거리</h2>
 <blockquote><p><strong>이 부록만 이 책의 다른 모든 장·부록과 근거의 성격이 다르다.</strong> <code>00_기획안.md</code> §2가 밝혔듯 이 책의 본문은 "시장 조사나 외부 논문을 인용하지 않는다"는 원칙을 지킨다 — 모든 주장은 Book-forge·Agent-Evaluator의 실제 소스 코드로만 뒷받침한다. 이 부록은 그 원칙의 유일한 예외다. 지금까지 다룬 메커니즘(HallucinationDetector·PerformanceMonitor·ThreatSeverityConfig·LLM Judge)이 <strong>업계 전체에서는 어떤 이름으로, 어떤 규모로 다뤄지는가</strong>를 짧게 정리해, Book-forge라는 한 도구를 넘어선 맥락을 얻고 싶은 독자에게 출발점을 준다. 여기 인용된 수치·주장은 각 출처의 것이지 이 책이 직접 검증한 것이 아니다 — 원문을 확인하고 싶다면 링크를 직접 따라가라.</p>
 </blockquote>
 <hr />
-<h3 id="c1-gate-challucinationdetector">C.1 환각 탐지 — Gate C·<code>HallucinationDetector</code>가 서 있는 자리</h3>
+<h3 id="b1-gate-challucinationdetector">B.1 환각 탐지 — Gate C·<code>HallucinationDetector</code>가 서 있는 자리</h3>
 <p>3장(§3.2)·9장(§9.2)·10장이 다룬 환각(hallucination)은 Book-forge 하나만의 문제가 아니라 업계 전체가 별도 계측 계층을 두고 씨름하는 문제다. Lakera의 정리에 따르면 환각은 "모델 하나의 결함"이 아니라 "빠진 평가 계층(missing eval layer)"의 문제로 프레이밍이 옮겨가는 중이며, 해법은 근거 제공(grounding) + 런타임 탐지 + 모드별 리포팅의 조합이라고 본다. Guardrails AI·LangKit·RAGAS 같은 프로덕션 도구가 RAG·불확실성 추정·자기일관성(self-consistency)·가드레일을 조합해 40~96%의 환각 감소를 보고한다는 조사도 있다(Zylos Research).</p>
 <p>Book-forge의 <code>HallucinationDetector</code>(7·9장)는 이 스펙트럼에서 가장 단순한 축 — <strong>RAG 근거 대조 하나</strong>만 쓴다. 자기일관성(같은 질문을 여러 번 물어 답이 갈리는지 보는 기법)이나 불확실성 추정(모델이 자기 답에 얼마나 확신하는지 수치화하는 기법)은 Book-forge 어디에도 없다 — 이 책이 반복해온 "적게, 정확하게 쓴다" 원칙이 여기서도 그대로 적용된 것으로 읽을 수 있다.</p>
 <ul>
@@ -3090,7 +3663,7 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 <li><a href="https://zylos.ai/research/2026-01-27-llm-hallucination-detection-mitigation">LLM Hallucination Detection and Mitigation: State of the Art in 2026 (Zylos Research)</a></li>
 <li><a href="https://www.adaline.ai/blog/complete-guide-llm-ai-agent-evaluation-2026">The Complete Guide to LLM &amp; AI Agent Evaluation in 2026 (Adaline)</a></li>
 </ul>
-<h3 id="c2-performancemonitor">C.2 에이전트 관측성이 독립 분야가 되다 — <code>PerformanceMonitor</code>가 서 있는 자리</h3>
+<h3 id="b2-performancemonitor">B.2 에이전트 관측성이 독립 분야가 되다 — <code>PerformanceMonitor</code>가 서 있는 자리</h3>
 <p>9장(§9.1)이 정리한 Tracker·Config·Gate 구조는 업계에서 "AI 에이전트 관측성(agent observability)"이라 불리는, 최근 별도 분야로 분화한 영역과 같은 문제를 다룬다. 업계 조사에 따르면 에이전트 관측성은 "단일 LLM 호출 로깅"이나 일반적인 APM(Application Performance Monitoring)과 구분되는 별도 실천으로 자리잡았다 — 핵심 차이는 "무엇을 출력했는가"가 아니라 "그 결과에 이르기까지 에이전트가 내린 결정의 사슬 전체를 설명할 수 있는가"다(digitalapplied.com). LangSmith·Arize Phoenix·Langfuse·Braintrust 같은 전용 플랫폼이 이 영역의 주요 도구로 꼽히고, OpenTelemetry의 GenAI SIG(Special Interest Group)가 멀티에이전트 시스템을 위한 표준 시맨틱 컨벤션을 만드는 중이라는 보도도 있다.</p>
 <p>Book-forge의 <code>PerformanceMonitor</code>(9·11장)는 이런 전용 플랫폼이 아니다 — 별도 서버나 대시보드 없이 <code>eval_results/*.json</code> 파일에 기록하고, <code>book-forge gate</code>로 병합해 읽는 것이 전부다. <strong>"프로덕션에 상시 배포된 여러 에이전트를 실시간으로 관측하는 도구"와 "책 한 권 분량 프로젝트의 품질을 배치로 점검하는 도구"는 애초에 겨냥하는 문제의 규모가 다르다</strong> — Book-forge가 후자를 택했다는 것을 15장(§15.2)의 "의도적으로 단순한 설계" 논의와 함께 읽으면 이 선택이 왜 합리적인지 더 분명해진다.</p>
 <ul>
@@ -3098,22 +3671,22 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 <li><a href="https://www.digitalapplied.com/blog/ai-agent-observability-2026-tracing-monitoring-stack-guide">AI Agent Observability 2026: Tracing &amp; Monitoring Stack (Digital Applied)</a></li>
 <li><a href="https://www.braintrust.dev/articles/best-ai-observability-tools-2026">AI observability tools: A buyer's guide to monitoring AI agents in production (Braintrust)</a></li>
 </ul>
-<h3 id="c3-owasp-top-10-gate-ethreatseverityconfig">C.3 프롬프트 인젝션과 OWASP Top 10 — Gate E·<code>ThreatSeverityConfig</code>가 서 있는 자리</h3>
-<p>8장(§8.3)이 다룬 <code>ThreatSeverityConfig</code>(외부 RAG 소스의 프롬프트 인젝션 위협)는 업계 표준 위험 분류 체계에서 이름이 있는 항목이다 — OWASP(Open Worldwide Application Security Project)의 "LLM 애플리케이션 Top 10"에서 프롬프트 인젝션은 <strong>LLM01</strong>, 즉 3년 연속 1위 위험으로 꼽혔다. 2025년판은 에이전트형 AI의 급성장을 반영해 카테고리를 새로 추가·재편했다. 관련 연구는 RAG 소스를 오염시키는 공격(문서 5개만 정교하게 조작해도 90% 확률로 응답을 조작할 수 있었다는 2026년 1월 연구)과, MCP(아래 C.4) 같은 도구 연결이 열어준 새 공격 표면(도구 오염·간접 인젝션)을 지적한다.</p>
-<p><code>ChapterDrafterAgent</code>만 <code>ThreatSeverityConfig</code>를 쓰는 이유(8장 §8.3 — "외부에서 온, 신뢰할 수 없는 콘텐츠를 프롬프트에 직접 섞는 유일한 에이전트")는 이 업계 분류로 보면 정확히 <strong>LLM01(프롬프트 인젝션)이 발생할 수 있는 유일한 진입점을 식별한 것</strong>과 같다. OWASP가 권고하는 심층 방어(최소 권한 도구, 입출력 필터링, 고위험 동작에 대한 사람 승인)와 견줘보면, Book-forge의 방어는 그중 "탐지·점수화"(<code>ThreatSeverityConfig</code>) 축에 해당하고, "사람 승인"은 6장의 저자 승인 루프가, "최소 권한"은 12장의 <code>@tool_guard</code>가 서로 다른 각도에서 담당한다는 것도 흥미로운 대응 관계다.</p>
+<h3 id="b3-owasp-top-10-gate-ethreatseverityconfig">B.3 프롬프트 인젝션과 OWASP Top 10 — Gate E·<code>ThreatSeverityConfig</code>가 서 있는 자리</h3>
+<p>8장(§8.3)이 다룬 <code>ThreatSeverityConfig</code>(외부 RAG 소스의 프롬프트 인젝션 위협)는 업계 표준 위험 분류 체계에서 이름이 있는 항목이다 — OWASP(Open Worldwide Application Security Project)의 "LLM 애플리케이션 Top 10"에서 프롬프트 인젝션은 <strong>LLM01</strong>, 즉 3년 연속 1위 위험으로 꼽혔다. 2025년판은 에이전트형 AI의 급성장을 반영해 카테고리를 새로 추가·재편했다. 관련 연구는 RAG 소스를 오염시키는 공격(문서 5개만 정교하게 조작해도 90% 확률로 응답을 조작할 수 있었다는 2026년 1월 연구)과, MCP(아래 B.4) 같은 도구 연결이 열어준 새 공격 표면(도구 오염·간접 인젝션)을 지적한다.</p>
+<p><code>rag_mode=True</code>인 6개 에이전트(ChapterDrafter·ReferenceTable·Diagram·Capstone·ModuleReference·Chat)만 <code>ThreatSeverityConfig</code>를 쓰는 이유(8장 §8.3 — "외부에서 온, 신뢰할 수 없는 콘텐츠를 프롬프트에 직접 섞는 에이전트들")는 이 업계 분류로 보면 정확히 <strong>LLM01(프롬프트 인젝션)이 발생할 수 있는 진입점을 식별한 것</strong>과 같다. OWASP가 권고하는 심층 방어(최소 권한 도구, 입출력 필터링, 고위험 동작에 대한 사람 승인)와 견줘보면, Book-forge의 방어는 그중 "탐지·점수화"(<code>ThreatSeverityConfig</code>) 축에 해당하고, "사람 승인"은 6장의 저자 승인 루프가, "최소 권한"은 12장의 <code>@tool_guard</code>가 서로 다른 각도에서 담당한다는 것도 흥미로운 대응 관계다.</p>
 <ul>
 <li><a href="https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/">OWASP Top 10 for LLM Applications 2025 (공식)</a></li>
 <li><a href="https://securityboulevard.com/2026/03/the-owasp-top-10-for-llm-applications-2025-explained-simply/">The OWASP Top 10 for LLM Applications (2025): Explained Simply</a></li>
 <li><a href="https://www.getmaxim.ai/articles/prompt-injection-defense-for-production-ai-agents-a-complete-2026-guide/">Prompt Injection Defense for Production AI Agents: A Complete 2026 Guide (Maxim AI)</a></li>
 </ul>
-<h3 id="c4-model-context-protocol-book-forge">C.4 Model Context Protocol — Book-forge가 다루지 않는 인접 기술</h3>
+<h3 id="b4-model-context-protocol-book-forge">B.4 Model Context Protocol — Book-forge가 다루지 않는 인접 기술</h3>
 <p>Anthropic이 2024년 말 공개한 MCP(Model Context Protocol)는 "AI 애플리케이션을 위한 USB-C"에 비유되는, LLM과 외부 도구·데이터 소스를 잇는 개방형 인터페이스 표준이다. 각 LLM·도구 조합마다 커스텀 연동 코드를 짜야 했던 "N×M 문제"를 없애는 것이 목적이며, 2026년 기준 월간 다운로드 1억 건을 넘는 등 업계 표준으로 빠르게 자리잡았다는 보도가 있다.</p>
 <p>Book-forge는 MCP를 쓰지 않는다 — <code>knowledge/sources.py</code>의 소스 어댑터(PDF·코드 저장소·URL)는 Book-forge 자신이 직접 짠 통합이다(00_Book_forge_둘러보기.md §0.2). 이것이 결함은 아니다 — Book-forge의 소스 유형은 몇 가지로 고정돼 있고 자주 바뀌지 않으므로, 범용 프로토콜을 도입하는 비용이 아직 정당화되지 않는다는 판단으로 읽을 수 있다. 다만 15장(§15.5)이 "이 책이 다루지 않은 열린 항목"을 정직하게 나열한 것과 같은 정신으로, MCP 역시 Book-forge가 <strong>의식적으로 채택하지 않은</strong> 인접 기술이라는 점을 여기 남겨둔다 — 도구 연동 지점을 더 늘릴 계획이 생긴다면 재검토할 후보다.</p>
 <ul>
 <li><a href="https://blockchain.news/ainews/mcp-model-context-protocol-emerges-as-key-ai-interoperability-standard-for-multi-agent-systems-in-2026">MCP (Model Context Protocol) Emerges as Key AI Interoperability Standard for Multi-Agent Systems in 2026</a></li>
 <li><a href="https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/">The 2026-07-28 MCP Specification Release Candidate (공식 블로그)</a></li>
 </ul>
-<h3 id="c5-llm-judge-14">C.5 LLM Judge의 신뢰성 논쟁 — 14장의 옵트인 설계가 서 있는 자리</h3>
+<h3 id="b5-llm-judge-14">B.5 LLM Judge의 신뢰성 논쟁 — 14장의 옵트인 설계가 서 있는 자리</h3>
 <p>14장(§14.2)은 Book-forge의 <code>--enable-llm-judge</code>가 기본 off이고 명시적으로 켜야 한다는 사실을 다뤘다. 이 설계가 왜 신중한지는 LLM Judge(LLM을 채점자로 쓰는 기법) 자체에 대한 최근 연구를 보면 더 분명해진다 — 21개 판정 모델을 9개 제공사에서 뽑아 3개 벤치마크·약 54만 건의 개별 판정으로 검증한 2026년 연구는, 같은 판정 모델이 <strong>한 벤치마크에서 다른 벤치마크로 옮기면 순위가 최대 14계단까지 흔들리고</strong>, 회차별 재현성은 높으면서도 응답 순서에 따른 편향(position bias)이 동시에 존재하는 모순("일관성-편향 역설")을 보고했다. 다른 연구들도 LLM Judge가 응답 길이·문체 같은 표면적 신호에 흔들리는 verbosity bias·self-enhancement bias를 지적한다.</p>
 <p>Book-forge가 LLM Judge를 "일부 샘플에만, 옵트인으로" 적용하는 것(14장 §14.2, <code>judge_sample_rate=0.2</code>)은 이런 신뢰성 논쟁을 고려하면 자연스러운 선택으로 보인다 — 판정 결과를 전면적으로 신뢰하는 대신, 참고 신호 하나로만 제한적으로 섞어 쓰는 태도다.</p>
 <ul>
@@ -3124,79 +3697,8 @@ def build_generate_capstone(llm: LLM, monitor: PerformanceMonitor) -&gt; Capston
 <h3 id="_1">이 부록을 어떻게 읽어야 하는가</h3>
 <ul>
 <li><strong>여기 나온 통계·순위는 각 출처 하나의 주장이다.</strong> 이 책 나머지 전체가 지키는 "실제 소스 코드로만 검증한다"는 원칙이 이 부록에는 적용되지 않는다 — 인용을 그대로 믿기보다 원문을 확인하는 습관이 필요하다.</li>
-<li><strong>Book-forge가 이 동향들을 "따라가지 못하고 있다"는 뜻이 아니다.</strong> C.1·C.2가 보여주듯, 오히려 업계의 정교한(그리고 무거운) 해법 대신 의도적으로 더 단순한 해법을 택한 지점이 많다 — 그 선택이 이 책 전체가 반복해온 "이 프로젝트 규모에 필요한 만큼만" 원칙과 일관된다.</li>
-<li><strong>각 절은 이 책의 특정 장으로 되돌아가는 다리다.</strong> C.1→9·10장, C.2→9·11·15장, C.3→8·12장, C.4→00_Book_forge_둘러보기.md·15장, C.5→14장. 순서대로 읽을 필요는 없다.</li>
-</ul>
-</section>
-<section class="chapter-section" id="appD" data-section-title="부록 D. 구조적 코드 인덱싱 상세 — code_index.py 전체">
-<h2 id="d-code_indexpy">부록 D. 구조적 코드 인덱싱 상세 — <code>code_index.py</code> 전체</h2>
-<p>4장(§4.3)이 "AST 정적 분석으로 모듈/클래스/함수 목록을 뽑는다"고 요약한 기능의 실제 구현이다. 4장 본문에서는 이 부록으로 옮겨, 순차 파이프라인이라는 그 챕터의 원래 주제에 집중할 수 있게 했다 — <code>--source</code>로 코드 저장소를 분석하는 원리 자체가 궁금할 때 여기로 돌아오면 된다.</p>
-<h3 id="d1">D.1 한 파일을 어떤 형태로 요약하는가</h3>
-<pre><code class="language-python">@dataclass
-class ClassSummary:
-    name: str
-    bases: list[str]
-    docstring: Optional[str]
-    methods: list[str]
-
-@dataclass
-class FunctionSummary:
-    name: str
-    args: list[str]
-    docstring: Optional[str]
-
-@dataclass
-class ModuleSummary:
-    path: str
-    imports: list[str] = field(default_factory=list)
-    classes: list[ClassSummary] = field(default_factory=list)
-    functions: list[FunctionSummary] = field(default_factory=list)
-</code></pre>
-<p>파일 하나가 결국 "이름·상속 관계·독스트링 첫 줄·공개 메서드 목록을 가진 클래스들"과 "이름·인자·독스트링 첫 줄을 가진 함수들"의 목록으로 요약된다.</p>
-<h3 id="d2-ast">D.2 실제로 뽑는 코드 — 표준 라이브러리 <code>ast</code>만 쓴다</h3>
-<pre><code class="language-python">def _extract_classes(tree: ast.Module) -&gt; list[ClassSummary]:
-    classes: list[ClassSummary] = []
-    for node in tree.body:
-        if not isinstance(node, ast.ClassDef):
-            continue
-        bases = [ast.unparse(b) for b in node.bases]
-        methods = [
-            n.name for n in node.body
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and not n.name.startswith(&quot;_&quot;)
-        ]
-        classes.append(ClassSummary(
-            name=node.name, bases=bases,
-            docstring=_first_line(ast.get_docstring(node)), methods=methods,
-        ))
-    return classes
-
-
-def extract_module_summary(rel_path: str, source_text: str) -&gt; Optional[ModuleSummary]:
-    &quot;&quot;&quot;단일 .py 파일 내용을 파싱해 ModuleSummary를 만든다.
-
-    문법 오류가 있으면 예외를 던지지 않고 None을 반환한다 — 저장소 전체
-    인덱싱이 파일 하나 때문에 중단되지 않게 한다.
-    &quot;&quot;&quot;
-    try:
-        tree = ast.parse(source_text)
-    except SyntaxError:
-        return None
-    return ModuleSummary(
-        path=rel_path, imports=_extract_imports(tree),
-        classes=_extract_classes(tree), functions=_extract_functions(tree),
-    )
-</code></pre>
-<p><code>ast.parse(source_text)</code>가 이 기능의 핵심이다 — 파이썬 인터프리터가 코드를 실행하기 전에 만드는 것과 같은 구문 트리(AST)를 만든 뒤, <code>tree.body</code>를 순회하며 클래스·함수 정의만 골라낸다. <strong>코드를 한 줄도 실행하지 않는다</strong> — <code>import</code>문이 실행되지 않으므로 어떤 부작용도 없고, 문법만 유효하면 의존성이 하나도 설치되지 않은 저장소도 인덱싱할 수 있다. <code>except SyntaxError: return None</code>이 3장·10장에서 반복된 원칙과 같은 자리에 있다는 것도 눈여겨볼 만하다 — 파일 하나가 깨져 있어도(다른 언어 파일에 <code>.py</code> 확장자가 잘못 붙는 등) 저장소 전체 인덱싱이 죽지 않는다.</p>
-<h3 id="d3">D.3 범위를 의도적으로 좁힌 지점</h3>
-<p><code>code_index.py</code> 모듈 docstring이 이 기능의 범위를 명확히 긋는다.</p>
-<blockquote><p>"<code>ast</code>가 표준 라이브러리라 새 의존성이 필요 없다는 게 이유다(tree-sitter 등 다국어 파서는 추가하지 않는다)."</p>
-</blockquote>
-<p>Python(<code>.py</code>) 파일만 지원하고, 다른 언어 파일은 이 인덱서를 건너뛰고 기존 텍스트 청킹(<code>knowledge/sources.py</code>)으로만 처리된다 — "모든 언어를 지원하는 완벽한 인덱서"가 아니라 "가장 흔한 경우(Python 저장소)를 새 의존성 없이 잘 처리하는 인덱서"를 택한 것이다.</p>
-<hr />
-<ul>
-<li><code>src/book_forge/knowledge/code_index.py</code> — 전체(<code>build_structure_index()</code>, <code>format_structure_summary()</code> 포함)</li>
-<li>4장(§4.3) — 이 코드가 파이프라인 어디에 끼어드는지, <code>design_toc()</code>가 그 결과를 어떻게 쓰는지</li>
+<li><strong>Book-forge가 이 동향들을 "따라가지 못하고 있다"는 뜻이 아니다.</strong> B.1·B.2가 보여주듯, 오히려 업계의 정교한(그리고 무거운) 해법 대신 의도적으로 더 단순한 해법을 택한 지점이 많다 — 그 선택이 이 책 전체가 반복해온 "이 프로젝트 규모에 필요한 만큼만" 원칙과 일관된다.</li>
+<li><strong>각 절은 이 책의 특정 장으로 되돌아가는 다리다.</strong> B.1→9·10장, B.2→9·11·15장, B.3→8·12장, B.4→00_Book_forge_둘러보기.md·15장, B.5→14장. 순서대로 읽을 필요는 없다.</li>
 </ul>
 </section></main><script>
 mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', fontFamily: 'Noto Sans KR, sans-serif' });

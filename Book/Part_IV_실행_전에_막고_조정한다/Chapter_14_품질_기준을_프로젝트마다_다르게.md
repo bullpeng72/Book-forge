@@ -120,7 +120,7 @@ Gate 가중치 조정은 API 키가 필요 없는 경로다 — `.env` 파일에
 
 ## 참고 자료
 
-- 부록 C.5(업계 동향) — LLM Judge의 신뢰성·편향 논쟁, `--enable-llm-judge`가 기본 off인 선택이 왜 최근 연구와도 맞물리는지
+- 부록 B.5(업계 동향) — LLM Judge의 신뢰성·편향 논쟁, `--enable-llm-judge`가 기본 off인 선택이 왜 최근 연구와도 맞물리는지
 - `src/book_forge/eval/monitor.py` — 전체
 - `src/book_forge/cli/commands/new_cmd.py`·`draft_cmd.py` — 실제 플래그 배선
 - `Book-forge/pyproject.toml` — `korean` extra(`agent-evaluator[korean]`)

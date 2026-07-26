@@ -160,7 +160,72 @@ if sources:
     code_structure = _build_structure_summary_from_sources(sources) or ""
 ```
 
-이 값은 LLM 호출이 아니라 **순수 AST 파싱**으로 만들어진다 — 세 번째 "협업자"가 있다면 그것은 LLM 에이전트가 아니라 결정론적 정적 분석 도구다. 3장(§3.2)에서 다룬 환각 문제의 첫 방어선이 여기 있다 — `design_toc()`가 실제로 존재하는 모듈 목록을 프롬프트에 받으면, 존재하지 않는 서브시스템을 목차에 지어낼 여지가 크게 줄어든다. `_build_structure_summary_from_sources()` 안에서 실제로 파일을 읽어 구조를 뽑는 `knowledge/code_index.py`는 표준 라이브러리 `ast`만으로 클래스·함수·독스트링을 파싱하고(코드를 한 줄도 실행하지 않는다), 문법 오류가 있는 파일은 예외 대신 조용히 건너뛴다(3·10장과 같은 원칙) — 이 파서의 전체 구현(`ClassSummary`/`extract_module_summary()` 등 실제 코드)은 [부록 D](Appendix/D_구조적_코드_인덱싱_상세.md)에서 확인할 수 있다.
+이 값은 LLM 호출이 아니라 **순수 AST 파싱**으로 만들어진다 — 세 번째 "협업자"가 있다면 그것은 LLM 에이전트가 아니라 결정론적 정적 분석 도구다. 3장(§3.2)에서 다룬 환각 문제의 첫 방어선이 여기 있다 — `design_toc()`가 실제로 존재하는 모듈 목록을 프롬프트에 받으면, 존재하지 않는 서브시스템을 목차에 지어낼 여지가 크게 줄어든다.
+
+`_build_structure_summary_from_sources()` 안에서 실제로 파일을 읽어 구조를 뽑는 것은 `knowledge/code_index.py`다. 먼저 한 파일을 어떤 형태로 요약하는지부터 본다.
+
+```python
+@dataclass
+class ClassSummary:
+    name: str
+    bases: list[str]
+    docstring: Optional[str]
+    methods: list[str]
+
+@dataclass
+class FunctionSummary:
+    name: str
+    args: list[str]
+    docstring: Optional[str]
+
+@dataclass
+class ModuleSummary:
+    path: str
+    imports: list[str] = field(default_factory=list)
+    classes: list[ClassSummary] = field(default_factory=list)
+    functions: list[FunctionSummary] = field(default_factory=list)
+```
+
+파일 하나가 결국 "이름·상속 관계·독스트링 첫 줄·공개 메서드 목록을 가진 클래스들"과 "이름·인자·독스트링 첫 줄을 가진 함수들"의 목록으로 요약된다. 이 요약을 실제로 뽑는 함수가 표준 라이브러리 `ast` 모듈만 쓴다.
+
+```python
+def _extract_classes(tree: ast.Module) -> list[ClassSummary]:
+    classes: list[ClassSummary] = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        bases = [ast.unparse(b) for b in node.bases]
+        methods = [
+            n.name for n in node.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and not n.name.startswith("_")
+        ]
+        classes.append(ClassSummary(
+            name=node.name, bases=bases,
+            docstring=_first_line(ast.get_docstring(node)), methods=methods,
+        ))
+    return classes
+
+
+def extract_module_summary(rel_path: str, source_text: str) -> Optional[ModuleSummary]:
+    """단일 .py 파일 내용을 파싱해 ModuleSummary를 만든다.
+
+    문법 오류가 있으면 예외를 던지지 않고 None을 반환한다 — 저장소 전체
+    인덱싱이 파일 하나 때문에 중단되지 않게 한다.
+    """
+    try:
+        tree = ast.parse(source_text)
+    except SyntaxError:
+        return None
+    return ModuleSummary(
+        path=rel_path, imports=_extract_imports(tree),
+        classes=_extract_classes(tree), functions=_extract_functions(tree),
+    )
+```
+
+`ast.parse(source_text)`가 이 기능의 핵심이다 — 파이썬 인터프리터가 코드를 실행하기 전에 만드는 것과 같은 구문 트리(AST)를 만든 뒤, `tree.body`를 순회하며 클래스·함수 정의만 골라낸다. **코드를 한 줄도 실행하지 않는다** — `import`문이 실행되지 않으므로 어떤 부작용도 없고, 문법만 유효하면 의존성이 하나도 설치되지 않은 저장소도 인덱싱할 수 있다. `except SyntaxError: return None`이 3장·10장에서 반복된 원칙과 같은 자리에 있다는 것도 눈여겨볼 만하다 — 파일 하나가 깨져 있어도(다른 언어 파일에 `.py` 확장자가 잘못 붙는 등) 저장소 전체 인덱싱이 죽지 않는다.
+
+> 👨‍💻 **개발자 TIP**: `code_index.py` 모듈 docstring이 이 기능의 범위를 명확히 긋는다 — "`ast`가 표준 라이브러리라 새 의존성이 필요 없다는 게 이유다(tree-sitter 등 다국어 파서는 추가하지 않는다)." Python(`.py`) 파일만 지원하고, 다른 언어 파일은 이 인덱서를 건너뛰고 기존 텍스트 청킹(`knowledge/sources.py`)으로만 처리된다 — "모든 언어를 지원하는 완벽한 인덱서"가 아니라 "가장 흔한 경우(Python 저장소)를 새 의존성 없이 잘 처리하는 인덱서"를 택한 것이다.
 
 ## 4.4 승인 게이트 — 사람이 파이프라인에 끼어드는 두 지점
 
@@ -188,7 +253,7 @@ if sources:
 - `src/book_forge/cli/commands/new_cmd.py` — 전체 흐름
 - `src/book_forge/agents/toc_designer.py` — `build_design_toc()`
 - `src/book_forge/models.py` — `parse_toc_manifest()`
-- 부록 D — `knowledge/code_index.py`의 AST 파싱 전체 구현
+- `src/book_forge/knowledge/code_index.py` — `ClassSummary`·`extract_module_summary()`·`build_structure_index()` 전체
 
 ---
 

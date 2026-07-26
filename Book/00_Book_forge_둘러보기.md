@@ -17,14 +17,14 @@
 | **데코레이터**(decorator) | 파이썬에서 함수의 코드를 직접 고치지 않고, 그 함수를 감싸 부가 기능(로깅·계측 등)을 덧붙이는 문법(`@무언가` 형태). Book-forge는 이 문법으로 "이 LLM 호출을 측정해서 기록해줘"를 덧붙인다 — 2장이 이 동작을 한 줄씩 따라간다. |
 | **Harness**(하네스) / **Harness Engineering** | 원래는 말이나 장비를 몸에 고정하는 "안전벨트·고정장치"를 뜻하는 단어다. 이 책에서는 **AI 에이전트의 실행 결과를 계측·판정하거나, 위험한 동작을 실행 전에 막는 장치 전체**를 가리키는 이름으로 쓰인다 — Agent-Evaluator SDK가 제공하는 배치 평가(Gate A–G)와 실시간 가드레일(LiveGuardrail)이 이 "하네스"를 이루는 두 축이며, 이 책 3~4부 전체의 주제다. |
 
-> 이후 장에서 이 단어들이 다시 나올 때 뜻이 가물가물하면 이 표로 돌아오면 된다. 더 많은 용어(개별 Harness Config 이름 등)는 [부록 B. 용어집](Appendix/B_용어집.md)에 정리돼 있다.
+> 이후 장에서 이 단어들이 다시 나올 때 뜻이 가물가물하면 이 표로 돌아오면 된다. 더 많은 용어(개별 Harness Config 이름 등)는 [부록 A. 용어집](Appendix/A_용어집.md)에 정리돼 있다.
 
 ## 0.1 Book-forge는 무엇을 하는 도구인가
 
 한 줄로: **주제 하나(또는 코드 저장소 경로)를 주면, 기획안·목차를 저자와 함께 확정한 뒤, 챕터 초안을 자동으로 쓰고, 그 결과를 HTML·PDF·EPUB·발표자료로 만들어내는 CLI 도구.** 그리고 이 책의 핵심 관심사인 "품질을 어떻게 보장하는가"는 이 파이프라인의 매 단계에 계측이 이미 배선돼 있다는 사실에서 나온다.
 
 ```mermaid
-flowchart LR
+flowchart TD
     IN["입력<br/>주제 + (선택)코드 저장소"] --> PL["기획안<br/>PlannerAgent"]
     PL -->|"저자 승인 루프"| TOC["목차<br/>TOCDesignerAgent"]
     TOC -->|"저자 승인 루프"| SC["스캐폴딩<br/>빈 챕터 파일 생성"]
@@ -43,7 +43,7 @@ Book-forge는 위 흐름을 아래 명령들로 나눠 노출한다. 이 표는 
 | 명령 | 하는 일 | 이 책에서 주로 다루는 곳 |
 |---|---|---|
 | `book-forge new "<제목>"` | 기획→목차 대화형 루프 + 스캐폴드. `--source`를 주면 전체 챕터 자동 초안까지 | 1~4장 |
-| `book-forge draft <slug> <ch\|--all>` | RAG 보조 챕터 초안 생성(narrative/reference_table/diagram/exercise/capstone) | 7장 |
+| `book-forge draft <slug> <ch\|--all>` | RAG 보조 챕터 초안 생성(narrative/reference_table/diagram/exercise/capstone/module_reference) | 7장 |
 | `book-forge review <slug> <ch>` | 정확성/가독성 검토자 2명 + 편집장 종합 판정 | 5장 |
 | `book-forge plan <slug> --revise` | 기획/목차 재검토(사람-에이전트 개정 루프) | 6장 |
 | `book-forge chat <slug>` | 프로젝트 지식창고에 대화형 질의 | 7장 |
@@ -104,7 +104,7 @@ Book-forge는 위 흐름을 아래 명령들로 나눠 노출한다. 이 표는 
 | **`LiveGuardrail` / `@tool_guard`** | 파일 쓰기처럼 되돌리기 어려운 동작을 **실행 전에** 막는 실시간 축 — 위 표(사후 채점)와는 완전히 다른 축. CI 게이트가 "배포 후 롤백"이 아니라 "배포 자체를 막는" 것과 같은 성격 | 12장 |
 | **`HallucinationDetector`** | `rag_mode=True`인 에이전트에서 자동 활성화되는, 근거 없는 서술을 잡아내는 Gate C 하위 채점기(Tracker의 일종) | 7·9장 |
 
-> 이 표에 없는 세부 Config(`ThreatSeverityConfig`, `ConflictResolutionConfig` 등)는 등장하는 장에서 그 자리에 필요한 만큼만 설명한다. 33개 Config 전체를 한눈에 정리한 표는 [부록 A](Appendix/A_Harness_Config_사용현황.md)에, 개별 용어는 [부록 B](Appendix/B_용어집.md)에 있다.
+> 이 표에 없는 세부 Config(`ThreatSeverityConfig`, `ConflictResolutionConfig` 등)는 등장하는 장에서 그 자리에 필요한 만큼만 설명한다 — 14개 에이전트 전체가 쓰는 Config를 한 표로 보고 싶다면 8장(§8.1), 개별 용어는 [부록 A](Appendix/A_용어집.md)에 있다.
 
 ## 0.5 이 지도를 어떻게 쓰는가 — 파이프라인 ↔ 챕터 ↔ Gate 대응표
 
@@ -124,7 +124,7 @@ Book-forge는 위 흐름을 아래 명령들로 나눠 노출한다. 이 표는 
 
 ## 0.6 직접 재현해보기 — 설치부터 첫 Gate 점수까지
 
-이 책은 "실측으로 재현 가능하다"는 말을 여러 번 쓴다(1장 §1.3 등). 말로만 남기지 않고, 여기서 그 재현 절차를 실제 명령 순서로 적어둔다 — Book-forge 저장소를 로컬에 클론했다는 전제다.
+이 책은 "실측으로 재현 가능하다"는 말을 여러 번 쓴다(1장 §1.4 등). 말로만 남기지 않고, 여기서 그 재현 절차를 실제 명령 순서로 적어둔다 — Book-forge 저장소를 로컬에 클론했다는 전제다.
 
 ```bash
 # 1. 설치 — RAG(--source)까지 쓰려면 [rag] extra 포함
@@ -152,12 +152,299 @@ book-forge gate "테스트 프로젝트" --min-gate-score 0.0
 
 ---
 
+## 0.7 프로젝트 아키텍처 — 패키지 구조와 의존 라이브러리
+
+Book-forge의 실제 코드는 `src/book_forge/` 아래 7개 서브패키지(+ 루트 3개 모듈)로 나뉜다. 이 절은 "어떤 묶음이 무슨 일을 하는가"를 30,000피트 상공에서 조망한다 — 각 파일의 역할은 바로 다음 절(0.8)에서 표로 정리한다.
+
+```
+src/book_forge/
+├── models.py, config.py, exceptions.py   # 루트 — 목차 데이터 모델·설정·예외 계층(3개 파일, 특정 패키지에 속하지 않음)
+├── llm/            # LLM Protocol + OpenAI·Anthropic·Ollama 통합(provider.py 1개 파일)
+├── agents/         # LLM 에이전트 13개 + @tool_guard 1개(scaffold) + 정적 검증기 5개 + 프롬프트 상수 1개
+├── knowledge/      # RAG — 소스 어댑터·임베딩·지식창고·구조적 코드 인덱싱(7개 파일)
+├── publish/        # 마크다운 → HTML/PDF/EPUB/Slides(9개 파일)
+├── editor/         # Flask 웹 에디터(server.py 1개 파일)
+├── eval/           # PerformanceMonitor 팩토리(2개 파일)
+└── cli/            # click 진입점 + 13개 서브커맨드(15개 파일)
+```
+
+`__init__.py`처럼 실질적인 로직이 없는 빈 파일을 제외하면 약 58개 파일, 총 7,019줄(조사 시점 `wc -l` 기준)이 Book-forge 전체 구현이다 — 이 책이 지금까지 인용해온 코드는 전부 이 58개 파일 중 일부다.
+
+의존 라이브러리는 `pyproject.toml`이 코어와 옵트인 extra를 명확히 나눈다:
+
+| 구분 | 라이브러리 | 어디서 쓰는가 |
+|---|---|---|
+| 코어(항상 설치) | `click` | `cli/` 전체 — 커맨드 정의 |
+| 코어 | `python-dotenv` | `config.py` — `.env` 로드 |
+| 코어 | `pydantic` | (설정 검증용으로 선언돼 있으나 이 책이 다루는 핵심 경로에서는 직접 노출되지 않는다) |
+| 코어 | `markdown` | `publish/markdown_engine.py` — `md_to_html()`의 실제 변환 엔진 |
+| 코어 | `requests` | `knowledge/embeddings.py`(Ollama API), `knowledge/web_search.py`, `knowledge/sources.py`(URL 소스) |
+| 코어 | `agent-evaluator>=0.9.9` | `agents/*`(`@agent_eval`/`@tool_guard`), `eval/monitor.py`, `cli/commands/gate_cmd.py` |
+| `[pdf]` | `playwright` | `publish/pdf_builder.py` — Chromium headless 인쇄 |
+| `[rag]` | `pypdf`, `numpy` | `knowledge/pdf_source.py`(PDF 추출), `knowledge/store.py`(코사인 유사도 행렬 연산) |
+| `[serve]` | `flask` | `editor/server.py` |
+| `[korean]` | `agent-evaluator[korean]` | `eval/monitor.py`의 `use_korean_tokenizer=True`가 기대하는 형태소 분석기 |
+
+> ⚠️ **`pyproject.toml`에 없는 의존성**: `llm/provider.py`는 provider로 OpenAI 또는 Anthropic을 선택했을 때만 `from openai import OpenAI` / `from anthropic import Anthropic`을 함수 내부에서 지연 import한다 — 두 SDK 모두 `pyproject.toml`의 어떤 의존성 목록에도 선언돼 있지 않다. 기본값인 Ollama만 쓰면 이 문제를 겪을 일이 없지만, `LLM_PROVIDER=openai`로 전환하려면 `pip install openai`를 별도로 실행해야 한다 — 이 책이 반복해서 강조하는 "관대한 파싱, 그러나 숨겨진 전제조건은 정직하게 문서화한다"는 원칙이 놓치기 쉬운 지점이다.
+
+이 8개 패키지 전부가 공통으로 따르는 두 가지 배선 패턴(`build_X(llm, monitor) -> Fn` 팩토리, `@agent_eval` vs `@tool_guard`의 축 구분)은 이미 이 책의 핵심 주제이므로 2·8·12장에서 각각 코드로 따라간다 — 이 절은 "그 패턴들이 정확히 어느 파일에 있는가"의 지도 역할만 한다.
+
+## 0.8 파일별 책임 지도
+
+아래 표는 Book-forge 소스 전체(58개 실질 파일)를 패키지별로 나눠, 각 파일의 책임과 이 책에서 주로 다루는 곳을 정리한 것이다 — 처음 읽을 때 전부 외울 필요는 없다. 이후 장에서 낯선 파일 이름이 나올 때 돌아와 찾아보는 용도다.
+
+### 루트 모듈
+
+| 파일 | 책임 | 핵심 요소 |
+|---|---|---|
+| `models.py` | 목차 데이터 모델 — `ChapterSpec`, ` ```toc ` 매니페스트 파싱, 목차 개정 이력 조작 | `ChapterSpec`, `parse_toc_manifest()`, `append_toc_revision_entries()` |
+| `config.py` | `~/Documents/BookForge/` 데이터 디렉토리 관리, `.env` 경로 해석 | `get_data_dir()`, `load_config()`, `project_dir_for()` |
+| `exceptions.py` | 예외 계층 | `BookForgeError`(base), `MissingAPIKeyError`, `TocParseError` 등 |
+
+### `llm/` — LLM 통합
+
+| 파일 | 책임 | 핵심 요소 |
+|---|---|---|
+| `llm/provider.py` | OpenAI/Anthropic/Ollama를 하나의 인터페이스로 통합, provider별 SDK 지연 로딩 | `LLM`(Protocol), `OpenAILLM`/`AnthropicLLM`/`OllamaLLM`, `create_llm()` |
+
+### `agents/` — LLM 호출 에이전트(13개, `build_X(llm, monitor) -> Fn` 팩토리 + `@agent_eval`)
+
+| 파일 | 책임 | 담당 챕터 |
+|---|---|---|
+| `agents/planner.py` | PlannerAgent — 주제/제약 → 기획안 마크다운 | 2장 |
+| `agents/toc_designer.py` | TOCDesignerAgent — 기획안(+코드 구조) → 목차 마크다운 | 4장 |
+| `agents/chapter_drafter.py` | ChapterDrafterAgent — narrative/exercise 서술형 챕터 초안(기본 생성기) | 7장 |
+| `agents/reference_table.py` | ReferenceTableAgent — RAG 소스에서 구조화된 사실만 표로 추출 | 7장 |
+| `agents/diagram_generator.py` | DiagramGeneratorAgent — RAG 소스 → Mermaid 다이어그램 중심 챕터 | 7장 |
+| `agents/capstone_generator.py` | CapstoneGeneratorAgent — 빈 템플릿+모범 정답을 한 번의 호출로 생성 | 7장 |
+| `agents/module_reference.py` | ModuleReferenceAgent — 구조적 코드 인덱싱 결과를 빠짐없이 표로 정리(전체 커버리지) | 7장 |
+| `agents/alternative_suggester.py` | AlternativeSuggesterAgent — 저커버리지 상황에서 자동 차단 대신 대안 제시 | 3장 |
+| `agents/chat_agent.py` | ChatAgent — 지식창고 발췌+대화 이력 기반 Q&A | 7장 |
+| `agents/research_agent.py` | ResearchAgent — 챕터 제목 → 검색 쿼리 생성(검색 자체는 `knowledge/web_search.py`) | 7장 |
+| `agents/review_loop.py` | AuthorReviewLoop — 저자 피드백에 따른 반복 개정(`run_review_loop()`는 LLM 미호출 순수 오케스트레이션) | 6장 |
+| `agents/review_panel.py` | ReviewerAgent(정확성/가독성)·ChiefEditorAgent — 감독자-작업자 다관점 리뷰 | 5장 |
+| `agents/slide_condenser.py` | SlideCondenserAgent — 책 섹션 하나 → 슬라이드 한 장 | (범위 밖) |
+
+### `agents/` — 그 외(LLM 호출 방식이 다르거나 아예 안 하는 7개 파일)
+
+| 파일 | 책임 | 비고 |
+|---|---|---|
+| `agents/scaffold.py` | ScaffoldAgent — 승인된 목차 → 빈 챕터 스텁 생성 + 목차 재조정 | `@agent_eval`이 아니라 `@tool_guard`(부작용 있는 파일 쓰기, 실행 전 차단 대상) — 12장 |
+| `agents/prompts.py` | 위 13개 에이전트 중 다수가 공유하는 프롬프트 템플릿 문자열 저장소 | 순수 상수 모듈, LLM 미호출 |
+| `agents/demonstration_verifier.py` | content_type별 생성 후 정적 검증(exercise 문법·diagram 구조·capstone TODO 등) | LLM 미호출, `@agent_eval` 없음 — 10장 |
+| `agents/code_consistency_checker.py` | 본문의 import/백틱 심볼이 실제 target_package에 존재하는지 대조 | LLM 미호출 — 10장 |
+| `agents/sdk_version_pin.py` | `--check-package` 대상 버전을 프로젝트별로 최초 1회 고정, 드리프트 경고 | LLM 미호출 — 10장 |
+| `agents/code_example_verifier.py` | python 코드 블록을 subprocess로 실제 실행해 exit code 검증(`--execute-examples`) | LLM 미호출 — 10장 |
+| `agents/term_consistency_checker.py` | 챕터 간 백틱 기술 용어 표기 불일치 후보 검출 | LLM 미호출 — 10장 |
+
+### `knowledge/` — RAG
+
+| 파일 | 책임 | 담당 챕터 |
+|---|---|---|
+| `knowledge/store.py` | `KnowledgeStore` — numpy 인메모리 코사인 유사도 벡터 스토어, JSON 영속화 | 7장 |
+| `knowledge/embeddings.py` | Ollama `/api/embeddings` 호출 래퍼(RAG는 항상 Ollama만 사용) | 7장 |
+| `knowledge/sources.py` | PDF/코드저장소/텍스트/URL을 동일한 청크 리스트로 변환하는 소스 어댑터 라우터 | 7장 |
+| `knowledge/pdf_source.py` | PDF → 텍스트 → 고정폭 슬라이딩 청크 | 7장 |
+| `knowledge/web_search.py` | DuckDuckGo HTML 엔드포인트 검색(API 키 불필요) | 7장 |
+| `knowledge/code_index.py` | Python `ast`로 모듈/클래스/함수 인벤토리 + 의존관계 정적 분석 | 4·7장 |
+| `knowledge/lifecycle.py` | 지식창고 청크를 소스 태그별로 집계(`book-forge knowledge status`) | (범위 밖) |
+
+### `publish/` — 빌드
+
+| 파일 | 책임 | 비고 |
+|---|---|---|
+| `publish/config.py` | `BookConfig` — HTML/PDF/EPUB/Slide 엔진 공통 설정 dataclass | 이 책 범위 밖(README 참고) |
+| `publish/front_matter.py` | `FrontMatter` — 저자/저작권/판 메타데이터를 별도 JSON으로 분리 저장 | 〃 |
+| `publish/toc_loader.py` | `01_목차.md` 매니페스트 → 실제 파일 경로가 채워진 `ResolvedChapter` 목록 | 4장 |
+| `publish/book_index.py` | 책 전체 찾아보기(색인) 항목 빌드(`term_consistency_checker`의 용어 추출 재사용) | 〃 |
+| `publish/markdown_engine.py` | `md_to_html()` — mermaid/커스텀 HTML/코드 보존 3단계 마크다운 변환 엔진(공용) | 〃 |
+| `publish/html_builder.py` | 전체 도서를 단일 HTML 파일로 빌드(사이드바 내비게이션 자동 생성) | 〃 |
+| `publish/pdf_builder.py` | Playwright(Chromium headless)로 챕터별 개별 PDF 인쇄 | 〃 |
+| `publish/epub_builder.py` | 순수 `zipfile`(표준 라이브러리)로 EPUB 3 컨테이너 조립 | 〃 |
+| `publish/slide_builder.py` | 마크다운 챕터 → Reveal.js 발표자료(`slide_condenser.py` 호출) | 〃 |
+
+### `editor/`, `eval/`
+
+| 파일 | 책임 | 담당 챕터 |
+|---|---|---|
+| `editor/server.py` | Flask 웹 에디터 — Part/Chapter MD 편집 + 팀 동시성 클레임 충돌 방지 | 13장 |
+| `eval/monitor.py` | `PerformanceMonitor` 팩토리 — 한국어 형태소 토크나이저, Gate 가중치 `.env` 오버라이드 | 14장 |
+| `eval/gate_summary.py` | 방금 저장된 평가 결과 JSON에서 Gate A–G 점수를 즉시 읽어 CLI에 표시 | 9장 |
+
+### `cli/` — 명령 오케스트레이션
+
+| 파일 | 책임 | 담당 챕터 |
+|---|---|---|
+| `cli/main.py` | click 그룹 진입점 — 13개 서브커맨드 등록 | 0.2절 |
+| `cli/project_utils.py` | 슬러그 → `BookConfig` 해석 공통 유틸(build/edit/gate/draft/plan이 공유) | (범위 밖) |
+| `cli/commands/new_cmd.py` | `book-forge new` — 기획~스캐폴딩 오케스트레이션, `--source` 배치 초안 연쇄 | 4장 |
+| `cli/commands/draft_cmd.py` | `book-forge draft` — RAG 초안 생성 오케스트레이션(733줄, 가장 큰 파일) | 7장 |
+| `cli/commands/gate_cmd.py` | `book-forge gate` — 여러 챕터 결과 병합 + `agent-eval gate` CLI 위임 | 9·11장 |
+| `cli/commands/plan_cmd.py` | `book-forge plan` — 기획/목차 재검토, `--revise` 재승인 루프 | 6장 |
+| `cli/commands/review_cmd.py` | `book-forge review` — 리뷰 패널 호출 래퍼 | 5장 |
+| `cli/commands/chat_cmd.py` | `book-forge chat` — 지식창고 기반 대화형 Q&A REPL | 7장 |
+| `cli/commands/research_cmd.py` | `book-forge research` — 검색 쿼리 생성 → 웹 검색 → 저자 선택 → 지식창고 추가 | 7장 |
+| `cli/commands/lint_cmd.py` | `book-forge lint` — 챕터 간 용어 불일치 발견·보고 | 10장 |
+| `cli/commands/build_cmd.py` | `book-forge build html\|pdf\|epub\|slides` 서브그룹 | (범위 밖) |
+| `cli/commands/edit_cmd.py` | `book-forge edit` — 웹 에디터 서버 실행 | 13장 |
+| `cli/commands/init_cmd.py` | `book-forge init` — LLM provider/API 키 대화형 `.env` 설정 마법사 | (범위 밖) |
+| `cli/commands/home_cmd.py` | `book-forge home` — 데이터/프로젝트 폴더를 OS 파일 탐색기로 열기 | (범위 밖) |
+| `cli/commands/knowledge_cmd.py` | `book-forge knowledge status\|reset` | (범위 밖) |
+
+## 0.9 모듈 간 관계 — 누가 누구를 부르는가
+
+파일 67개 전부를 하나의 그래프에 그리면 알아볼 수 없으므로, 패키지 단위로 뭉쳐 실제 import 관계를 그린다 — 화살표는 전부 실제 `from book_forge.X import Y` 문을 근거로 삼았다.
+
+```mermaid
+graph TD
+    CLI["cli/commands/*<br/>(오케스트레이션)"] --> AGENTS["agents/*<br/>(LLM 에이전트 13 + 정적 검증기 5)"]
+    CLI --> KNOW["knowledge/*<br/>(RAG)"]
+    CLI --> PUB["publish/*<br/>(빌드)"]
+    CLI --> EVAL["eval/*<br/>(계측 팩토리)"]
+    CLI --> LLMP["llm/provider.py"]
+    CLI --> ROOT["models.py · config.py · exceptions.py"]
+
+    AGENTS --> LLMP
+    AGENTS --> ROOT
+    AGENTS -->|"prompts.py 공유"| AGENTS
+    AGENTS -.->|"code_consistency_checker.py만<br/>(로컬 모드 한정)"| KNOW
+
+    KNOW --> ROOT
+
+    PUB --> ROOT
+    PUB -.->|"book_index.py<br/>(용어 추출 재사용)"| AGENTS
+    PUB -.->|"slide_builder.py<br/>(slide_condenser.py 호출)"| AGENTS
+
+    EDITOR["editor/server.py"] --> PUB
+
+    AGENTS --> AE["agent_evaluator<br/>(외부 SDK)"]
+    EVAL --> AE
+    EDITOR --> AE
+```
+
+이 그래프에서 눈에 띄는 비대칭이 두 가지 있다.
+
+1. **`agents/`는 `knowledge/`를 몰라도 대부분 동작한다.** RAG 소스(`sources`)는 `cli/commands/draft_cmd.py`가 `knowledge/store.py`에서 미리 꺼내 문자열로 넘겨주므로, 대부분의 에이전트 함수는 `KnowledgeStore` 객체 자체를 본 적이 없다 — 유일한 예외가 `agents/code_consistency_checker.py`(점선 화살표)로, 로컬 디렉토리 모드에서만 `knowledge/code_index.py`를 직접 지연 import한다.
+2. **`publish/`는 원칙적으로 `agents/`를 몰라야 하는 레이어지만(빌드는 집필과 무관한 별도 단계), 실제로는 두 파일이 예외다.** `publish/book_index.py`는 `agents/term_consistency_checker.py`의 용어 추출 함수(순수 함수, LLM 미호출)를 재사용한다 — 찾아보기(색인)를 만들 때 "이미 있는 로직을 새로 만들지 않는다"는 판단에서 나온 얕은 예외다. `publish/slide_builder.py`는 이보다 근본적인 의존이다 — 챕터 섹션을 슬라이드 한 장으로 압축하는 작업 자체를 `agents/slide_condenser.py`의 `build_condense_section()`(LLM 호출 에이전트)에 위임하므로, "빌드는 집필과 무관하다"는 원칙이 발표자료 빌드에는 처음부터 적용되지 않는다.
+
+`editor/server.py`가 `publish/`(마크다운 렌더링)와 `agent_evaluator`(팀 동시성 가드레일) 둘만 직접 의존하고 `agents/`나 `knowledge/`는 전혀 모른다는 점도 이 그래프에서 확인할 수 있다 — 웹 에디터는 "사람이 직접 쓴 텍스트를 저장·미리보기"할 뿐, LLM을 한 번도 호출하지 않는다.
+
+## 0.10 핵심 흐름 시퀀스 다이어그램
+
+지금까지의 표와 그래프가 "무엇이 있는가"를 보여줬다면, 이 절은 "실제로 실행하면 어떤 순서로 호출되는가"를 세 가지 핵심 명령으로 보여준다. 각 다이어그램의 세부 사항은 표기된 장에서 코드로 다시 따라간다.
+
+### `book-forge new "<제목>"` — 기획부터 스캐폴딩까지 (4장)
+
+```mermaid
+sequenceDiagram
+    participant Author as 저자
+    participant CLI as new_cmd.py
+    participant Planner as PlannerAgent
+    participant RL as AuthorReviewLoop
+    participant TOC as TOCDesignerAgent
+    participant SC as ScaffoldAgent
+
+    Author->>CLI: book-forge new "제목"
+    CLI->>Planner: propose_plan(topic, constraints)
+    Planner-->>CLI: 기획안 초안(md)
+    loop 승인까지 반복(최대 5회, LoopDetectionConfig)
+        CLI->>RL: run_review_loop(kind="plan", ...)
+        RL->>Author: render(md) + ask_feedback()
+        Author-->>RL: Enter(승인) 또는 수정 요청
+        opt 피드백 있음
+            RL->>Planner: revise(current_md, feedback)
+            Planner-->>RL: 수정된 md
+        end
+    end
+    CLI->>CLI: 00_기획안.md 저장
+    CLI->>TOC: design_toc(proposal_md, code_structure)
+    TOC-->>CLI: 목차 초안(md)
+    CLI->>RL: run_review_loop(kind="toc", ...) — 동일 패턴 재사용
+    RL-->>CLI: 승인된 목차 md
+    CLI->>CLI: parse_toc_manifest() → 01_목차.md 저장
+    CLI->>SC: scaffold_project(project_dir, chapters)
+    SC->>SC: write_chapter_stub() × N (@tool_guard)
+    SC-->>CLI: 생성 결과 로그
+    CLI-->>Author: 완료 + eval_results/ 경로
+```
+
+`RL`(AuthorReviewLoop)가 기획안·목차 두 단계에서 완전히 같은 함수로 재사용된다는 점이 이 다이어그램의 핵심이다 — `kind` 인자 하나로 어떤 문서를 개정 중인지만 구분한다(6장).
+
+### `book-forge draft <slug> <ch>` — RAG 조회부터 정적 검증까지 (7·10장)
+
+```mermaid
+sequenceDiagram
+    participant Author as 저자
+    participant CLI as draft_cmd.py
+    participant Store as KnowledgeStore
+    participant Gen as 생성 에이전트*
+    participant Verify as 정적 검증기
+
+    Author->>CLI: book-forge draft SLUG N
+    CLI->>Store: query_with_scores(chapter_title, top_k, max_per_source)
+    Store-->>CLI: [(청크, 코사인 유사도), ...]
+    CLI->>CLI: avg_score 계산 → --min-coverage와 대조(D)
+    alt 커버리지 미달
+        CLI->>Gen: (AlternativeSuggesterAgent) suggest_alternatives(...)
+        Gen-->>Author: 대안 제안 후 생성 보류
+    else 커버리지 충분
+        CLI->>CLI: content_type으로 생성기 분기(B)
+        CLI->>Gen: build_generate_*(llm, monitor)(sources=...)
+        Gen-->>CLI: 챕터 초안 md (+ capstone이면 solution md 별도)
+        CLI->>CLI: 챕터 .md 저장 + 인용 URL 자동 부착
+        CLI->>Verify: verify_demonstration() / verify_capstone()
+        Verify-->>CLI: VerificationResult(문법·구조 대조, LLM 미호출)
+        opt --check-package
+            CLI->>Verify: verify_code_consistency() / check_version_drift()
+        end
+        opt --execute-examples
+            CLI->>Verify: verify_code_execution() (subprocess)
+        end
+    end
+    CLI-->>Author: Gate 요약 + 검증 결과 출력
+```
+
+> \* `Gen`은 content_type에 따라 실제로는 5개 서로 다른 파일 중 하나로 바뀐다 — narrative/exercise는 `chapter_drafter.py`, `reference_table`은 동명 파일, `module_reference`는 동명 파일(RAG 대신 구조 인덱싱 요약 사용), `diagram`은 `diagram_generator.py`, `capstone`은 `capstone_generator.py`다. 이 분기 전체는 0.8절의 "agents/ — LLM 호출 에이전트" 표와 대응한다.
+
+RAG 조회(`Store.query_with_scores`)가 콘텐츠 생성기 분기(B)보다 **먼저** 일어난다는 순서가 중요하다 — 검색된 청크의 평균 유사도가 낮으면 어떤 생성기를 부를지 결정하기도 전에 대안 제안 경로로 빠진다.
+
+### `book-forge gate <slug>` — 병합부터 최종 판정까지 (9·11장)
+
+```mermaid
+sequenceDiagram
+    participant Author as 저자
+    participant CLI as gate_cmd.py
+    participant PM as PerformanceMonitor(SDK)
+    participant Sub as agent-eval CLI(subprocess)
+
+    Author->>CLI: book-forge gate SLUG
+    CLI->>CLI: _all_result_files() — eval_results/*.json 수집
+    alt 결과 파일 1개
+        CLI->>CLI: target = 그 파일 그대로(병합 왕복 없음)
+    else 결과 파일 2개 이상
+        CLI->>PM: PerformanceMonitor.load_from_file(files[0])
+        loop 나머지 파일
+            CLI->>PM: merged.merge(load_from_file(extra))
+        end
+        PM-->>CLI: merged
+        CLI->>CLI: merged.save_to_file(_merged_gate_result.json)
+    end
+    CLI->>Sub: subprocess.run([sys.executable,"-m","agent_evaluator.cli.main","gate",target,...])
+    Sub-->>CLI: exit code(0=통과 / 1=미달 / 2=baseline 회귀 / 3=골든셋 회귀)
+    CLI-->>Author: exit code 그대로 전달
+```
+
+이 다이어그램에서 가장 중요한 사실은 `gate_cmd.py` 안 어디에도 Gate A–G 점수를 실제로 계산하는 코드가 없다는 것이다 — `PerformanceMonitor.merge()`(SDK 기존 기능)로 병합만 하고, 최종 판정은 `agent-eval` CLI subprocess에 완전히 위임한다. Book-forge가 "품질 판정 로직을 만들지 않고, agent-evaluator가 이미 제공하는 계측·게이팅 기능을 가져다 쓰는 응용 프로그램"이라는 이 책 전체의 전제(서문·CLAUDE.md)가 코드 레벨에서 가장 명확하게 드러나는 지점이 바로 여기다.
+
+---
+
 ## 이 장의 핵심
 
 - **Book-forge는 입력 하나가 여러 에이전트를 순서대로 거쳐 출력물이 되는 파이프라인이다.** 0.1의 다이어그램이 이 책 전체의 뼈대다.
 - **CLI 명령 하나하나가 이 책의 특정 장에 대응한다.** 0.2의 표로 "지금 읽는 장이 실제로 어떤 명령을 설명하는가"를 확인할 수 있다.
 - **Agent-Evaluator는 전통적 QA(로그·테스트·CI 게이트)의 LLM 버전이다.** Tracker(항상 켜짐)·Config(옵트인 조정)·Gate(최종 판정)라는 세 층으로 나뉜다 — 이후 장에서 `@agent_eval`이나 `PerformanceMonitor`가 나오면 이 절(0.4)로 돌아와 확인할 수 있다.
 - **말로만 "재현 가능하다"고 하지 않는다.** 0.6의 5단계를 그대로 실행하면 이 책이 인용하는 모든 실측 예제의 형식을 직접 확인할 수 있다.
+- **소스 전체는 8개 패키지·67개 파일·약 7,000줄이다.** 0.7~0.8이 그 전체 지도이고, 0.9의 관계 그래프는 계층 간 의존 방향(그리고 그 방향을 깨는 두 예외)을, 0.10의 시퀀스 다이어그램 3개는 `new`/`draft`/`gate` 세 핵심 명령이 실제로 어떤 순서로 함수를 호출하는지 보여준다.
 
 ## 참고 자료
 

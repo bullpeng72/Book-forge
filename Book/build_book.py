@@ -113,10 +113,8 @@ ORDERED_FILES = [
     robust_path(BOOK_DIR / "Part_IV_실행_전에_막고_조정한다/Chapter_14_품질_기준을_프로젝트마다_다르게.md"),
     robust_path(BOOK_DIR / "Part_IV_실행_전에_막고_조정한다/Chapter_15_한계와_열린_문제.md"),
     robust_path(BOOK_DIR / "99_맺음말.md"),
-    robust_path(BOOK_DIR / "Appendix/A_Harness_Config_사용현황.md"),
-    robust_path(BOOK_DIR / "Appendix/B_용어집.md"),
-    robust_path(BOOK_DIR / "Appendix/C_업계_동향과_더_읽을거리.md"),
-    robust_path(BOOK_DIR / "Appendix/D_구조적_코드_인덱싱_상세.md"),
+    robust_path(BOOK_DIR / "Appendix/A_용어집.md"),
+    robust_path(BOOK_DIR / "Appendix/B_업계_동향과_더_읽을거리.md"),
 ]
 
 # ── Mermaid / raw-HTML 주입 — 이 책의 다이어그램은 챕터 본문에 ```mermaid로
@@ -508,10 +506,8 @@ TOC_STRUCTURE = [
     ("chapter", "Chapter_15", "ch15", "15. 한계와 열린 문제"),
     ("chapter", "99_맺음말", "afterword", "맺음말"),
     ("part", "부록"),
-    ("appendix", "A_Harness_Config", "appA", "부록 A. Harness Config 사용 현황"),
-    ("appendix", "B_용어집", "appB", "부록 B. 용어집"),
-    ("appendix", "C_업계_동향", "appC", "부록 C. 업계 동향과 더 읽을거리"),
-    ("appendix", "D_구조적_코드_인덱싱", "appD", "부록 D. 구조적 코드 인덱싱 상세"),
+    ("appendix", "A_용어집", "appA", "부록 A. 용어집"),
+    ("appendix", "B_업계_동향", "appB", "부록 B. 업계 동향과 더 읽을거리"),
 ]
 
 STEM_TO_ID: dict[str, str] = {}
