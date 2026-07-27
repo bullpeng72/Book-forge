@@ -1,7 +1,7 @@
 # Chapter 8. `@agent_eval` 데코레이터 해부
 
 > ## Part III. 배치 평가로 품질을 계측한다
-> Part II가 "에이전트들이 어떻게 협업하는가"를 다뤘다면, Part III의 4개 챕터는 그 협업이 만든 **결과물의 품질을 어떻게 판정하는가**로 초점을 옮긴다. 이미 2·5·6장에서 스쳐 지나간 `@agent_eval`·Gate·Config를 이제 정면으로 해부하고(8장), Gate A–G가 실제로 무엇을 재는지 정리한다(9장). 이어서 Gate가 손대지 않는 영역인 정적 검증을 보고(10장), 마지막으로 챕터 하나가 아니라 책 전체를 판정하는 집계로 마무리한다(11장).
+> Part II가 "에이전트들이 어떻게 협업하는가"를 다뤘다면, Part III의 6개 챕터는 그 협업이 만든 **결과물의 품질을 어떻게 판정하는가**로 초점을 옮긴다. 이미 2·5·6장에서 스쳐 지나간 `@agent_eval`·Gate·Config를 이제 정면으로 해부하고(8장), Gate A–G가 실제로 무엇을 재는지 정리한다(9장). 이어서 그 매핑과 가중치를 설계하는 방법론(10장), Gate가 손대지 않는 영역인 정적 검증(11장), 챕터 하나가 아니라 책 전체를 판정하는 집계(12장), 마지막으로 이 모든 것을 CI/CD로 자동화하는 방법(13장)까지 다룬다.
 
 > **이 챕터에서 배우는 것**
 > - Book-forge의 14개 에이전트 전체가 각각 어떤 Harness Config를 골랐는지
@@ -43,6 +43,8 @@ Book-forge 소스 전체(`agents/*.py`)를 뒤지면 `@agent_eval`이 붙은 함
 
 실제 `build_draft_chapter()` 코드를 보면 이 판단이 어디서 나왔는지가 데코레이터 인자 옆 주석에 그대로 남아 있다.
 
+> 📄 **파일**: `src/book_forge/agents/chapter_drafter.py`
+
 ```python
 def build_draft_chapter(llm: LLM, monitor: PerformanceMonitor) -> DraftFn:
     @agent_eval(
@@ -80,6 +82,8 @@ def build_draft_chapter(llm: LLM, monitor: PerformanceMonitor) -> DraftFn:
 
 **RAG 생성기 4·5·6·7번은 §8.3의 `ChapterDrafterAgent`와 사실상 같은 틀이다.** `DiagramGeneratorAgent`를 예로 확인한다.
 
+> 📄 **파일**: `src/book_forge/agents/diagram_generator.py`
+
 ```python
 def build_generate_diagram(llm: LLM, monitor: PerformanceMonitor) -> GenerateFn:
     @agent_eval(
@@ -101,9 +105,11 @@ def build_generate_diagram(llm: LLM, monitor: PerformanceMonitor) -> GenerateFn:
 
 > "`reference_table.py`는 RAG로 검색된 소스 발췌문에서 '확인되는 값만' 표로 만든다 — 검색이 놓친 항목은 애초에 LLM 눈에 안 보이므로 조용히 빠진다(실측: Book-forge 자신의 `agents/` 13개 파일 중 4개만 우연히 top-k에 뽑혀 다뤄짐). 이 에이전트는 RAG 검색을 거치지 않고, 구조 요약(모든 모듈/클래스/함수를 결정론적으로 나열)을 그대로 `sources`로 받는다."
 
-**"확인되는 값만"(누락 가능)과 "빠짐없이"(날조 가능)라는 정반대 실패 모드**가, 같은 `rag_mode=True` 아래 `sources`에 무엇이 담기느냐로 갈린다. `demonstration_verifier.py`가 이 둘을 반대 방향으로 검증하는 이유(10장)가 바로 여기 있다.
+**"확인되는 값만"(누락 가능)과 "빠짐없이"(날조 가능)라는 정반대 실패 모드**가, 같은 `rag_mode=True` 아래 `sources`에 무엇이 담기느냐로 갈린다. `demonstration_verifier.py`가 이 둘을 반대 방향으로 검증하는 이유(11장)가 바로 여기 있다.
 
 **12~14번(`ResearchAgent`·`AlternativeSuggesterAgent`·`SlideCondenserAgent`)은 `rag_mode`도 `threat_severity`도 없다.** `ResearchAgent`가 특히 흥미롭다. §8.3의 예측("`rag_mode=True`인가로 `threat_severity` 필요 여부를 100% 예측할 수 있다")이 여기서도 거꾸로 확인된다.
+
+> 📄 **파일**: `src/book_forge/agents/research_agent.py`
 
 ```python
 def build_generate_search_queries(llm: LLM, monitor: PerformanceMonitor) -> GenerateQueriesFn:

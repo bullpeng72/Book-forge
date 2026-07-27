@@ -12,7 +12,7 @@ A–G로 계측한다 — Book-forge 자신은 품질 판정 로직을 만들지
 - **핵심 의존성:** `agent-evaluator>=0.9.9`(필수), `click`/`pydantic`/`markdown`/`requests`(코어),
   `playwright`(PDF/EPUB, `[pdf]`), `pypdf`+`numpy`(RAG, `[rag]`), `flask`(웹 에디터, `[serve]`)
 - **기본 LLM Provider:** Ollama(로컬, API 키 불필요) — `LLM_PROVIDER` 환경변수로 OpenAI/Anthropic 전환 가능
-- **테스트:** 408개, `pytest`(`.venv/bin/python -m pytest`로 실행 — 시스템 Python이 아니라 프로젝트 자체 venv 사용)
+- **테스트:** 409개, `pytest`(`.venv/bin/python -m pytest`로 실행 — 시스템 Python이 아니라 프로젝트 자체 venv 사용)
 
 ---
 
@@ -309,7 +309,7 @@ monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
 
 ```
 src/book_forge/
-├── agents/         # LLM 호출 에이전트(13개) + 정적 검증기(6개) — 전부 팩토리 함수 패턴
+├── agents/         # LLM 호출 에이전트(13개) + 정적 검증기(5개) — 전부 팩토리 함수 패턴
 ├── knowledge/      # RAG — 소스 어댑터, 임베딩, 지식창고, 구조적 코드 인덱싱
 ├── publish/        # 마크다운 → HTML/PDF/EPUB/Slides
 ├── editor/         # Flask 웹 에디터

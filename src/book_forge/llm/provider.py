@@ -11,11 +11,25 @@ from __future__ import annotations
 import os
 from typing import Optional, Protocol, runtime_checkable
 
-from book_forge.exceptions import MissingAPIKeyError, UnsupportedProviderError
+from book_forge.exceptions import (
+    LLMProviderError,
+    MissingAPIKeyError,
+    UnsupportedProviderError,
+)
 
 DEFAULT_OPENAI_MODEL = "gpt-5-nano"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_OLLAMA_MODEL = "llama3.2"
+
+
+def _require_non_empty(text: str, provider: str) -> str:
+    # @agent_eval은 빈 문자열을 "완료된 응답"으로 기록해 TaskResult.has_error가
+    # False로 남는다 — 콘텐츠 필터링·네트워크 이상 등 원인과 무관하게 빈 응답은
+    # 항상 예외로 전파해야 Gate C(신뢰성)가 실패로 잡고, 챕터 파일이 빈 채로
+    # 저장되는 것도 막는다.
+    if not text:
+        raise LLMProviderError(f"{provider} provider가 빈 응답을 반환했습니다.")
+    return text
 
 
 @runtime_checkable
@@ -48,7 +62,7 @@ class OpenAILLM:
             messages=messages,
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content or ""
+        return _require_non_empty(response.choices[0].message.content or "", "openai")
 
 
 class AnthropicLLM:
@@ -67,7 +81,8 @@ class AnthropicLLM:
             system=system or "",
             messages=[{"role": "user", "content": prompt}],
         )
-        return "".join(block.text for block in response.content if hasattr(block, "text"))
+        text = "".join(block.text for block in response.content if hasattr(block, "text"))
+        return _require_non_empty(text, "anthropic")
 
 
 class OllamaLLM:
@@ -99,7 +114,7 @@ class OllamaLLM:
         }
         response = requests.post(f"{self._base_url}/api/generate", json=payload, timeout=180)
         response.raise_for_status()
-        return response.json().get("response", "")
+        return _require_non_empty(response.json().get("response", ""), "ollama")
 
 
 def create_llm(provider: Optional[str] = None, model: Optional[str] = None) -> LLM:

@@ -28,7 +28,46 @@ flowchart TD
     D --> Out["완성된 초안"]
 ```
 
-이 다이어그램은 요약이다. `new_cmd.py`의 `new()` 함수에서 CLI 옵션 처리·에러 분기를 걷어내고 핵심 오케스트레이션만 남기면 이렇게 된다. 이후 장에서 개별 조각(2장 `propose_plan()`, 6장 `run_review_loop()`, 12장 `scaffold_project()`)을 다시 만나면, 이 발췌로 돌아와 "전체 흐름의 어디였는지" 확인하면 된다.
+이 다이어그램은 요약이다. `new_cmd.py`의 `new()` 함수에서 CLI 옵션 처리·에러 분기를 걷어내고 핵심 오케스트레이션만 남기면 이렇게 된다. 이후 장에서 개별 조각(2장 `propose_plan()`, 6장 `run_review_loop()`, 14장 `scaffold_project()`)을 다시 만나면, 이 발췌로 돌아와 "전체 흐름의 어디였는지" 확인하면 된다.
+
+위 플로우차트가 "무엇이 있는가"를 보여줬다면, 아래는 "실제로 어떤 순서로 호출되는가"를 함수 호출 단위로 더 세밀하게 보여준다. 특히 플로우차트에서는 상자 하나("저자 승인")로 뭉뚱그려진 승인 루프가, 실제로는 반복 상한이 걸린 루프라는 것이 여기서 드러난다.
+
+```mermaid
+sequenceDiagram
+    participant Author as 저자
+    participant CLI as new_cmd.py
+    participant Planner as PlannerAgent
+    participant RL as AuthorReviewLoop
+    participant TOC as TOCDesignerAgent
+    participant SC as ScaffoldAgent
+
+    Author->>CLI: book-forge new "제목"
+    CLI->>Planner: propose_plan(topic, constraints)
+    Planner-->>CLI: 기획안 초안(md)
+    loop 승인까지 반복(최대 5회, LoopDetectionConfig)
+        CLI->>RL: run_review_loop(kind="plan", ...)
+        RL->>Author: render(md) + ask_feedback()
+        Author-->>RL: Enter(승인) 또는 수정 요청
+        opt 피드백 있음
+            RL->>Planner: revise(current_md, feedback)
+            Planner-->>RL: 수정된 md
+        end
+    end
+    CLI->>CLI: 00_기획안.md 저장
+    CLI->>TOC: design_toc(proposal_md, code_structure)
+    TOC-->>CLI: 목차 초안(md)
+    CLI->>RL: run_review_loop(kind="toc", ...) — 동일 패턴 재사용
+    RL-->>CLI: 승인된 목차 md
+    CLI->>CLI: parse_toc_manifest() → 01_목차.md 저장
+    CLI->>SC: scaffold_project(project_dir, chapters)
+    SC->>SC: write_chapter_stub() × N (@tool_guard)
+    SC-->>CLI: 생성 결과 로그
+    CLI-->>Author: 완료 + eval_results/ 경로
+```
+
+`RL`(AuthorReviewLoop)가 기획안·목차 두 단계에서 완전히 같은 함수로 재사용된다는 점이 이 다이어그램의 핵심이다. `kind` 인자 하나로 어떤 문서를 개정 중인지만 구분한다(6장).
+
+> 📄 **파일**: `src/book_forge/cli/commands/new_cmd.py` (`new()`, 발췌)
 
 ```python
 load_config()
@@ -72,7 +111,7 @@ results = scaffold_project(project_dir, chapters)
 monitor.save_to_file("planning")
 ```
 
-이 20줄 남짓한 코드에 이 책이 다룰 개념 대부분이 모여 있다. `create_llm()`(1장), `@agent_eval` 적용 함수(2장), `run_review_loop()`(6장), `parse_toc_manifest()`(§4.2), `scaffold_project()`(12장)이 전부 이 안에 등장한다. **순차 파이프라인의 "협업"이란 결국 이 코드가 하는 일 그 자체다.** 메시지 버스나 이벤트 큐 없이, 한 함수 안에서 변수를 다음 호출의 인자로 넘기는 것이 전부다.
+이 20줄 남짓한 코드에 이 책이 다룰 개념 대부분이 모여 있다. `create_llm()`(1장), `@agent_eval` 적용 함수(2장), `run_review_loop()`(6장), `parse_toc_manifest()`(§4.2), `scaffold_project()`(14장)이 전부 이 안에 등장한다. **순차 파이프라인의 "협업"이란 결국 이 코드가 하는 일 그 자체다.** 메시지 버스나 이벤트 큐 없이, 한 함수 안에서 변수를 다음 호출의 인자로 넘기는 것이 전부다. 마지막 줄 `monitor.save_to_file("planning")`도 눈여겨볼 값이다. 이 세션 전체(기획+목차)에서 쌓인 계측 결과를 `eval_results/planning.json`이라는 이름으로 디스크에 남기는데, 이 파일명이 바로 12장이 다루는 "챕터별로 흩어진 결과 파일들을 어떻게 책 한 권으로 합치는가"의 재료 중 하나가 된다.
 
 ## 4.2 넘겨주는 데이터가 계약이다
 
@@ -90,6 +129,8 @@ monitor.save_to_file("planning")
 특히 눈여겨볼 지점은 TOCDesigner의 출력 형식이다. 목차는 사람이 읽는 마크다운(제목·소개)과, 코드가 파싱하는 ` ```toc ` 코드 펜스 블록을 **한 문서 안에 함께** 담는다. 이는 "사람이 검토하기 편한 형식"과 "다음 에이전트가 안정적으로 소비할 수 있는 형식"이 다를 수 있다는 것을 보여준다. 이 둘을 하나의 문서에 공존시키는 것이 Book-forge가 택한 해법이다.
 
 `toc_designer.py`의 `build_design_toc()`는 2장에서 본 `build_propose_plan()`과 뼈대가 완전히 같다.
+
+> 📄 **파일**: `src/book_forge/agents/toc_designer.py`
 
 ```python
 def build_design_toc(llm: LLM, monitor: PerformanceMonitor) -> DesignTocFn:
@@ -119,9 +160,11 @@ def build_design_toc(llm: LLM, monitor: PerformanceMonitor) -> DesignTocFn:
     return design_toc
 ```
 
-`code_structure`가 빈 문자열이면 `code_structure_block`도 빈 문자열이 되고, 프롬프트는 `--source` 없이 실행했을 때와 완전히 동일해진다. 이것이 "하위 호환"이라는 말이 코드로는 정확히 무엇을 뜻하는지 보여주는 사례다. `EvalMetadata`의 `extra`에 `code_structure_used`를 남겨두는 것도 실무적이다. 나중에 `eval_results/planning.json`을 열어보면, 이 특정 실행이 구조적 코드 인덱싱을 실제로 썼는지 아닌지를 Gate 점수와 별개로 바로 확인할 수 있다.
+데코레이터에 나열된 세 Config는 코드 주석이 요약하듯 모두 "기획안의 의도를 목차가 이어받았는가"를 다른 각도에서 본다. `plan_tracking=PlanConfig()`는 기획 단계에서 세운 계획(대상 독자·차별점 등)이 이후 산출물에 실제로 반영됐는지를 추적하고, `subtask_tracking=SubtaskConfig()`는 목차의 챕터 하나하나를 "하위 작업(subtask)"으로 보고 그 커버리지를 채점하며, `context_retention=ContextRetentionConfig()`는 앞 단계(기획안)의 맥락을 뒤 단계(목차)가 얼마나 유지했는지를 본다. `code_structure`가 빈 문자열이면 `code_structure_block`도 빈 문자열이 되고, 프롬프트는 `--source` 없이 실행했을 때와 완전히 동일해진다. 이것이 "하위 호환"이라는 말이 코드로는 정확히 무엇을 뜻하는지 보여주는 사례다. `EvalMetadata`의 `extra`에 `code_structure_used`를 남겨두는 것도 실무적이다. 나중에 `eval_results/planning.json`을 열어보면, 이 특정 실행이 구조적 코드 인덱싱을 실제로 썼는지 아닌지를 Gate 점수와 별개로 바로 확인할 수 있다.
 
 목차가 파싱되는 쪽(`ScaffoldAgent`가 소비하는 쪽)도 실제 코드로 확인해두면 "계약"이라는 말이 더 구체적으로 다가온다. `models.py`의 `parse_toc_manifest()`는 ` ```toc ` 블록 한 줄 한 줄을 `ChapterSpec`으로 바꾼다.
+
+> 📄 **파일**: `src/book_forge/models.py`
 
 ```python
 def parse_toc_manifest(toc_markdown: str) -> list[ChapterSpec]:
@@ -153,6 +196,8 @@ def parse_toc_manifest(toc_markdown: str) -> list[ChapterSpec]:
 
 `--source`로 코드 저장소 디렉토리가 주어지면, `new_cmd.py`는 목차 설계 **이전에** `knowledge/code_index.py`의 정적 분석으로 실제 모듈/클래스/함수 목록을 미리 뽑아 `code_structure`라는 문자열로 만든다.
 
+> 📄 **파일**: `src/book_forge/cli/commands/new_cmd.py`
+
 ```python
 code_structure = ""
 if sources:
@@ -163,6 +208,8 @@ if sources:
 이 값은 LLM 호출이 아니라 **순수 AST 파싱**으로 만들어진다. 세 번째 "협업자"가 있다면 그것은 LLM 에이전트가 아니라 결정론적 정적 분석 도구다. 3장(§3.2)에서 다룬 환각 문제의 첫 방어선이 여기 있다. `design_toc()`가 실제로 존재하는 모듈 목록을 프롬프트에 받으면, 존재하지 않는 서브시스템을 목차에 지어낼 여지가 크게 줄어든다.
 
 `_build_structure_summary_from_sources()` 안에서 실제로 파일을 읽어 구조를 뽑는 것은 `knowledge/code_index.py`다. 먼저 한 파일을 어떤 형태로 요약하는지부터 본다.
+
+> 📄 **파일**: `src/book_forge/knowledge/code_index.py`
 
 ```python
 @dataclass
@@ -187,6 +234,8 @@ class ModuleSummary:
 ```
 
 파일 하나가 결국 "이름·상속 관계·독스트링 첫 줄·공개 메서드 목록을 가진 클래스들"과 "이름·인자·독스트링 첫 줄을 가진 함수들"의 목록으로 요약된다. 이 요약을 실제로 뽑는 함수가 표준 라이브러리 `ast` 모듈만 쓴다.
+
+> 📄 **파일**: `src/book_forge/knowledge/code_index.py`
 
 ```python
 def _extract_classes(tree: ast.Module) -> list[ClassSummary]:
@@ -223,7 +272,7 @@ def extract_module_summary(rel_path: str, source_text: str) -> Optional[ModuleSu
     )
 ```
 
-`ast.parse(source_text)`가 이 기능의 핵심이다. 파이썬 인터프리터가 코드를 실행하기 전에 만드는 것과 같은 구문 트리(AST)를 만든 뒤, `tree.body`를 순회하며 클래스·함수 정의만 골라낸다. **코드를 한 줄도 실행하지 않는다.** `import`문이 실행되지 않으므로 어떤 부작용도 없고, 문법만 유효하면 의존성이 하나도 설치되지 않은 저장소도 인덱싱할 수 있다. `except SyntaxError: return None`이 3장·10장에서 반복된 원칙과 같은 자리에 있다는 것도 눈여겨볼 만하다. 파일 하나가 깨져 있어도(다른 언어 파일에 `.py` 확장자가 잘못 붙는 등) 저장소 전체 인덱싱이 죽지 않는다.
+`ast.parse(source_text)`가 이 기능의 핵심이다. 파이썬 인터프리터가 코드를 실행하기 전에 만드는 것과 같은 구문 트리(AST)를 만든 뒤, `tree.body`를 순회하며 클래스·함수 정의만 골라낸다. **코드를 한 줄도 실행하지 않는다.** `import`문이 실행되지 않으므로 어떤 부작용도 없고, 문법만 유효하면 의존성이 하나도 설치되지 않은 저장소도 인덱싱할 수 있다. `except SyntaxError: return None`이 3장·11장에서 반복된 원칙과 같은 자리에 있다는 것도 눈여겨볼 만하다. 파일 하나가 깨져 있어도(다른 언어 파일에 `.py` 확장자가 잘못 붙는 등) 저장소 전체 인덱싱이 죽지 않는다.
 
 > 👨‍💻 **개발자 TIP**: `code_index.py` 모듈 docstring이 이 기능의 범위를 명확히 긋는다. "`ast`가 표준 라이브러리라 새 의존성이 필요 없다는 게 이유다(tree-sitter 등 다국어 파서는 추가하지 않는다)." Python(`.py`) 파일만 지원하고, 다른 언어 파일은 이 인덱서를 건너뛰고 기존 텍스트 청킹(`knowledge/sources.py`)으로만 처리된다. "모든 언어를 지원하는 완벽한 인덱서"가 아니라 "가장 흔한 경우(Python 저장소)를 새 의존성 없이 잘 처리하는 인덱서"를 택한 것이다.
 
@@ -237,7 +286,7 @@ def extract_module_summary(rel_path: str, source_text: str) -> Optional[ModuleSu
 
 ## 직접 해보기
 
-0장(§0.6)에서 만든 프로젝트 디렉토리를 열어 `01_목차.md`의 ` ```toc ` 블록을 직접 한 줄 고쳐보자(예: 챕터 제목을 바꾸거나 `content_type`을 `exercise`로 바꿔보기). 그다음 `book-forge draft <slug> --all`을 실행하면, `parse_toc_manifest()`(§4.2)가 그 수정을 실제로 어떻게 반영하는지 눈으로 확인할 수 있다.
+1장(§1.9)에서 만든 프로젝트 디렉토리를 열어 `01_목차.md`의 ` ```toc ` 블록을 직접 한 줄 고쳐보자(예: 챕터 제목을 바꾸거나 `content_type`을 `exercise`로 바꿔보기). 그다음 `book-forge draft <slug> --all`을 실행하면, `parse_toc_manifest()`(§4.2)가 그 수정을 실제로 어떻게 반영하는지 눈으로 확인할 수 있다.
 
 여러 단계로 이어지는 파이프라인을 설계할 때 이 장에서 가져갈 교훈은 하나다. 각 단계 사이에 오가는 값이 "사람이 검토하기 편한 형식"과 "다음 단계가 파싱하기 쉬운 형식" 중 어느 쪽을 우선해야 하는지 미리 정하라. 목차 매니페스트가 그 둘을 한 문서에 공존시킨 것처럼, 두 요구가 충돌한다면 하나를 포기하지 말고 공존시킬 방법부터 찾는다.
 

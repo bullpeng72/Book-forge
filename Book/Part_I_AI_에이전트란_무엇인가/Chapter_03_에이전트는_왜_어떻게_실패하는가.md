@@ -21,7 +21,7 @@
 
 > "실측 확인: `Settings`(agent_evaluator.config), `KoreanRAGDatasetGenerator`(agent_evaluator.datasets), `LiveGuardrail`(agent_evaluator.gates.live_guardrail)는 전부 실존하는 클래스인데 최상위 재노출이 없어 `_resolve_dotted`가 매번 오탐(없음)으로 판정했다."
 
-이 경우는 **LLM이 아니라 검증 도구 자신의 한계**였다. 클래스는 실제로 존재하는데, 최상위 패키지 네임스페이스에 재노출(re-export)돼 있지 않아서 검증기가 "찾을 수 없다"고 잘못 판정한 것이다. 이 사례는 중요한 교훈을 남긴다. **검증 도구도 틀릴 수 있고, 그 도구 자체를 검증하는 두 번째 확인이 필요하다**(10장에서 이 버그가 어떻게 고쳐졌는지 다룬다).
+이 경우는 **LLM이 아니라 검증 도구 자신의 한계**였다. 클래스는 실제로 존재하는데, 최상위 패키지 네임스페이스에 재노출(re-export)돼 있지 않아서 검증기가 "찾을 수 없다"고 잘못 판정한 것이다. 이 사례는 중요한 교훈을 남긴다. **검증 도구도 틀릴 수 있고, 그 도구 자체를 검증하는 두 번째 확인이 필요하다**(11장에서 이 버그가 어떻게 고쳐졌는지 다룬다).
 
 ## 3.3 드리프트 — 서로 다른 챕터가 같은 내용으로 수렴한다
 
@@ -31,6 +31,8 @@
 
 `scaffold.py`가 챕터 스텁 파일을 만들 때, 이론적으로는 같은 도구 호출이 계속 반복될 위험이 있다(예: 재시도 로직에 버그가 있어 같은 파일 쓰기를 계속 시도하는 경우). `scaffold_project()`는 이 위험에 대비해 아예 세션 전체를 감싼다.
 
+> 📄 **파일**: `src/book_forge/agents/scaffold.py`
+
 ```python
 guardrail = LiveGuardrail(loop_detection=LoopDetectionConfig(consecutive_repeat_threshold=5))
 with live_guardrail_session(guardrail, task_id=f"scaffold_{project_dir.name}"):
@@ -38,11 +40,13 @@ with live_guardrail_session(guardrail, task_id=f"scaffold_{project_dir.name}"):
         results.append(write_chapter_stub(...))
 ```
 
-`consecutive_repeat_threshold=5`는 같은 호출이 5번 연속 반복되면 차단한다는 뜻이다. 이 메커니즘은 12장에서 훨씬 자세히 다룬다. 여기서 강조할 것은, 이 방어가 **"모델이 반복할 수도 있다"는 것을 전제로 미리 짜여 있다**는 점이다. 실제로 반복이 관측된 뒤에 추가한 사후 대응이 아니라, LLM 기반 시스템이라면 구조적으로 있을 수 있는 위험을 처음부터 가정한 설계다.
+`with live_guardrail_session(guardrail, task_id=...)`가 이 코드의 뼈대다. `task_id`는 "직전 호출과 같은가"를 비교할 때 어느 세션 안에서 비교할지 구분하는 식별자이고, `for` 루프 안의 모든 `write_chapter_stub()` 호출이 이 `with` 블록 하나 안에 있으므로 전부 같은 세션으로 취급된다. `consecutive_repeat_threshold=5`는 같은 호출이 5번 연속 반복되면 차단한다는 뜻이다. 이 메커니즘은 14장에서 훨씬 자세히 다룬다. 여기서 강조할 것은, 이 방어가 **"모델이 반복할 수도 있다"는 것을 전제로 미리 짜여 있다**는 점이다. 실제로 반복이 관측된 뒤에 추가한 사후 대응이 아니라, LLM 기반 시스템이라면 구조적으로 있을 수 있는 위험을 처음부터 가정한 설계다.
 
 ## 3.5 경로 침범 — 허용된 범위 밖에 쓴다
 
 `write_chapter_stub()`(`scaffold.py`)는 함수 시작부에서 곧바로 경로를 검사한다.
+
+> 📄 **파일**: `src/book_forge/agents/scaffold.py` (`write_chapter_stub()`)
 
 ```python
 resolved_project = project_path.resolve()
@@ -51,17 +55,17 @@ if resolved_project not in resolved_target.parents:
     raise BookForgeError(f"프로젝트 디렉토리 밖 경로 쓰기 시도 차단: {resolved_target}")
 ```
 
-이 검사가 왜 `ScopeConfig`(Agent-Evaluator SDK가 제공하는 Harness Config) 대신 직접 짠 코드인지는 이 함수 바로 위 주석이 정확히 밝힌다. `ScopeConfig`는 파일 경로가 아니라 **도구 이름**(allow/forbid 목록)을 검사하는 설정이기 때문이다. "프로젝트 디렉토리 밖에 쓰지 말라"는 요구는 SDK가 대신 해주는 기능이 아니라, 이 모듈이 직접 구현해야 하는 방어 코드였다. SDK에 있는 기능과 없는 기능을 정확히 구분하지 않으면, "Config 하나만 켜면 다 막아준다"는 잘못된 믿음으로 이어질 수 있다.
+`resolved_target.parents`는 대상 경로의 모든 상위 디렉토리를 담은 목록이다. 그 목록 안에 프로젝트 루트(`resolved_project`)가 없다는 것은, 쓰려는 대상이 프로젝트 디렉토리 하위 경로가 아니라는 뜻이다 — 즉 `..`로 상위 디렉토리를 거슬러 올라가거나 절대 경로로 다른 위치를 가리키는 시도를 이 한 줄로 걸러낸다. 이 검사가 왜 `ScopeConfig`(Agent-Evaluator SDK가 제공하는 Harness Config) 대신 직접 짠 코드인지는 이 함수 바로 위 주석이 정확히 밝힌다. `ScopeConfig`는 파일 경로가 아니라 **도구 이름**(allow/forbid 목록)을 검사하는 설정이기 때문이다. "프로젝트 디렉토리 밖에 쓰지 말라"는 요구는 SDK가 대신 해주는 기능이 아니라, 이 모듈이 직접 구현해야 하는 방어 코드였다. SDK에 있는 기능과 없는 기능을 정확히 구분하지 않으면, "Config 하나만 켜면 다 막아준다"는 잘못된 믿음으로 이어질 수 있다.
 
 ## 3.6 다섯 실패 유형과 이 책의 대응 지점
 
 | 실패 유형 | 원인의 성격 | 이 책에서 다루는 대응 |
 |---|---|---|
 | 무응답 | provider 구현 세부사항 | 1장(`think: False`) |
-| 환각 | 모델의 한계 + 검증 도구 자신의 한계 | 9장(Gate C), 10장(정적 검증기) |
+| 환각 | 모델의 한계 + 검증 도구 자신의 한계 | 9장(Gate C), 11장(정적 검증기) |
 | 드리프트 | RAG 검색의 구조적 성질 | 7장(`max_per_source`) |
-| 반복 | LLM 기반 시스템의 구조적 위험 | 12장(`LoopDetectionConfig`) |
-| 경로 침범 | 부작용이 있는 도구 호출 | 12장(경로 검사 + `tool_guard`) |
+| 반복 | LLM 기반 시스템의 구조적 위험 | 14장(`LoopDetectionConfig`) |
+| 경로 침범 | 부작용이 있는 도구 호출 | 14장(경로 검사 + `tool_guard`) |
 
 > 👨‍💻 **개발자 TIP**: 이 표를 거꾸로 읽으면 체크리스트가 된다. 새 에이전트를 만들 때 "이 다섯 유형 중 어느 것이 이 에이전트에 해당하는가"를 먼저 물어보면, 어떤 Harness Config나 검증기를 붙여야 할지 판단하기 쉬워진다.
 

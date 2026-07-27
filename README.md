@@ -334,7 +334,7 @@ Book-forge는 [agent-evaluator](https://pypi.org/project/agent-evaluator/) SDK �
 ```bash
 pip install -e ".[dev,pdf,serve,rag]"
 python -m playwright install --with-deps chromium
-pytest                 # 408개 테스트
+pytest                 # 409개 테스트
 ruff check src tests scripts
 python -m build           # sdist + wheel 둘 다 생성 (패키징 검증 —
                           # editor/templates/*.html 포함 여부 확인 필수)

@@ -11,6 +11,8 @@
 
 지금까지 다룬 두 협업(4장의 순차 파이프라인, 5장의 감독자-작업자)은 전부 에이전트끼리의 협업이었다. `review_loop.py`는 다르다. **저자(사람)가 루프의 한 참여자**다. 기획안이나 목차 초안을 보여주고, 저자가 Enter(승인)를 누르거나 수정 요청을 입력하면, `revise()`가 그 피드백을 반영해 다시 쓴다. 승인할 때까지 이 왕복이 계속된다.
 
+> 📄 **파일**: `src/book_forge/agents/review_loop.py`
+
 ```python
 def run_review_loop(
     *, kind: str, initial_md: str, revise_fn: ReviseFn,
@@ -32,6 +34,8 @@ def run_review_loop(
         current = revise_fn(current_md=current, feedback=feedback, round_no=round_no, kind=kind, ground_truth=feedback)
 ```
 
+함수 본문은 `while True`로 도는 단순한 상태 기계다. 매 반복마다 먼저 `render(current)`로 지금까지의 초안을 저자에게 보여주고, 라운드 수가 상한(`MAX_REVIEW_ROUNDS`)에 도달했으면 더 묻지 않고 `current`를 그대로 반환한다. 그렇지 않으면 `ask_feedback()`으로 저자 입력을 받는데, 입력이 비어 있거나 `{"y", "yes", "승인", "ok"}` 중 하나면(대소문자 구분 없이) 승인으로 간주해 즉시 반환한다. 그 외의 입력은 전부 "수정 요청"으로 취급해 `round_no`를 하나 올리고 `revise_fn()`(실제로는 아래 §6.3의 `revise()`)을 호출해 `current`를 새 초안으로 교체한 뒤 루프 맨 위로 돌아간다. `render`와 `ask_feedback`이 함수 인자로 주입된다는 점도 눈여겨볼 만하다 — 이 루프 자체는 "화면에 어떻게 보여줄지"·"입력을 어떻게 받을지"를 전혀 모르며, 그 덕분에 기획안 검토와 목차 검토 양쪽에 그대로 재사용된다(4장 §4.1).
+
 ## 6.2 두 겹의 안전장치 — 왜 하나로는 부족한가
 
 이 루프는 무한히 돌 수 있는 구조다. 저자가 계속 수정을 요청하면 계속 다시 쓴다. Book-forge는 이 위험을 **두 층**으로 막는다.
@@ -48,6 +52,8 @@ def run_review_loop(
 ## 6.3 왜 `conversation_eval`이 아니라 라운드마다 `@agent_eval`인가
 
 `review_loop.py`의 파일 최상단 docstring에 이례적으로 자세한 설명이 있다. `conversation_eval`(Agent-Evaluator SDK가 제공하는 다회 대화 전용 데코레이터)이 이 상황에 더 자연스러워 보일 수 있지만, 실제 SDK 소스(`decorators.py`)를 확인한 결과 **31개 Harness Config 전부가 시그니처로만 받아질 뿐 평가에 실제로 반영되지 않는다**는 것을 발견했다(`_CONVERSATION_EVAL_UNUSED_HARNESS_PARAMS` 튜플을 직접 세면 31개). `LoopDetectionConfig`가 실제로 작동하려면 각 라운드가 독립된 `TaskResult`로 기록돼야 하는데, `conversation_eval`은 그 구조를 만들지 않는다.
+
+> 📄 **파일**: `src/book_forge/agents/review_loop.py` (`build_revise()`)
 
 ```python
 @agent_eval(

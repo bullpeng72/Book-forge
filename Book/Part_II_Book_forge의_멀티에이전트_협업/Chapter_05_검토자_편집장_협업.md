@@ -17,6 +17,8 @@
 
 각 리뷰어는 `build_reviewer()`로 만들어지고, `AgentRoleConfig`로 자신의 역할을 벗어나지 못하게 계측된다.
 
+> 📄 **파일**: `src/book_forge/agents/review_panel.py` (`build_reviewer()`)
+
 ```python
 @agent_eval(
     monitor,
@@ -33,11 +35,13 @@ def review(chapter_title: str, chapter_md: str, ground_truth: str = "") -> tuple
     ...
 ```
 
-`role_violation_penalty=0.3`은 "이 리뷰어가 자기 역할(예: 정확성 검토)을 벗어난 말을 하면 Gate F 점수에 30% 페널티를 준다"는 뜻이다. 정확성 담당 리뷰어가 갑자기 문체를 지적하기 시작하면, 그건 그 자체로 품질 신호(역할 이탈)로 잡힌다.
+`role_name`은 이 리뷰어의 역할 이름(예: "정확성 검토자")이고, `allowed_action_keywords`/`forbidden_action_keywords`는 그 역할이 검토 의견에서 써도 되는/쓰면 안 되는 키워드 목록이다(예: 정확성 담당이라면 "오탈자"·"어투" 같은 가독성 관련 단어가 `forbidden_action_keywords`에 들어간다). `AgentRoleConfig`는 리뷰어의 응답 텍스트에 금지 키워드가 등장하는지를 이 목록으로 대조해 역할 이탈 여부를 판정한다. `role_violation_penalty=0.3`은 "이 리뷰어가 자기 역할(예: 정확성 검토)을 벗어난 말을 하면 Gate F 점수에 30% 페널티를 준다"는 뜻이다. 정확성 담당 리뷰어가 갑자기 문체를 지적하기 시작하면, 그건 그 자체로 품질 신호(역할 이탈)로 잡힌다.
 
 ## 5.3 위임과 응답 — 협업이 명시적 이벤트로 기록된다
 
 `run_review_panel()`은 각 리뷰어를 부르기 **전후**로 `monitor.agent_coordination_tracker.track_interaction()`을 명시적으로 호출한다.
+
+> 📄 **파일**: `src/book_forge/agents/review_panel.py` (`run_review_panel()`)
 
 ```python
 monitor.agent_coordination_tracker.track_interaction(
@@ -59,6 +63,8 @@ monitor.agent_coordination_tracker.track_interaction(
 ## 5.4 합의도 — 판정 자체를 구조화 신호로 쓴다
 
 각 리뷰어는 `_parse_reviewer_output()`으로 `VERDICT:`(approve/revise)와 `REASON:`을 자유 텍스트에서 관대하게 파싱한다. 형식을 어겨도 예외를 던지지 않고 "revise"로 안전하게 폴백한다(3장 §3.2의 교훈과 같은 원칙 — 파싱 실패가 파이프라인 전체를 죽이면 안 된다).
+
+> 📄 **파일**: `src/book_forge/agents/review_panel.py`
 
 ```python
 def _parse_reviewer_output(text: str) -> tuple[str, str]:
@@ -82,6 +88,8 @@ def _parse_reviewer_output(text: str) -> tuple[str, str]:
 ## 5.5 편집장 — 리뷰를 넘겨받아 최종 판정을 내린다
 
 편집장(`build_chief_editor()`)은 리뷰어들의 텍스트를 요약한 `reviews_text`와 합의도 결과(`consensus`)를 함께 받아 최종 판정을 낸다. `ConflictResolutionConfig()`가 붙는 이유는 명확하다. 리뷰어들의 판정이 서로 엇갈릴 때(한 명은 approve, 한 명은 revise) 편집장이 그 갈등을 어떻게 조정하는지가 Gate F의 conflict_resolution 지표가 채점하는 대상이기 때문이다.
+
+> 📄 **파일**: `src/book_forge/agents/review_panel.py`
 
 ```python
 def build_chief_editor(llm: LLM, monitor: PerformanceMonitor) -> DecideFn:

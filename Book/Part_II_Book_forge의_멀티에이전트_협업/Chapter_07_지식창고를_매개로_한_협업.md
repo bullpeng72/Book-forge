@@ -14,6 +14,8 @@
 
 `chapter_drafter.py`(집필)와 `chat_agent.py`(대화)는 서로를 호출하지 않는다. 심지어 같은 CLI 명령에서 실행되지 않을 수도 있다(`book-forge draft`로 집필하고, 나중에 다른 세션에서 `book-forge chat`으로 질문한다). 이 둘을 잇는 것은 `knowledge/store.py`가 관리하는 JSON 파일 하나다.
 
+> 📄 **파일**: `src/book_forge/knowledge/store.py`
+
 ```python
 def default_store_path(project_dir: Path) -> Path:
     """draft/chat이 공유하는 프로젝트별 영속 지식창고 경로."""
@@ -30,6 +32,8 @@ def default_store_path(project_dir: Path) -> Path:
 
 `query_with_scores()`는 `numpy`만으로 코사인 유사도를 계산한다.
 
+> 📄 **파일**: `src/book_forge/knowledge/store.py` (`query_with_scores()`)
+
 ```python
 query_vec = np.array(embed_text(text))
 matrix = np.array(self._vectors)
@@ -37,11 +41,13 @@ norms = np.linalg.norm(matrix, axis=1) * np.linalg.norm(query_vec) + 1e-10
 scores = matrix @ query_vec / norms
 ```
 
-벡터 DB 서버를 띄우지 않고, 파이썬 프로세스 하나 안에서 행렬 연산 한 줄로 검색이 끝난다. 이 단순함이 Book-forge의 "로컬 파일 하나로 완결된다"는 원칙과 정확히 맞물린다(15장에서 이 선택의 한계도 정직하게 다룬다).
+네 줄을 순서대로 풀면 이렇다. `query_vec`은 질문 텍스트를 임베딩한 벡터 하나, `matrix`는 지식창고에 저장된 모든 청크의 임베딩 벡터를 쌓은 행렬이다. `matrix @ query_vec`(행렬-벡터 곱)이 질문 벡터와 각 청크 벡터의 내적을 한 번에 계산하고, 분모의 `np.linalg.norm(...)` 곱은 두 벡터 각각의 길이(크기)다. 내적을 두 벡터 길이의 곱으로 나누면 "방향이 얼마나 같은가"만 남는 값(코사인 유사도, -1~1)이 되고, `+ 1e-10`은 벡터 길이가 0에 가까울 때 0으로 나누는 것을 막는 안전장치다. `scores`에는 결국 청크마다 "이 질문과 얼마나 의미가 비슷한가"를 나타내는 숫자 하나가 남는다. 벡터 DB 서버를 띄우지 않고, 파이썬 프로세스 하나 안에서 행렬 연산 한 줄로 검색이 끝난다. 이 단순함이 Book-forge의 "로컬 파일 하나로 완결된다"는 원칙과 정확히 맞물린다(17장에서 이 선택의 한계도 정직하게 다룬다).
 
 ## 7.3 한 소스가 검색을 독점하는 문제 — 3장에서 예고한 방어
 
 3장(§3.3)에서 다룬 "챕터 드리프트" 문제를 여기서 코드로 확인할 수 있다. `query_with_scores()`의 `max_per_source` 인자는 한 소스가 검색 결과 상위를 독점하는 것을 막는다.
+
+> 📄 **파일**: `src/book_forge/knowledge/store.py` (`query_with_scores()`)
 
 ```python
 selected: list[int] = []
@@ -60,6 +66,8 @@ for i in np.argsort(-scores):
 코드 주석에 실측 근거가 남아 있다. "파일 하나가 청크의 61%를 차지하면 관련성과 무관하게 검색 결과를 지배한다." `_source_label()`은 `knowledge/sources.py`가 청크마다 붙이는 `"# 파일: xxx"`/`"# 출처: url"` 태그를 역파싱해 이 청크가 어느 소스에서 왔는지 식별한다. 소스를 식별할 수 없는 청크(태그 없는 PDF 등)는 이 균형 조정에서 예외로 그대로 통과한다.
 
 그 태그를 애초에 붙이는 쪽(`_tag_each_chunk()`)도 실제 코드로 보면 왜 "매 청크마다" 다시 붙이는지가 분명해진다.
+
+> 📄 **파일**: `src/book_forge/knowledge/sources.py`
 
 ```python
 def _tag_each_chunk(chunks: list[str], tag: str) -> list[str]:
@@ -80,6 +88,8 @@ def _tag_each_chunk(chunks: list[str], tag: str) -> list[str]:
 ## 7.4 대화 에이전트도 같은 계약을 따른다
 
 `chat_agent.py`의 `answer_question()`은 집필 에이전트와 계측 방식이 사실상 동일하다 — `rag_mode=True`, `context_arg="sources"`로 `HallucinationDetector`가 자동으로 켜진다. 차이는 산출물의 형태뿐이다. 이 책이 지금까지 이 함수의 시스템 프롬프트만 보여줬으니, 여기서 팩토리 함수 전체를 확인한다.
+
+> 📄 **파일**: `src/book_forge/agents/chat_agent.py`
 
 ```python
 CHAT_SYSTEM_PROMPT = (
@@ -135,6 +145,8 @@ flowchart TB
 
 지금까지 이 챕터가 다룬 `@agent_eval`(§7.4)은 질문 **하나하나**를 독립적으로 채점한다. 그런데 `book-forge chat`은 질문을 여러 번 주고받는 **대화**다. "방금 그 얘기 좀 더 해줘" 같은 흐름 전체의 질이 좋은지는 질문 하나만 봐서는 알 수 없다. `chat_cmd.py`는 이 문제를 위해 Agent-Evaluator SDK의 `ConversationSession`(`monitor.conversation()`)이라는, 이 책이 지금까지 다루지 않은 **세 번째 계측 축**을 쓴다.
 
+> 📄 **파일**: `src/book_forge/cli/commands/chat_cmd.py`
+
 ```python
 monitor = build_book_monitor(output_dir=str(config.project_dir / "eval_results"))
 answer_question = build_answer_question(llm, monitor)
@@ -161,6 +173,46 @@ if conv.metrics is not None:
 `answer_question()`(`@agent_eval`)이 질문 하나를 Gate A~G로 채점하는 동안, `conv.turn(user=..., agent=...)`는 그 질문·답변 쌍을 **세션**(`with conv:` 블록 전체)에 별도로 쌓는다. 둘은 같은 대화에서 동시에 일어나지만 완전히 다른 것을 잰다. 세션이 끝나면(`/exit` 또는 EOF) `conv.metrics`에서 4개 지표를 읽을 수 있다. 맥락 유지(`context_retention`, 이전 대화를 실제로 참고했는가), 주제 일관성(`topic_coherence`), 심화도(`progressive_depth`, 대화가 점점 구체적으로 들어가는가), 완결성(`session_completion`)이 그 넷이다.
 
 > 📋 **QA 관리자 TIP**: `chat_cmd.py`의 모듈 docstring이 이 지표들의 위치를 명확히 못박는다. "Gate A-G 점수에는 반영되지 않는 운영 지표"다. `book-forge gate`가 집계하는 것은 어디까지나 `@agent_eval`이 만든 `TaskResult`들이고, `ConversationSession`의 세션 지표는 그 옆에서 **참고용으로만** CLI에 출력된다. 두 축을 섞으면 안 되는 이유는 6장(§6.3)에서 `conversation_eval` 대신 라운드별 `@agent_eval`을 쓴 이유와 정확히 같은 자리에 있다. 이 SDK에서 "여러 번의 상호작용을 하나로 묶어 보는 것"과 "낱개 호출을 정확히 채점하는 것"은 서로 다른 메커니즘이 담당한다.
+
+## 7.6 `book-forge draft` 전체 흐름 — 지식창고 조회는 어디에 있는가
+
+지금까지 이 챕터는 지식창고를 "쓰는 쪽"(집필)과 "읽는 쪽"(대화)을 따로 봤다. 마지막으로 `book-forge draft` 명령 하나가 실행될 때, §7.1~7.3에서 다룬 `query_with_scores()` 호출이 전체 흐름 중 정확히 어느 위치에 있는지 확인해두면 이 장 전체가 하나의 그림으로 이어진다.
+
+```mermaid
+sequenceDiagram
+    participant Author as 저자
+    participant CLI as draft_cmd.py
+    participant Store as KnowledgeStore
+    participant Gen as 생성 에이전트*
+    participant Verify as 정적 검증기
+
+    Author->>CLI: book-forge draft SLUG N
+    CLI->>Store: query_with_scores(chapter_title, top_k, max_per_source)
+    Store-->>CLI: [(청크, 코사인 유사도), ...]
+    CLI->>CLI: avg_score 계산 → --min-coverage와 대조(D)
+    alt 커버리지 미달
+        CLI->>Gen: (AlternativeSuggesterAgent) suggest_alternatives(...)
+        Gen-->>Author: 대안 제안 후 생성 보류
+    else 커버리지 충분
+        CLI->>CLI: content_type으로 생성기 분기(B)
+        CLI->>Gen: build_generate_*(llm, monitor)(sources=...)
+        Gen-->>CLI: 챕터 초안 md (+ capstone이면 solution md 별도)
+        CLI->>CLI: 챕터 .md 저장 + 인용 URL 자동 부착
+        CLI->>Verify: verify_demonstration() / verify_capstone()
+        Verify-->>CLI: VerificationResult(문법·구조 대조, LLM 미호출)
+        opt --check-package
+            CLI->>Verify: verify_code_consistency() / check_version_drift()
+        end
+        opt --execute-examples
+            CLI->>Verify: verify_code_execution() (subprocess)
+        end
+    end
+    CLI-->>Author: Gate 요약 + 검증 결과 출력
+```
+
+> \* `Gen`은 content_type에 따라 실제로는 5개 서로 다른 파일 중 하나로 바뀐다 — narrative/exercise는 `chapter_drafter.py`, `reference_table`은 동명 파일, `module_reference`는 동명 파일(RAG 대신 구조 인덱싱 요약 사용), `diagram`은 `diagram_generator.py`, `capstone`은 `capstone_generator.py`다.
+
+RAG 조회(`Store.query_with_scores`)가 콘텐츠 생성기 분기(B)보다 **먼저** 일어난다는 순서가 중요하다. 검색된 청크의 평균 유사도가 낮으면 어떤 생성기를 부를지 결정하기도 전에 대안 제안 경로(3장에서 다룬 `AlternativeSuggesterAgent`)로 빠지기 때문이다. 생성 직후 이어지는 정적 검증(`Verify`) 4종은 11장에서 자세히 다룬다 — 이 챕터가 다룬 지식창고는 이 전체 흐름의 앞부분(RAG 조회)만 차지한다는 것을 이 다이어그램이 보여준다.
 
 ---
 

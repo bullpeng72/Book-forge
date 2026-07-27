@@ -1,7 +1,7 @@
 """llm/provider.py create_llm() 팩토리 테스트 — SDK 호출 없이 분기 로직만 검증."""
 import pytest
 
-from book_forge.exceptions import MissingAPIKeyError, UnsupportedProviderError
+from book_forge.exceptions import LLMProviderError, MissingAPIKeyError, UnsupportedProviderError
 from book_forge.llm.provider import OllamaLLM, create_llm
 
 
@@ -75,3 +75,19 @@ def test_ollama_generate_sends_think_false(monkeypatch) -> None:
     assert result == "생성된 답변"
     assert captured["json"]["think"] is False
     assert captured["json"]["options"]["num_predict"] == 500
+
+
+def test_ollama_generate_raises_on_empty_response(monkeypatch) -> None:
+    # think=False로도 못 막는 원인(콘텐츠 필터링·네트워크 이상 등)으로 응답이
+    # 비어 있을 때, 조용히 ""를 반환하면 @agent_eval이 "완료"로 기록해 Gate C가
+    # 실패를 놓치고 챕터 파일이 빈 채 저장된다 — 반드시 예외로 전파돼야 한다.
+    def fake_post(url, json, timeout):
+        return _FakeOllamaResponse({"response": ""})
+
+    import requests
+
+    monkeypatch.setattr(requests, "post", fake_post)
+
+    llm = OllamaLLM(base_url="http://localhost:11434", model="llama3.2")
+    with pytest.raises(LLMProviderError):
+        llm.generate("프롬프트")

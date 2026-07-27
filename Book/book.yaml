@@ -2,21 +2,13 @@ title: "Book-forge로 읽는 AI 에이전트와 Harness Engineering"
 language: ko
 
 # 챕터 순서: Part_로마숫자_/Chapter_NN_ 명명규칙이 book-binder 2순위 자동감지와
-# 일치해 Part I~IV 챕터 + Appendix 순서는 자동으로 맞게 잡힌다.
+# 일치해 Part I~IV 챕터(신설 Ch10·Ch13 포함, Part III는 6개 챕터) + Appendix
+# A/B/C(신설 C 포함) 순서는 자동으로 맞게 잡힌다.
 # 99_맺음말.md은 앞자리 번호(99 ≥ 50 임계값)로 자동 후주 처리되어 Part IV 뒤·
 # Appendix 앞에 배치된다 — build_book.py의 ORDERED_FILES와 동일.
 #
-# 알려진 사소한 차이: 최상위 전주(front matter) 파일이 00_서문.md와
-# 00_Book_forge_둘러보기.md 두 개인데, 자연정렬은 두 파일명을 코드포인트로
-# 비교해 "00_Book_forge_둘러보기.md"(ASCII 'B')가 "00_서문.md"(한글 '서')보다
-# 앞에 오는 것으로 판단한다 — 그래서 build_book.py의 ORDERED_FILES(서문 →
-# 둘러보기)와 반대로 "둘러보기 → 서문" 순으로 나온다. order.files로 순서를
-# 강제 고정하는 방법도 있지만, 그러면 book-binder가 Part I~IV 전체에 대해
-# 사이드바 TOC의 Part 구분 헤딩(part_label)을 만들지 못하게 되는 손실이 더 커
-# (order.files/manifest 방식은 파트 라벨을 채우지 않음) 의도적으로 그대로
-# 두었다. 두 파일 다 전주이므로 순서가 바뀌어도 내용상 문제는 없다 — 정확한
-# 원본 순서가 필요하면 이 파일에 order.files를 추가하거나, 파일명을
-# "00a_..."처럼 바꿔 자연정렬을 맞추는 방법을 고려할 것.
+# 최상위 전주(front matter)는 00_서문.md 하나뿐이다(구 00_Book_forge_둘러보기.md는
+# 삭제, 내용은 1~2장과 신설 부록 C로 재배치됐다) — 자연정렬 충돌이 없다.
 
 exclude:
   - "README.md"
