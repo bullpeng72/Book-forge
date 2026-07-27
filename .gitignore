@@ -13,3 +13,7 @@ venv/
 .coverage
 htmlcov/
 .DS_Store
+
+# 빌드 산출물 — 소스(.md)에서 재생성되므로 버전 관리 대상에서 제외
+Book/book-forge-ai-harness-engineering.html
+Book/pdf/
