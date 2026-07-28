@@ -41,7 +41,7 @@
 | **`LiveGuardrail` / `@tool_guard`** | 파일 쓰기처럼 되돌리기 어려운 동작을 **실행 전에** 막는 실시간 축 — 위 표(사후 채점)와는 완전히 다른 축. CI 게이트가 "배포 후 롤백"이 아니라 "배포 자체를 막는" 것과 같은 성격 | 14장 |
 | **`HallucinationDetector`** | `rag_mode=True`인 에이전트에서 자동 활성화되는, 근거 없는 서술을 잡아내는 Gate C 하위 채점기(Tracker의 일종) | 7·9장 |
 
-> 이 표에 없는 세부 Config(`ThreatSeverityConfig`, `ConflictResolutionConfig` 등)는 등장하는 장에서 그 자리에 필요한 만큼만 설명한다. 14개 에이전트 전체가 쓰는 Config를 한 표로 보고 싶다면 8장(§8.1)을 참고하고, 개별 용어는 [부록 A](../Appendix/A_용어집.md)에서 찾아보면 된다.
+> 이 표에 없는 세부 Config(`ThreatSeverityConfig`, `ConflictResolutionConfig` 등)는 등장하는 장에서 그 자리에 필요한 만큼만 설명한다. 16개 컴포넌트 전체가 쓰는 Config를 한 표로 보고 싶다면 8장(§8.2~8.5)을 참고하고, 개별 용어는 [부록 A](../Appendix/A_용어집.md)에서 찾아보면 된다.
 
 앞으로 어떤 장을 읽든, "지금 1장(§1.1)의 파이프라인 중 어느 화살표를 보고 있는가"를 아래 표로 확인할 수 있다.
 

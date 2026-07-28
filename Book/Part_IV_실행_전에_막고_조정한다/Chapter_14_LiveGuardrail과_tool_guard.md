@@ -14,7 +14,7 @@
 
 ## 14.1 두 축의 경계 — 다시 확인한다
 
-8장(§8.5)에서 이미 이 경계를 예고했다. 결과(응답 문자열)를 반환하는 함수는 `@agent_eval`로 사후 채점하고, 파일 쓰기 같은 부작용이 있는 함수는 `@tool_guard`로 실행 전에 막는다. `scaffold.py`의 `write_chapter_stub()`가 그 실제 사례다.
+8장(§8.6)에서 이미 이 경계를 예고했다. 결과(응답 문자열)를 반환하는 함수는 `@agent_eval`로 사후 채점하고, 파일 쓰기 같은 부작용이 있는 함수는 `@tool_guard`로 실행 전에 막는다. `scaffold.py`의 `write_chapter_stub()`가 그 실제 사례다.
 
 > 📄 **파일**: `src/book_forge/agents/scaffold.py`
 

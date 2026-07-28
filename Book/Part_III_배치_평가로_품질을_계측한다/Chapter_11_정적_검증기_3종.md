@@ -164,7 +164,7 @@ def _fold_key(term: str) -> str:
 
 ## 참고 자료
 
-- 8장(§8.4) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 **생성 코드** 자체
+- 8장(§8.3) — 이 챕터가 검증만 다룬 diagram/capstone/module_reference 콘텐츠 유형의 **생성 코드** 자체
 - 부록 B.1(업계 동향) — RAG·자기일관성·불확실성 추정을 조합하는 업계의 환각 대응과, Book-forge가 그중 가장 단순한 축만 쓰는 이유
 - `src/book_forge/agents/code_consistency_checker.py`
 - `src/book_forge/agents/demonstration_verifier.py`

@@ -108,7 +108,7 @@ def build_answer_question(llm: LLM, monitor: PerformanceMonitor) -> AnswerFn:
         sla=SLAConfig(p95_ms=30_000, p99_ms=60_000),
         # Gate E: ChapterDrafterAgent와 동일하게, sources가 외부 PDF/문서일 수 있어
         # 프롬프트 인젝션 위협이 동일하게 존재한다(산출물이 REPL 출력이라는 점은
-        # 이 위협 자체와 무관하다) — 8장(§8.3)에서 이 대칭을 자세히 다룬다.
+        # 이 위협 자체와 무관하다) — 8장(§8.3·§8.4)에서 이 대칭을 자세히 다룬다.
         threat_severity=ThreatSeverityConfig(),
     )
     def answer_question(
@@ -127,7 +127,7 @@ def build_answer_question(llm: LLM, monitor: PerformanceMonitor) -> AnswerFn:
     return answer_question
 ```
 
-`task_type="information_retrieval"`이 `ChapterDrafterAgent`의 `"document_creation"`(8장에서 확인한다)과 다르다는 점, `SLAConfig(p95_ms=30_000)`가 30초로 `ChapterDrafterAgent`의 60초보다 짧다는 점이 이 함수의 성격을 그대로 드러낸다. 대화형 응답은 사용자가 화면 앞에서 기다리므로 지연 허용치가 더 짧다(8장 §8.3에서 이 차이를 다시 다룬다). 반대로 `threat_severity=ThreatSeverityConfig()`는 `ChapterDrafterAgent`와 **완전히 동일**하다. `sources`가 지식창고(RAG)에서 온 이상, 산출물이 파일이든 REPL 출력이든 "외부의 신뢰할 수 없는 콘텐츠를 프롬프트에 섞는다"는 위협 자체는 달라지지 않기 때문이다. 집필 에이전트는 결과를 파일로 저장하고, 대화 에이전트는 결과를 REPL에 즉시 출력한다. 하지만 둘 다 "제공된 발췌문에 없는 내용을 지어내지 말라"는 같은 제약 아래, 같은 지식창고를 근거로 답한다. `conversation_history`는 `rag_mode`의 `context_arg`(근거 판정용)와는 별개다. 대화 이력은 순수하게 "방금 말한 그거" 같은 지시대명사를 이해하게 돕는 용도로만 프롬프트에 얹힌다.
+`task_type="information_retrieval"`이 `ChapterDrafterAgent`의 `"document_creation"`(8장에서 확인한다)과 다르다는 점, `SLAConfig(p95_ms=30_000)`가 30초로 `ChapterDrafterAgent`의 60초보다 짧다는 점이 이 함수의 성격을 그대로 드러낸다. 대화형 응답은 사용자가 화면 앞에서 기다리므로 지연 허용치가 더 짧다(8장 §8.3·§8.4에서 이 차이를 다시 다룬다). 반대로 `threat_severity=ThreatSeverityConfig()`는 `ChapterDrafterAgent`와 **완전히 동일**하다. `sources`가 지식창고(RAG)에서 온 이상, 산출물이 파일이든 REPL 출력이든 "외부의 신뢰할 수 없는 콘텐츠를 프롬프트에 섞는다"는 위협 자체는 달라지지 않기 때문이다. 집필 에이전트는 결과를 파일로 저장하고, 대화 에이전트는 결과를 REPL에 즉시 출력한다. 하지만 둘 다 "제공된 발췌문에 없는 내용을 지어내지 말라"는 같은 제약 아래, 같은 지식창고를 근거로 답한다. `conversation_history`는 `rag_mode`의 `context_arg`(근거 판정용)와는 별개다. 대화 이력은 순수하게 "방금 말한 그거" 같은 지시대명사를 이해하게 돕는 용도로만 프롬프트에 얹힌다.
 
 ```mermaid
 flowchart TB
