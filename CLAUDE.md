@@ -309,7 +309,7 @@ monkeypatch.setattr(project_utils, "get_data_dir", lambda: tmp_path)
 
 ```
 src/book_forge/
-├── agents/         # LLM 호출 에이전트(13개) + 정적 검증기(5개) — 전부 팩토리 함수 패턴
+├── agents/         # LLM 호출 에이전트(13개, 전부 build_X(llm, monitor) 팩토리 패턴) + 정적 검증기(5개, LLM 미호출 — 팩토리 아닌 평범한 함수)
 ├── knowledge/      # RAG — 소스 어댑터, 임베딩, 지식창고, 구조적 코드 인덱싱
 ├── publish/        # 마크다운 → HTML/PDF/EPUB/Slides
 ├── editor/         # Flask 웹 에디터
