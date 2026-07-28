@@ -28,7 +28,7 @@ Book-forge의 `PerformanceMonitor`(9·12장)는 이런 전용 플랫폼이 아�
 
 8장(§8.3)이 다룬 `ThreatSeverityConfig`(외부 RAG 소스의 프롬프트 인젝션 위협)는 업계 표준 위험 분류 체계에서 이름이 있는 항목이다. OWASP(Open Worldwide Application Security Project)의 "LLM 애플리케이션 Top 10"에서 프롬프트 인젝션은 **LLM01**, 즉 3년 연속 1위 위험으로 꼽혔다. 2025년판은 에이전트형 AI의 급성장을 반영해 카테고리를 새로 추가·재편했다. 관련 연구는 RAG 소스를 오염시키는 공격(문서 5개만 정교하게 조작해도 90% 확률로 응답을 조작할 수 있었다는 2026년 1월 연구)과, MCP(아래 B.4) 같은 도구 연결이 열어준 새 공격 표면(도구 오염·간접 인젝션)을 지적한다.
 
-`rag_mode=True`인 6개 에이전트(ChapterDrafter·ReferenceTable·Diagram·Capstone·ModuleReference·Chat)만 `ThreatSeverityConfig`를 쓰는 이유(8장 §8.6 — "외부에서 온, 신뢰할 수 없는 콘텐츠를 프롬프트에 직접 섞는 에이전트들")는 이 업계 분류로 보면 정확히 **LLM01(프롬프트 인젝션)이 발생할 수 있는 진입점을 식별한 것**과 같다. OWASP가 권고하는 심층 방어(최소 권한 도구, 입출력 필터링, 고위험 동작에 대한 사람 승인)와 견줘보면, Book-forge의 방어는 그중 "탐지·점수화"(`ThreatSeverityConfig`) 축에 해당한다. "사람 승인"은 6장의 저자 승인 루프가, "최소 권한"은 14장의 `@tool_guard`가 서로 다른 각도에서 담당한다는 것도 흥미로운 대응 관계다.
+`rag_mode=True`인 6개 에이전트(ChapterDrafter·ReferenceTable·Diagram·Capstone·ModuleReference·Chat)만 `ThreatSeverityConfig`를 쓰는 이유(8장 §8.6의 결정 트리 두 번째 질문 — "신뢰 못 할 외부 콘텐츠를 다루는가")는 이 업계 분류로 보면 정확히 **LLM01(프롬프트 인젝션)이 발생할 수 있는 진입점을 식별한 것**과 같다. OWASP가 권고하는 심층 방어(최소 권한 도구, 입출력 필터링, 고위험 동작에 대한 사람 승인)와 견줘보면, Book-forge의 방어는 그중 "탐지·점수화"(`ThreatSeverityConfig`) 축에 해당한다. "사람 승인"은 6장의 저자 승인 루프가, "최소 권한"은 14장의 `@tool_guard`가 서로 다른 각도에서 담당한다는 것도 흥미로운 대응 관계다.
 
 - [OWASP Top 10 for LLM Applications 2025 (공식)](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/)
 - [The OWASP Top 10 for LLM Applications (2025): Explained Simply](https://securityboulevard.com/2026/03/the-owasp-top-10-for-llm-applications-2025-explained-simply/)
