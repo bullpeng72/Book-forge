@@ -42,7 +42,7 @@
 | 컴포넌트 | 무엇을 하는가 | 보장해야 할 품질 | 예상·실제 문제 | 측정 | 처리 |
 |---|---|---|---|---|---|
 | **ResearchAgent** | 챕터 제목 → 검색 쿼리 생성(실제 웹 검색·선택은 저자가 별도로 수행) | 챕터 제목의 맥락을 반영한 쿼리를 만들어야 | 저위험군 — 외부 콘텐츠를 직접 프롬프트에 섞지 않으므로 인젝션 위협이 없다(`sources` 인자 자체가 없음) | `InstructionConfig`만 | 배치 — Gate A 정도, 나머지는 대체로 N/A |
-| **AlternativeSuggesterAgent** | 소스 커버리지가 낮거나 실증이 어려울 때 저자에게 대안 제시 — 단순 경고로 끝내지 않고 다음 행동을 고르게 함 | `chapter_title`/`reason`을 실제로 반영 · 최소한의 근거(10자) 포함 | Gate C·D(신뢰성·실증 가능성)가 이미 "위험" 신호를 낸 뒤에 호출되므로, 그 신호를 소비하지 못하면 저자가 위험을 인지 못한 채 진행될 수 있음 | `InstructionConfig` + `ExplainabilityConfig(min_reasoning_length=10)` | 배치 — Gate A/G |
+| **AlternativeSuggesterAgent** | 소스 커버리지가 낮거나 실증이 어려울 때 저자에게 대안 제시 — 단순 경고로 끝내지 않고 다음 행동을 고르게 함 | `chapter_title`/`reason`을 실제로 반영 · 최소한의 근거(10자) 포함 | `draft_cmd.py`의 RAG 커버리지 체크(평균 코사인 유사도가 `--min-coverage` 미만)가 이미 위험 신호를 낸 **뒤에** 호출됨 — 이 신호는 Agent-Evaluator Gate 점수가 아니라 검색 자체의 품질 휴리스틱이다 · 소비 못 하면 저자가 위험을 인지 못한 채 진행될 수 있음 | `InstructionConfig` + `ExplainabilityConfig(min_reasoning_length=10)` | 배치 — Gate A/G |
 | **ChapterDrafterAgent**(narrative·exercise) | RAG 소스 + 챕터 제목 → 챕터 본문 생성 | 소스에 근거해야(환각 금지) · SLA(60초/90초) 내 응답 · 외부 RAG 콘텐츠의 프롬프트 인젝션에 안전 | **환각**(3.2) — 존재하지 않는 API 인용 · SLA 초과(9장 §9.5 실측: 로컬 35B 모델에서 D=0.135) · RAG 소스 오염 | `HallucinationDetector`(rag_mode 자동, Gate C) · `SLAConfig`(Gate D) · `ThreatSeverityConfig`(Gate E) | 배치 — Gate C/D/E + 생성 직후 정적 검증(11장, Gate 미반영·참고용) |
 | **ReferenceTableAgent** | RAG 소스 → 구조화된 사실(용어·API·명령어·파라미터)을 마크다운 표로 | 소스에 명시된 값만("확인되는 값만" 원칙) — 확인 안 되면 행 자체를 생략 | 검색이 놓친 항목은 조용히 **누락**됨(실측: Book-forge 자신의 `agents/` 13개 파일 중 4개만 우연히 top-k에 뽑혀 다뤄짐) · RAG 오염 | ChapterDrafterAgent와 동일 3종(Gate C/D/E) | 배치 + 정적 검증(표 셀이 실제 소스에 등장하는가) |
 | **DiagramGeneratorAgent** | RAG 소스 → mermaid 다이어그램 | 알려진 mermaid 타입으로 시작 · 노드/엣지가 실제 구조에 근거 | 100% LLM이 그래프 구조 자체를 새로 구성하므로 서술형보다 **환각** 위험이 큼(실측: "패키지 구조"를 요청했는데 파일 하나의 내부 관계만 그려진 스코프 불일치) | 동일 3종(Gate C/D/E) | 배치 + 정적 검증(`verify_diagram`, `min_grounding_ratio=0.3`) |
@@ -126,7 +126,13 @@ def build_draft_chapter(llm: LLM, monitor: PerformanceMonitor) -> DraftFn:
 >     return raw, EvalMetadata(extra={"phase": "alternative_suggestion", "reason": reason})
 > ```
 >
-> 이 에이전트가 §8.3 표에서 유독 특별한 이유는 시그니처에 있다. `reason` 인자는 Gate C·D가 이미 "이대로 진행하면 위험하다"고 판단한 **이유 그 자체**다. 즉 이 에이전트는 새로운 위험을 만드는 게 아니라, **이미 다른 두 Gate가 낸 경고를 소비해서** 저자가 다음 행동을 고를 수 있는 구체적 선택지로 바꾸는 안전판이다.
+> 이 에이전트가 §8.3 표에서 유독 특별한 이유는 시그니처에 있다. `reason` 인자에는 `draft_cmd.py`가 이미 계산해둔 값이 그대로 들어간다. 실제 호출부(`draft_cmd.py`)를 보면 이렇다.
+>
+> ```python
+> reason=f"평균 소스 유사도 {avg_score:.3f}로 낮음 (top_k={top_k}개 청크 검색)",
+> ```
+>
+> `avg_score`는 `KnowledgeStore.query_with_scores()`가 돌려준 코사인 유사도 평균이고, 이 값이 `--min-coverage` 임계값에 못 미쳤다는 사실 자체가 `reason` 문자열이 된다. **이 판단은 Agent-Evaluator의 Gate 점수가 아니다** — `book-forge gate`가 아직 실행되지 않은, 생성 직전 시점이라 Gate A–G 점수 자체가 아직 존재하지 않는다. (`alternative_suggester.py`의 모듈 docstring은 이 트리거를 "C(근거 검증 계층)·D(실증 가능성 게이트)"라 부르는데, 이는 `SPEC.md`가 매긴 Book-forge **자체** 기능 번호(`일반 능력 A~Z`)이지 Agent-Evaluator의 Gate C·D와는 무관하다 — 알파벳이 겹치는 우연일 뿐이며, 헷갈리기 쉬운 지점이다.) 즉 이 에이전트는 새로운 위험을 만드는 게 아니라, **이미 `draft_cmd.py` 자신이 계산한 검색 품질 경고를 소비해서** 저자가 다음 행동을 고를 수 있는 구체적 선택지로 바꾸는 안전판이다.
 
 ## 8.6 Config를 고르는 법 — 이 표를 거꾸로 읽는다
 
