@@ -51,9 +51,9 @@ korean = ["agent-evaluator[korean]"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5", "mypy>=1.10", "playwright>=1.40", "flask>=3.0", "pypdf>=4.0", "numpy>=1.24", "agent-evaluator[korean]"]
 
 [project.urls]
-Homepage = "https://github.com/bullpeng72/Book_forge"
-Repository = "https://github.com/bullpeng72/Book_forge"
-Issues = "https://github.com/bullpeng72/Book_forge/issues"
+Homepage = "https://github.com/bullpeng72/Book-forge"
+Repository = "https://github.com/bullpeng72/Book-forge"
+Issues = "https://github.com/bullpeng72/Book-forge/issues"
 
 [project.scripts]
 book-forge = "book_forge.cli.main:cli"

@@ -154,8 +154,8 @@ book-forge init                         # LLM Provider 설정 (기본 Ollama —
 저장소를 직접 받아 편집 가능 모드로 설치하려면(기여, 최신 미배포 변경 반영):
 
 ```bash
-git clone https://github.com/bullpeng72/Book_forge.git
-cd Book_forge
+git clone https://github.com/bullpeng72/Book-forge.git
+cd Book-forge
 pip install -e ".[dev]"          # 코어 + 테스트 도구
 pip install -e ".[pdf]"          # + Playwright (PDF/EPUB 빌드용)
 pip install -e ".[serve]"        # + Flask (웹 에디터용)
