@@ -37,7 +37,18 @@ def _team_guardrail(project_dir: Path) -> LiveGuardrail:
     )
 ```
 
-`tool_name="write"`는 14장의 `write_chapter_stub()`에는 없던 인자다. `@tool_guard`는 기본적으로 함수 이름(`_write_chapter_file`)을 도구 이름으로 쓰지만, 여러 파일에 걸쳐 비슷한 이름의 내부 함수가 있을 수 있으므로 명시적으로 `"write"`라는 안정적인 이름을 지정해, 나중에 감사 로그나 `ScopeConfig`에서 이 도구를 가리킬 때 파일 리팩터링에 흔들리지 않게 한다. 인자 이름 `path`가 우연이 아니라는 점이 이 코드의 핵심 디테일이다. `TeamConcurrencyConfig`가 도구 호출 인자에서 "이 호출이 어느 파일 경로를 건드리려 하는가"를 자동으로 추출하려면, 그 인자 이름이 SDK가 기대하는 후보 이름(`path_param_candidates` 기본값)과 일치해야 한다. 함수 시그니처 자체가 SDK와의 암묵적 계약을 지키도록 설계돼 있다.
+`tool_name="write"`는 14장의 `write_chapter_stub()`에는 없던 인자이고, 여기서는 이름을 붙이는 수준을 넘어 **없으면 검사 자체가 통째로 꺼지는** 필수 계약이다. Agent-Evaluator SDK의 실제 검사 코드(`gates/live_guardrail.py`)를 열어보면 이유가 드러난다.
+
+> 🔧 **Agent-Evaluator SDK 소스**: `agent_evaluator/gates/live_guardrail.py` (Book-forge 코드가 아니다)
+
+```python
+_tc_cfg = self._team_concurrency
+if _tc_cfg is not None and tool_name in _tc_cfg.scoped_tool_names:
+    _path = extract_path_param(parameters, _tc_cfg.path_param_candidates)
+    ...
+```
+
+`TeamConcurrencyConfig.scoped_tool_names`의 기본값은 `("read", "edit", "write")`다(`bash` 같은 비정형 도구는 의도적으로 제외돼 있다). `tool_name in _tc_cfg.scoped_tool_names`가 `False`면 그 아래 충돌 검사 블록 전체가 실행되지 않는다. `@tool_guard`가 붙은 함수는 기본적으로 자기 함수 이름(`_write_chapter_file`)을 도구 이름으로 쓰는데, `_write_chapter_file`은 이 세 이름 중 어디에도 없다. 즉 `tool_name="write"`를 명시하지 않았다면 — 감사 로그가 헷갈리는 수준이 아니라 — `TeamConcurrencyConfig`가 이 호출을 아예 검사 대상으로 보지 않아 **충돌 감지가 조용히 통째로 꺼진 채** 동작했을 것이다. 인자 이름 `path`도 같은 이유로 우연이 아니다. `extract_path_param()`이 도구 호출 인자에서 "이 호출이 어느 파일 경로를 건드리려 하는가"를 자동으로 추출하려면, 그 인자 이름이 SDK가 기대하는 후보 이름(`path_param_candidates` 기본값 `("file", "filePath", "path")`)과 일치해야 한다. 함수 시그니처의 인자 이름 하나, 데코레이터의 `tool_name` 하나 — 둘 다 SDK와의 암묵적 계약이고, 어느 한쪽이라도 어긋나면 이 방어는 예외 없이 조용히 무력화된다.
 
 ## 15.3 실제 저장 흐름 — 충돌하면 409
 
@@ -90,7 +101,7 @@ sequenceDiagram
 ## 이 챕터의 핵심
 
 - **`LiveGuardrail`은 루프 탐지(14장)뿐 아니라 팀 동시성 충돌도 같은 메커니즘으로 막는다.** `TeamConcurrencyConfig`를 끼우는 것만 다르다.
-- **함수 인자 이름이 SDK와의 암묵적 계약이다.** `path`라는 이름 자체가 `TeamConcurrencyConfig`가 경로를 추출하는 방식과 맞물려 있다.
+- **`tool_name`과 인자 이름 둘 다 SDK와의 암묵적 계약이다.** `tool_name`이 `TeamConcurrencyConfig.scoped_tool_names`(기본값 `read`/`edit`/`write`) 목록에 없으면 충돌 검사 블록 자체가 실행되지 않고, 인자 이름이 `path_param_candidates`와 안 맞으면 경로를 못 찾는다 — 둘 다 어긋나면 에러 없이 조용히 무력화된다.
 - **SDK의 예외를 의미 있는 사용자 신호로 바꾸는 것은 애플리케이션의 책임이다.** `GuardrailBlockedError` → HTTP 409가 그 예다.
 - **`.aoo/claims.jsonl`은 서버 강제력이 아니라 자발적 선언이다.** 팀이 실제로 `claims add`를 쓰지 않으면 보호받지 못한다.
 
@@ -98,6 +109,7 @@ sequenceDiagram
 
 - `src/book_forge/editor/server.py` — 전체
 - `Agent-Evaluator/agent_evaluator/gates/team_concurrency.py` — `TeamConcurrencyConfig`
+- `Agent-Evaluator/agent_evaluator/gates/live_guardrail.py` — `scoped_tool_names`/`path_param_candidates`를 실제로 검사하는 코드
 
 ---
 
