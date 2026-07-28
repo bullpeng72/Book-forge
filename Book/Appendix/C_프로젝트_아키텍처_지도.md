@@ -128,7 +128,7 @@ src/book_forge/
 | 파일 | 책임 | 담당 챕터 |
 |---|---|---|
 | `cli/main.py` | click 그룹 진입점 — 13개 서브커맨드 등록 | 1장 §1.2 |
-| `cli/project_utils.py` | 슬러그 → `BookConfig` 해석 공통 유틸(build/edit/gate/draft/plan이 공유) | (범위 밖) |
+| `cli/project_utils.py` | 슬러그 → `BookConfig` 해석 공통 유틸 — 13개 서브커맨드 중 `new`·`home`·`init` 3개를 뺀 10개(`build`·`draft`·`edit`·`gate`·`plan`·`chat`·`research`·`review`·`lint`·`knowledge`)가 `load_book_config()`/`resolve_project_dir()`를 공유 | (범위 밖) |
 | `cli/commands/new_cmd.py` | `book-forge new` — 기획~스캐폴딩 오케스트레이션, `--source` 배치 초안 연쇄 | 4장 |
 | `cli/commands/draft_cmd.py` | `book-forge draft` — RAG 초안 생성 오케스트레이션(733줄, 가장 큰 파일) | 7장 |
 | `cli/commands/gate_cmd.py` | `book-forge gate` — 여러 챕터 결과 병합 + `agent-eval gate` CLI 위임 + CI 연동 플래그 | 9·12·13장 |
