@@ -60,18 +60,23 @@ Agent-Evaluator SDK의 `PerformanceMonitor`에는 이미 `merge()`와 `load_from
 
 ```python
 def _merge_result_files(files: list[Path]) -> Path:
-    """여러 챕터 결과 파일을 하나의 PerformanceMonitor로 합쳐 저장하고 그 경로를 반환한다."""
+    """여러 챕터 결과 파일을 하나의 PerformanceMonitor로 합쳐 저장하고 그 경로를 반환한다.
+
+    PerformanceMonitor.load_from_file()/.merge()는 agent-evaluator가 이미
+    제공하는 SDK 기능이다(D8) — Book-forge가 직접 병합 로직을 구현하지
+    않는다. files는 최소 1개 이상이어야 한다(호출부가 보장).
+    """
     from agent_evaluator import PerformanceMonitor
 
     merged = PerformanceMonitor.load_from_file(str(files[0]))
     for extra in files[1:]:
         merged = merged.merge(PerformanceMonitor.load_from_file(str(extra)))
-    output_path = files[0].parent / "_merged_gate_result.json"
+    output_path = files[0].parent / _MERGED_RESULT_FILENAME
     merged.save_to_file(str(output_path))
     return output_path
 ```
 
-`load_from_file()`이 저장된 JSON에서 `PerformanceMonitor`를 복원하고, `merge()`가 다른 인스턴스의 태스크를 모두 흡수한 **새** 인스턴스를 반환한다(원본을 변형하지 않는다). `files[0]`부터 순서대로 접어(fold) 하나로 합친다.
+`load_from_file()`이 저장된 JSON에서 `PerformanceMonitor`를 복원하고, `merge()`가 다른 인스턴스의 태스크를 모두 흡수한 **새** 인스턴스를 반환한다(원본을 변형하지 않는다). `files[0]`부터 순서대로 접어(fold) 하나로 합친다. 독스트링 자체가 이 절의 제목("새 병합 로직을 만들지 않는다")을 그대로 못박아둔다는 것도 눈여겨볼 만하다 — 코드를 쓴 사람이 "이건 SDK 기능이지 우리가 짠 로직이 아니다"를 스스로 남겨둔 것이다.
 
 ## 12.3 자기 자신을 다시 삼키지 않게 막는다
 
@@ -83,13 +88,21 @@ def _merge_result_files(files: list[Path]) -> Path:
 _MERGED_RESULT_FILENAME = "_merged_gate_result.json"
 _NON_REPORT_FILENAMES = {"baseline.json", _MERGED_RESULT_FILENAME}
 
+
 def _all_result_files(eval_dir: Path) -> list[Path]:
+    """eval_results/의 챕터별 결과 JSON 전부를 이름순으로 반환한다.
+
+    baseline.json(리포트가 아니라 --save-baseline이 저장한 비교 기준)과
+    이 함수 스스로 만드는 병합 산출물(_merged_gate_result.json)은 제외한다
+    — 후자를 안 걸러내면 다음 gate 실행 때 이전 병합 결과가 또 병합
+    입력으로 들어가는 피드백 루프가 생긴다.
+    """
     if not eval_dir.is_dir():
         return []
     return sorted(p for p in eval_dir.glob("*.json") if p.name not in _NON_REPORT_FILENAMES)
 ```
 
-`baseline.json`(별도 비교 기준 파일)과 자기 자신의 병합 산출물, 둘 다 다음 집계 대상에서 제외한다. 이 방어는 버그가 실제로 터진 뒤 추가한 것이 아니다. **설계 단계에서 미리 예상해 만든 것**이다(3장에서 다룬 사전 설계 원칙과 같은 계보다).
+`baseline.json`(별도 비교 기준 파일)과 자기 자신의 병합 산출물, 둘 다 다음 집계 대상에서 제외한다. 이 방어는 버그가 실제로 터진 뒤 추가한 것이 아니다. **설계 단계에서 미리 예상해 만든 것**이다(3장에서 다룬 사전 설계 원칙과 같은 계보다) — 독스트링에 "피드백 루프가 생긴다"는 위험이 이미 예방 문구로 적혀 있다는 사실이 그 증거다.
 
 ## 12.4 실측 — 재현된 문제가 실제로 고쳐졌는가
 

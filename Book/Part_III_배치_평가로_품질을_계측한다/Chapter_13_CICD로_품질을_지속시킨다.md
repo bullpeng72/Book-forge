@@ -127,7 +127,8 @@ Agent-Evaluator SDK는 `--fail-on-regression`(§13.2, 단일 실행 대비 회�
 ## 참고 자료
 
 - `src/book_forge/cli/commands/gate_cmd.py` — 전체(모든 CI 플래그의 실제 배선)
-- `Agent-Evaluator/Media/Book/Part_VI_실전이식가이드/Chapter_27_CICD_완성.md` — 이 챕터가 재구성한 원본 방법론(추세 분석·골든 데이터셋 자동화 포함)
+- `Agent-Evaluator/Media/Book/Part_VI_실전이식가이드/Chapter_27_CICD_완성.md` — §13.1 인용("측정이 사람의 행동과 독립적으로 실행돼야 한다")의 원본이자 이 챕터가 재구성한 방법론(추세 분석·골든 데이터셋 자동화 포함)
+- `Agent-Evaluator/Media/Book/Part_VI_실전이식가이드/Chapter_26_전체_통합.md` — §13.4 인용("Gate 리포트가 지속적으로 나오는 환경을 만드는 것이 먼저다")의 원본
 - 17장(한계와 열린 문제) — `agent-eval trend`/`GoldenSetBuilder` 미배선 항목
 
 ---
