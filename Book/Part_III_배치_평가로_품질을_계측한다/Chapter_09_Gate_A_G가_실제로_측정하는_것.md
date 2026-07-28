@@ -37,14 +37,17 @@ class LatencyTracker(BaseTracker):
     def record_latency(self, task_id: str, task_type: str,
                        total_time: float, breakdown: dict[str, float]):
         """Record latency for a task"""
+        self._cached_stats = None  # invalidate cache on new record
         self._latencies.append({
             "task_id": task_id, "task_type": task_type,
             "total_time": total_time, "breakdown": breakdown,
         })
 
     def get_latency_stats(self, task_type: str | None = None) -> dict[str, float]:
-        """p50/p95/p99 등 지연 통계를 계산해 돌려준다."""
+        """Get latency statistics.
         ...
+        """
+        ...  # p50/p90/p95/p99 등을 계산해 돌려준다 — 전체 조회는 캐싱, 타입별 조회는 매번 재계산
 ```
 
 `record_latency()`가 매 호출마다 숫자를 쌓고(수집), `get_latency_stats()`가 그 누적치에서 p95·p99 같은 통계를 뽑는다(집계). **모든 Tracker가 이 "쌓기 → 계산하기" 두 메서드 쌍 패턴을 공유한다.** Gate가 최종적으로 읽는 것은 원시 데이터가 아니라 이 `get_*_stats()`/`calculate_*()` 메서드들이 이미 계산해 둔 값이다.
@@ -59,10 +62,14 @@ class SLAConfig:
     """SLA 준수 추적 설정."""
     p95_ms: float = 5000.0
     p99_ms: float = 10000.0
+    ttft_ms: float | None = None
     breach_window: int = 10
     warn_threshold: int = 2
     fail_threshold: int = 5
     max_cost_per_task: float | None = None
+    budget_usd: float | None = None
+    token_limit: int | None = None
+    # __post_init__()이 음수 임계값 등을 방어(생략)
 ```
 
 `p95_ms`/`p99_ms`는 각각 "상위 95%/99% 요청이 이 시간 안에 끝나야 한다"는 지연 기준선이다. 8장 §8.3의 `ChapterDrafterAgent`가 `SLAConfig(p95_ms=60_000, p99_ms=90_000)`를 넘기는 것은, `LatencyTracker`가 이미 계산해 둔 p95·p99 값을 "이 숫자를 넘으면 위반"이라는 기준과 대조하라고 Gate D에 알려주는 것이다. `LatencyTracker` 자신은 `SLAConfig`가 있는지 없는지조차 모른다. **Tracker는 "무슨 일이 있었는가"를 객관적으로 기록하고, Config는 "그게 괜찮은 일이었는가"를 판단할 기준선을 정하고, Gate는 그 판단들을 모아 하나의 점수로 압축한다.**
@@ -94,15 +101,22 @@ class SLAConfig:
 
 ## 9.4 Gate A의 실제 계산 — TCR과 Accuracy를 섞는다
 
-Gate A는 이 책이 가장 자주 언급하는 Gate다(PlannerAgent·TOCDesignerAgent·ChapterDrafterAgent 전부 기여). 실제 점수 계산은 다음 공식을 따른다(`CLAUDE.md`에 문서화된 Book-forge 전역 설정).
+Gate A는 이 책이 가장 자주 언급하는 Gate다(PlannerAgent·TOCDesignerAgent·ChapterDrafterAgent 전부 기여). `Book-forge/CLAUDE.md`는 이 가중치의 **기본값**(`gate_a_tcr_weight=0.4`)만 문서화해뒀을 뿐, 실제 블렌딩 공식 자체는 CLAUDE.md 어디에도 없다 — Agent-Evaluator SDK 자신의 소스에 그대로 있다.
 
-> 📄 **출처**: `Book-forge/CLAUDE.md`에 문서화된 공식(실제 소스 코드 발췌가 아니라 개발자가 문서로 정리해둔 수식)
+> 🔧 **Agent-Evaluator SDK 소스**: `agent_evaluator/gates/gate_a_goal/aggregate.py` (Book-forge 코드가 아니다)
 
+```python
+# TCR은 Gate A 핵심 지표 — gate_a_tcr_weight(기본 0.4)로 Config 지표와 가중 평균
+_tcr_component = _a_vals[0]
+_config_components = _a_vals[1:]
+if _config_components:
+    _config_avg = sum(_config_components) / len(_config_components)
+    _a_score = gate_a_tcr_weight * _tcr_component + (1.0 - gate_a_tcr_weight) * _config_avg
+else:
+    _a_score = float(_tcr_component)
 ```
-_a_score = gate_a_tcr_weight × TCR컴포넌트 + (1 − gate_a_tcr_weight) × 나머지 평균
-```
 
-기본값은 `gate_a_tcr_weight=0.4`다. 태스크 완료율(TCR)이 40%, 나머지(AccuracyEvaluator 블렌딩·ResponseQualityEvaluator 등)가 60%를 차지한다. 16장에서 이 가중치를 프로젝트마다 다르게 조정하는 실제 코드(`.env`)를 다룬다.
+기본값은 `gate_a_tcr_weight=0.4`다. 태스크 완료율(TCR, `_tcr_component`)이 40%, 나머지 Config 지표 평균(`_config_avg` — AccuracyEvaluator 블렌딩·ResponseQualityEvaluator 등)이 60%를 차지한다. `else` 분기도 눈여겨볼 만하다. TCR 말고는 아무 Config 신호도 없으면(`_config_components`가 비어 있으면) 가중 평균을 계산하지 않고 TCR 하나만으로 점수를 낸다 — 나눌 값이 없을 때 억지로 평균을 만들지 않는, 이 책이 반복해온 "정직한 폴백" 원칙과 같은 자리다. 16장에서 이 가중치를 프로젝트마다 다르게 조정하는 실제 코드(`.env`)를 다룬다.
 
 ## 9.5 실제 채점 사례 — 한 챕터의 Gate 점수
 
@@ -165,6 +179,7 @@ def format_gate_line(gate: str, score: Optional[float]) -> str:
 - 부록 B.1·B.2(업계 동향) — 환각 탐지·에이전트 관측성이 업계 전체에서는 어떤 규모·이름으로 다뤄지는지
 - `Agent-Evaluator/CLAUDE.md` — Gate별 트래커 기여 방식 전체 표
 - `Agent-Evaluator/agent_evaluator/core/trackers/monitor.py` — `PerformanceMonitor.__init__()`의 Tracker 초기화
+- `Agent-Evaluator/agent_evaluator/gates/gate_a_goal/aggregate.py` — Gate A의 실제 TCR·Config 블렌딩 공식
 - `src/book_forge/eval/monitor.py` — `build_book_monitor()`
 - `src/book_forge/eval/gate_summary.py` — `format_gate_line()`, `GATE_LABELS`
 
